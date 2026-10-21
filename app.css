@@ -147,3 +147,24 @@ tr.more{display:none}
 .xp{margin:10px auto 0;display:flex}
 .main section:not(.lead) td{padding-top:8px;padding-bottom:8px}.main section:not(.lead) th{padding-top:6px;padding-bottom:6px}.lead .big{margin:10px 0 6px}
 @media(min-width:901px){.main>.lead{min-height:352px;display:flex;flex-direction:column;justify-content:space-between}}
+tr.rl{cursor:pointer;transition:opacity .2s}tr.rl:hover{opacity:.8}tr.rl a{color:inherit}
+.nd.pend{color:var(--mu)}.nd.pend::before{border-style:dotted;border-color:#6b6b73}
+.seg.sm span{padding:2px 7px;font-size:11px}
+.kv>div{min-width:0}.kv .lbl{overflow-wrap:anywhere}@media(max-width:900px){.kv{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}.lgrid{grid-template-columns:minmax(0,1fr)!important}.kv .seg span{padding:2px 5px}}
+.ctl{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.ctl .seg span{cursor:pointer}
+.pchart{display:block;animation:rise .5s var(--ease) both}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:6px;align-items:center}
+.legend i{display:inline-block;margin-right:5px;vertical-align:middle}
+.tri{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent}.tri.up{border-bottom:8px solid var(--gr)}.tri.dn{border-top:8px solid var(--rd)}
+.ring{width:9px;height:9px;border:2px solid var(--or);border-radius:50%}
+.kn{color:var(--dim)}
+@media(max-width:900px){.idl{line-height:1.6}}
+.pchart{height:auto}@media(max-width:900px){.idl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+/* v4.5 field info card */
+.fi{position:relative;cursor:help;text-decoration:underline dotted #4a4a52;text-underline-offset:3px}
+.fi::after{content:attr(data-f);position:absolute;left:0;top:calc(100% + 6px);z-index:40;min-width:160px;max-width:280px;white-space:normal;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:11px/1.5 ui-monospace,Menlo,monospace;color:var(--tx);box-shadow:0 12px 30px rgba(0,0,0,.45);opacity:0;pointer-events:none;transform:translateY(-4px);transition:opacity .2s,transform .35s var(--ease)}
+.fi:hover::after,.fi:focus::after{opacity:1;transform:none}
+.r.fi::after{left:auto;right:0}
+.pchart{min-height:220px}
+@media(max-width:900px){.kv .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.f label{white-space:nowrap}}
+.kv .lbl.fi:focus,.kv .lbl.fi:hover{overflow:visible}
