@@ -1,0 +1,11 @@
+{
+ "built_at": "2026-10-21T11:10:25Z",
+ "data_as_of": "2026-10-21T11:08:59.000Z",
+ "source": "https://api.wakeloom.com/v1/public/leaderboard",
+ "leaders": 50,
+ "leader_pages_seo": 50,
+ "sitemap_addrs": 2658,
+ "mode": "client-live+seo-snap-50",
+ "sitemap_api": true,
+ "error": null
+}

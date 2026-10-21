@@ -1,0 +1,17 @@
+/account.html /app/account.html 301
+/board.html /app/board.html 301
+/config.html /app/config.html 301
+/health.html /app/health.html 301
+/leader-5c1e.html /app/leader-5c1e.html 301
+/leader-91d4.html /app/leader-91d4.html 301
+/leader-avalon.html /app/leader-avalon.html 301
+/leader-lunadegen.html /app/leader-lunadegen.html 301
+/leader.html /app/leader.html 301
+/leaders.html /app/leaders.html 301
+/login.html /app/login.html 301
+/overview.html /app/overview.html 301
+/strategies.html /app/strategies.html 301
+/zh/leader/:addr /zh/leader/_shell/index.html 200
+/en/leader/:addr /en/leader/_shell/index.html 200
+/zh/leader/:addr/ /zh/leader/_shell/index.html 200
+/en/leader/:addr/ /en/leader/_shell/index.html 200

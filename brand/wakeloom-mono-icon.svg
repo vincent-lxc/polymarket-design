@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Wakeloom 织迹（单色）">
+  <!-- 32 单位网格 = 16px 下 1px；所有端点和线宽都在网格上 -->
+  <rect width="512" height="512" rx="96" fill="none"/>
+  <path d="M96 160 L256 384 L416 160" fill="none" stroke="currentColor" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M192 160 L256 256 L320 160" fill="none" stroke="currentColor" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

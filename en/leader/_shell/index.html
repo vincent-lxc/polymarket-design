@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Polymarket Trader Stats | Wakeloom</title><meta name="description" content="Loads win rate, ROI and drawdown for this wallet from the public API."><link rel="canonical" href="https://www.wakeloom.com/en/leader/_shell/"><link rel="alternate" hreflang="zh-CN" href="https://www.wakeloom.com/zh/leader/_shell/"><link rel="alternate" hreflang="en" href="https://www.wakeloom.com/en/leader/_shell/"><link rel="alternate" hreflang="x-default" href="https://www.wakeloom.com/">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Wakeloom"><meta property="og:title" content="Polymarket Trader Stats | Wakeloom"><meta property="og:description" content="Loads win rate, ROI and drawdown for this wallet from the public API."><meta property="og:url" content="https://www.wakeloom.com/en/leader/_shell/"><meta property="og:image" content="https://www.wakeloom.com/icons/favicon-512.png"><meta property="og:locale" content="en_US"><meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0d0d10"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icons/wakeloom.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/site.css?v=1">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://www.wakeloom.com/#org","name":"Wakeloom","alternateName":"Wakeloom 织迹","url":"https://www.wakeloom.com/","logo":"https://www.wakeloom.com/icons/favicon-512.png"},{"@type":"WebSite","@id":"https://www.wakeloom.com/#website","name":"Wakeloom","alternateName":"Wakeloom 织迹","url":"https://www.wakeloom.com/","inLanguage":["zh-CN","en"],"publisher":{"@id":"https://www.wakeloom.com/#org"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.wakeloom.com/en/"},{"@type":"ListItem","position":2,"name":"Leaderboard","item":"https://www.wakeloom.com/en/leaderboard/"}]}]}</script>
+</head><body>
+<header class="top"><a class="logo" href="/en/"><img src="/icons/wakeloom.svg" width="28" height="28" alt=""><b>Wakeloom</b></a>
+<nav class="nv"><a href="/en/leaderboard/">Leaderboard</a><a href="/en/how-it-works/">How it works</a><a href="/en/copy-trading/">Paper copy trading</a><a href="/en/faq/">FAQ</a></nav><div class="tr"><a class="lg" href="/zh/leader/_shell/" hreflang="zh-CN">中文</a><a class="btn pri sm" href="/app/">Open the app</a></div></header>
+<main><div data-live="leader" data-addr="">
+<section class="ph"><p class="crumb"><a href="/en/">Home</a> / <a href="/en/leaderboard/">Leaderboard</a> / …</p>
+<h1 data-f="name">Loading…</h1><p class="addr num" data-f="addr"></p><p class="lead" data-f="desc">Loads win rate, ROI and drawdown for this wallet from the public API.</p>
+<p class="mu sm" data-f="asof"></p><span class="live-badge" data-live-badge="leader"></span>
+<p class="nd pad" data-f="missing" hidden>No public data for this wallet, or the API is unavailable.</p></section>
+<section class="card grid" data-f="grid"><div class="st"><span>Win rate (90d)</span><b class="nd">No data</b></div><div class="st"><span>ROI (90d)</span><b class="nd">No data</b></div><div class="st"><span>Max drawdown</span><b class="nd">No data</b></div><div class="st"><span>Resolved markets</span><b class="nd">No data</b></div></section>
+<div data-f="spark"></div>
+<section class="card" data-f="facts" style="display:none"></section>
+<section class="card" data-f="recent"><div class="hd"><b>Last 20 results</b></div><p class="nd pad">No data</p></section>
+<section class="card cta-row"><div><b>Open this wallet in the app</b><p class="mu">A ranking does not predict future results.</p></div><a class="btn pri" data-f="app" href="/app/">Open the app →</a></section>
+</div>
+<script>
+(function(){
+  var m=location.pathname.match(new RegExp("/leader/(0x[a-fA-F0-9]{40})/?"));
+  var a=(m&&m[1]||new URLSearchParams(location.search).get("addr")||"").toLowerCase();
+  var root=document.querySelector("[data-live=leader]");
+  if(root&&a){root.setAttribute("data-addr",a);var el=document.querySelector("[data-f=addr]");if(el){el.textContent=a;el.title=a;}
+  var app=document.querySelector("[data-f=app]");if(app)app.href="/app/leader.html?addr="+a;
+  var can=document.querySelector('link[rel=canonical]');if(can)can.href="https://www.wakeloom.com/en/leader/"+a+"/";
+  }
+})();
+</script></main>
+<footer class="ft"><div class="fl"><a class="logo" href="/en/"><img src="/icons/wakeloom.svg" width="22" height="22" alt=""><b>Wakeloom</b></a><span>Wallet analytics · Paper trading</span></div><nav><a href="/en/risk/">Risk notice</a><a href="/en/privacy/">Privacy</a><a href="/en/terms/">Terms</a><a href="/en/about/">About</a></nav><p>Wakeloom is an independent tool for Polymarket. It is not affiliated with or endorsed by Polymarket. Nothing here is investment advice.</p></footer>
+<script src="/site.js" defer></script><script src="/site-live.js" defer></script></body></html>
