@@ -175,3 +175,14 @@ tr.rl{cursor:pointer;transition:opacity .2s}tr.rl:hover{opacity:.8}tr.rl a{color
 .hv-t{background:#0b0b0d;border:1px solid #2a2a30;border-radius:8px;padding:7px 10px;font-size:12px;line-height:1.5;color:var(--tx);white-space:nowrap;display:flex;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.5)}
 .hv-t b{font-family:ui-monospace,Menlo,monospace;font-size:13px}.hv-t span{color:var(--mu);font-size:11px}
 .hbar{position:relative}
+/* v4.7 total + share */
+.big.tot{font-size:56px;line-height:1.1;margin:6px 0 2px}
+.modal.share{width:720px;margin:0;left:50%;top:50%;transform:translate(-50%,calc(-50% + 24px)) scale(.96);max-height:92vh;overflow:auto}
+.ovl:target .modal.share{transform:translate(-50%,-50%)}
+.shwrap{background:#000;border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;justify-content:center}
+.shwrap canvas{max-width:100%;max-height:52vh;height:auto;border-radius:6px}
+.sw{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mu);cursor:pointer}.sw input{accent-color:var(--or)}
+@media(max-width:900px){.big.tot{font-size:44px}.modal.share{left:0;top:auto;bottom:0;width:100vw;max-width:100vw;border-radius:16px 16px 0 0;transform:translateY(105%)}.ovl:target .modal.share{transform:none}}
+.ovl.open .mask{opacity:1;pointer-events:auto}.ovl.open .modal{opacity:1;pointer-events:auto}
+.ovl.open .modal.share{transform:translate(-50%,-50%)}
+@media(max-width:900px){.ovl.open .modal.share{transform:none}}
