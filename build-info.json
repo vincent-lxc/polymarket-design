@@ -1,0 +1,8 @@
+{
+ "built_at": "2026-10-21T10:45:55Z",
+ "data_as_of": "2026-10-21T10:39:46.000Z",
+ "source": "https://api.wakeloom.com/v1/public/leaderboard",
+ "leaders": 50,
+ "min_resolved": 20,
+ "error": null
+}

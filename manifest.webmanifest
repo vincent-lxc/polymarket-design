@@ -3,7 +3,7 @@
   "short_name": "Wakeloom",
   "description": "钱包分析 · 模拟盘。支持 Polymarket。",
   "lang": "zh-CN",
-  "start_url": "./overview.html",
+  "start_url": "./app/overview.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0d0d10",
