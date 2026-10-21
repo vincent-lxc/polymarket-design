@@ -186,6 +186,7 @@ function initLogin(){
       say("请在钱包里选择账户…");
       const [address]=await window.ethereum.request({method:"eth_requestAccounts"});
       const n=await api("/v1/auth/nonce",{method:"POST",auth:false,body:{address,domain:location.host||"localhost",uri:location.origin,chain_id:137}});
+      if(!n||typeof n.message!=="string"||!n.message) throw new Error("服务端没有返回签名内容");
       say("请在钱包里签名（不会发起交易）…");
       const signature=await window.ethereum.request({method:"personal_sign",params:[n.message,address]});
       const v=await api("/v1/auth/verify",{method:"POST",auth:false,body:{address,message:n.message,signature}});

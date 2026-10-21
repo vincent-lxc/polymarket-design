@@ -1,8 +1,9 @@
 (function(){
 var cv=document.getElementById("shcv");if(!cv)return;var ctx=cv.getContext("2d"),D=cv.dataset,hide=false,F='"Noto Sans CJK SC","Noto Sans SC","PingFang SC",sans-serif',M='ui-monospace,"DejaVu Sans Mono",Menlo,monospace';
+function logo(x,y,s){var k=s/512;ctx.save();ctx.translate(x,y);ctx.scale(k,k);ctx.fillStyle="#141416";rr(0,0,512,512,96);ctx.fill();ctx.lineCap="round";ctx.lineJoin="round";[["#FF6A1F",64,[[96,160],[256,384],[416,160]]],["#FFB48A",48,[[192,160],[256,256],[320,160]]]].forEach(function(d){ctx.strokeStyle=d[0];ctx.lineWidth=d[1];ctx.beginPath();d[2].forEach(function(q,i){i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])});ctx.stroke()});ctx.restore()}
 function draw(){var W=cv.width,H=cv.height,tall=H>W,p=tall?72:64,up=D.up==="1",col=up?"#2fd47a":"#ff5a5f",v=JSON.parse(D.v);
  ctx.fillStyle="#0e0e10";ctx.fillRect(0,0,W,H);var g=ctx.createRadialGradient(W*.9,0,0,W*.9,0,W*.8);g.addColorStop(0,"rgba(255,106,31,.20)");g.addColorStop(1,"rgba(255,106,31,0)");ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
- ctx.fillStyle="#FF6A1F";ctx.fillRect(p,p,8,40);ctx.fillStyle="#ededf0";ctx.font="700 34px "+F;ctx.textBaseline="middle";ctx.fillText("【产品名】",p+22,p+20);
+ logo(p,p,40);ctx.fillStyle="#ededf0";ctx.font="700 34px "+F;ctx.textBaseline="middle";ctx.fillText("Wakeloom 织迹",p+54,p+20);
  ctx.font="500 22px "+F;var tag="模拟盘",tw=ctx.measureText(tag).width+28;ctx.strokeStyle="#3a3a42";ctx.lineWidth=2;rr(W-p-tw,p+2,tw,36,18);ctx.stroke();ctx.fillStyle="#9a9aa3";ctx.fillText(tag,W-p-tw+14,p+20);
  var y=p+110;ctx.fillStyle="#9a9aa3";ctx.font="400 26px "+F;ctx.fillText(hide?"收益率":"合计净值",p,y);
  y+=tall?110:86;ctx.fillStyle="#ededf0";ctx.font="700 "+(tall?120:96)+"px "+M;ctx.fillText(hide?D.pct:D.eq,p,y);
@@ -13,7 +14,7 @@ function draw(){var W=cv.width,H=cv.height,tall=H>W,p=tall?72:64,up=D.up==="1",c
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
 document.getElementById("shsz").addEventListener("click",function(e){var b=e.target.closest("[data-sz]");if(!b)return;var s=b.dataset.sz.split("x");cv.width=+s[0];cv.height=+s[1];this.querySelectorAll("span").forEach(function(x){x.classList.toggle("on",x===b)});draw()});
 document.getElementById("shhide").addEventListener("change",function(){hide=this.checked;draw()});
-document.getElementById("shsave").addEventListener("click",function(){var a=document.createElement("a");a.download="收益卡-"+cv.width+"x"+cv.height+(hide?"-仅收益率":"")+".png";a.href=cv.toDataURL("image/png");document.body.appendChild(a);a.click();a.remove()});
+document.getElementById("shsave").addEventListener("click",function(){var a=document.createElement("a");a.download="wakeloom-share-"+cv.width+"x"+cv.height+(hide?"-pct":"")+".png";a.href=cv.toDataURL("image/png");document.body.appendChild(a);a.click();a.remove()});
 document.getElementById("shcopy").addEventListener("click",function(){var u=location.href.split("#")[0],t=document.getElementById("shtoast");function ok(){t.style.opacity=1;setTimeout(function(){t.style.opacity=0},1600)}
  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(u).then(ok,fb);else fb();function fb(){var x=document.createElement("textarea");x.value=u;document.body.appendChild(x);x.select();try{document.execCommand("copy")}catch(e){}x.remove();ok()}});
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(draw);draw()})();

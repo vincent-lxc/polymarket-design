@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" role="img" aria-label="Wakeloom 织迹（单色）" fill="currentColor" color="#EDEDF0">
+  <path d="M48 112 L128 224 L208 112" fill="none" stroke="currentColor" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M96 112 L128 160 L160 112" fill="none" stroke="currentColor" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="304" y="196" font-family="Inter, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif" font-size="128" font-weight="700" letter-spacing="-2">Wakeloom<tspan dx="36" font-family="'Noto Sans CJK SC','PingFang SC','Microsoft YaHei',sans-serif" font-size="112" letter-spacing="0">织迹</tspan></text>
+</svg>
