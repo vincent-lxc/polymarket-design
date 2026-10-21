@@ -101,7 +101,7 @@ td.r,th.r{text-align:right}
  .lgrid{grid-template-columns:1fr 1fr}.lgrid .cell:last-child{grid-column:1/-1}
  .tpls{grid-template-columns:1fr}.form{grid-template-columns:1fr 1fr}
  .top h1{font-size:18px}
- .tabs{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;bottom:0;left:0;right:0;background:rgba(14,14,16,.96);border-top:1px solid var(--line);padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:40}
+ .tabs{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;bottom:0;left:0;right:0;background:rgba(14,14,16,.96);border-top:1px solid var(--line);padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:40}
  .tabs a{text-align:center;font-size:12px;color:var(--mu);padding:6px 0;border-radius:8px}
  .tabs a.on{color:var(--or);font-weight:600}
  .drawer{width:100%;max-width:100%;top:auto;bottom:0;height:auto;max-height:86vh;border-left:0;border-top:1px solid var(--line);border-radius:16px 16px 0 0;transform:translateY(105%)}
@@ -186,3 +186,16 @@ tr.rl{cursor:pointer;transition:opacity .2s}tr.rl:hover{opacity:.8}tr.rl a{color
 .ovl.open .mask{opacity:1;pointer-events:auto}.ovl.open .modal{opacity:1;pointer-events:auto}
 .ovl.open .modal.share{transform:translate(-50%,-50%)}
 @media(max-width:900px){.ovl.open .modal.share{transform:none}}
+/* v4.8 BFF */
+.sk{display:block;height:12px;border-radius:6px;background:#26262b;animation:skp 1.2s ease-in-out infinite;width:70%;margin-left:auto}
+td:first-child .sk{margin-left:0}
+@keyframes skp{0%,100%{opacity:.35}50%{opacity:1}}
+.demo-badge{position:fixed;top:12px;right:12px;z-index:60;background:#FF6A1F;color:#111;font-weight:600;font-size:12px;padding:4px 10px;border-radius:999px}
+body.login{min-height:100vh;display:grid;place-items:center;padding:20px}
+.lgbox{width:min(420px,100%);display:flex;flex-direction:column;gap:12px}
+.btn.big{justify-content:center;padding:12px 16px;font-size:15px}
+.btn.dis{opacity:.45;cursor:not-allowed}
+.live-badge{position:fixed;top:12px;right:12px;z-index:60;border:1px solid #2fd47a55;color:#2fd47a;font-size:12px;padding:4px 10px;border-radius:999px;background:#0d0d10}
+.demo-badge,.live-badge{top:auto;bottom:16px;right:16px}
+@media (max-width:900px){.demo-badge,.live-badge{bottom:72px;right:12px}}
+.live .rail .rc:not(.note){display:none}
