@@ -199,3 +199,9 @@ body.login{min-height:100vh;display:grid;place-items:center;padding:20px}
 .demo-badge,.live-badge{top:auto;bottom:16px;right:16px}
 @media (max-width:900px){.demo-badge,.live-badge{bottom:72px;right:12px}}
 .live .rail .rc:not(.note){display:none}
+/* v4.9 即将上线 + 策略页手机操作列 */
+.btn.soon{opacity:.45;cursor:not-allowed;pointer-events:none;gap:6px}
+.btn.soon em{font-style:normal;font-size:10px;color:var(--or);border:1px solid rgba(255,106,31,.4);border-radius:999px;padding:0 5px;line-height:15px}
+.ops{display:inline-flex;gap:6px;justify-content:flex-end}
+@media (max-width:900px){.ops{flex-direction:column;align-items:stretch;gap:4px}.ops .btn{justify-content:center}#st-mine td{padding-left:6px;padding-right:6px}#st-mine .tag{white-space:nowrap}}
+@media (max-width:900px){#st-mine table{font-size:13px}#st-mine td,#st-mine th{padding:10px 4px}#st-mine td:first-child b{word-break:break-all}#st-mine .ops .btn{padding:4px 8px}}
