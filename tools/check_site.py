@@ -33,7 +33,8 @@ for f in sorted(glob.glob(f"{ROOT}/zh/**/index.html", recursive=True) + glob.glo
     for h in re.findall(r'href="(/[^"#?]*)', s):
         t = os.path.join(ROOT, h.lstrip("/")); t = os.path.join(t, "index.html") if h.endswith("/") else t
         if not os.path.exists(t): err.append(f"{rel}: 死链 {h}")
-    text = re.sub(r"<[^>]+>", " ", s)
+    text = re.sub(r"<[^>]+>", " ", re.sub(r'<script type="application/ld\+json">.*?</script>', " ", s, flags=re.S))
+    if "/leader/" in path: text = re.sub(r"@\S+", " ", text)   # leader 昵称是第三方数据
     for w in BAN_W:
         if w.lower() in text.lower(): err.append(f"{rel}: 禁用词 {w}")
     if re.search(r'(无数据|No data)[^<]{0,3}0', text): pass

@@ -20,20 +20,40 @@ def get(path):
 
 # ---------------- 数据 ----------------
 def load():
-    data = {"ok": False, "as_of": None, "leaders": [], "wallets": {}, "source": None, "err": None}
+    data = {"ok": False, "as_of": None, "leaders": [], "wallets": {}, "pages": [], "details": {}, "source": None, "err": None, "sitemap_ok": False}
     try:
         lb = get("/v1/public/leaderboard")
         b = lb.get("leaderboard") or {}
+        for l in b.get("leaders") or []: l["address"] = l["address"].lower()
         data.update(ok=True, as_of=b.get("as_of"), leaders=b.get("leaders") or [], source="/v1/public/leaderboard", window=b.get("window"))
     except Exception as e:
-        data["err"] = str(e); return data
-    keep = [l for l in data["leaders"] if l.get("gate_pass") and ((l.get("metrics") or {}).get("resolved_markets") or 0) >= MIN_RESOLVED]
-    def w(l):
-        try: return l["address"], get("/v1/public/wallets/" + l["address"])
-        except Exception: return l["address"], None
-    with ThreadPoolExecutor(8) as ex:
-        for a, j in ex.map(w, keep): data["wallets"][a] = j
-    data["leaders"] = keep
+        data["err"] = "leaderboard: " + str(e)
+    # 详情页清单：/v1/public/sitemap（服务端已按成交笔数过滤），分页拉全
+    addrs, off = [], 0
+    try:
+        while off is not None:
+            sm = get(f"/v1/public/sitemap?offset={off}&limit=1000").get("sitemap") or {}
+            ls = sm.get("leaders") or []
+            addrs += [(x["address"].lower(), x.get("updated_at")) for x in ls if x.get("address")]
+            if not ls: break
+            off = sm.get("next_offset")
+        data["sitemap_ok"] = True
+    except Exception as e:
+        data["err"] = (data["err"] or "") + " sitemap: " + str(e)
+        addrs = [(l["address"].lower(), data["as_of"]) for l in data["leaders"]]   # 退回：只用排行榜地址
+    seen = set(); data["pages"] = [(a, u) for a, u in addrs if not (a in seen or seen.add(a))]
+    def det(a):
+        try: return a, (get("/v1/public/leaders/" + a) or {}).get("leader")
+        except Exception: return a, None
+    def wal(a):
+        try: return a, get("/v1/public/wallets/" + a)     # 只为收益曲线
+        except Exception: return a, None
+    with ThreadPoolExecutor(16) as ex:
+        for a, j in ex.map(det, [a for a, _ in data["pages"]]): data["details"][a] = j
+        for a, j in ex.map(wal, [l["address"].lower() for l in data["leaders"]]): data["wallets"][a] = j
+    data["pages"] = [(a, u) for a, u in data["pages"] if data["details"].get(a)]
+    pg = {a for a, _ in data["pages"]}
+    data["leaders"] = [l for l in data["leaders"] if l["address"].lower() in pg]   # 榜单只列有详情页的
     return data
 
 # ---------------- 格式 ----------------
@@ -243,8 +263,8 @@ def leaderboard(lang, D):
         tbl = f'<p class="nd pad">{T[lang]["nd"]}</p><p class="mu pad">{"构建时排行榜接口不可用，本页为占位，下次构建会自动补上。" if zh else "The leaderboard API was unavailable at build time; this is a placeholder until the next build."}</p>'
     else:
         tbl = f'<div class="tw"><table class="lt"><thead>{lhead(lang)}</thead><tbody>{rows}</tbody></table></div>'
-    intro = ("按链上近 90 天表现排序。进榜前先排除单次重仓、刷量、自成交和做市地址，并且只收录已结算市场不少于 " + str(MIN_RESOLVED) + " 个的地址。排名不代表以后的表现。" if zh else
-             f"Ranked by 90-day on-chain results. Before ranking we exclude one-off bets, wash volume, self-crossing and market makers, and we only list wallets with at least {MIN_RESOLVED} resolved markets. A ranking does not predict future results.")
+    intro = ("按链上近 90 天表现排序。进榜前先排除单次重仓、刷量、自成交和做市地址，并且只收录成交笔数足够多的地址。排名不代表以后的表现。" if zh else
+             f"Ranked by 90-day on-chain results. Before ranking we exclude one-off bets, wash volume, self-crossing and market makers, and we only list wallets with enough trades. A ranking does not predict future results.")
     body = f'''<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {"排行榜" if zh else "Leaderboard"}</p><h1>{"Polymarket 交易者排行榜" if zh else "Leaderboard of Polymarket traders"}</h1><p class="lead">{E(intro)}</p>
 {f'<p class="mu sm">{"数据截至" if zh else "Data as of"} {E(asof)} · {"共" if zh else ""} {len(D["leaders"])} {"位" if zh else "traders"} · <a class="ln" href="/{lang}/how-it-works/">{"选人方法" if zh else "How we pick"} →</a></p>' if asof else ""}</section>
 <section class="card">{tbl}</section>'''
@@ -252,9 +272,12 @@ def leaderboard(lang, D):
           "itemListElement": [{"@type": "ListItem", "position": i + 1, "url": f"{SITE}/{lang}/leader/{l['address']}/", "name": dname(D["wallets"].get(l["address"]), l["address"])} for i, l in enumerate(D["leaders"])]}
     write(f"{lang}/leaderboard/index.html", page(lang, "leaderboard/", "leaderboard", body, [il, crumbs(lang, [("排行榜" if zh else "Leaderboard", "leaderboard/")])]))
 
-def leader(lang, l, rank, D):
-    zh = lang == "zh"; a = l["address"]; w = D["wallets"].get(a) or {}
-    m = dict(l.get("metrics") or {}); m.update((w.get("metrics") or {}))
+def leader(lang, a, upd, rank, D):
+    zh = lang == "zh"; d = D["details"].get(a) or {}; w = dict(D["wallets"].get(a) or {}); w.update({k: v for k, v in d.items() if k in ("user_name", "x_username")})
+    w["as_of"] = d.get("updated_at") or upd
+    m = dict(d.get("metrics") or {})
+    for k in ("win_rate", "roi", "max_drawdown"):
+        if d.get(k) is not None: m[k] = d[k]
     nm = dname(w, a)
     asof_raw = w.get("as_of") or D["as_of"]; asof = bj(asof_raw, lang)
     wr, roi, dd_, rm = pct(m.get("win_rate"), d=1), pct(m.get("roi"), True), pct(m.get("max_drawdown")), num(m.get("resolved_markets"))
@@ -284,7 +307,8 @@ def leader(lang, l, rank, D):
       (L("持仓中位时长", "Median hold"), ((f"{m['median_hold_minutes']/1440:.1f} 天" if zh else f"{m['median_hold_minutes']/1440:.1f} days") if isinstance(m.get("median_hold_minutes"), (int, float)) else None), "", "median_hold_minutes"),
     ]
     grid = "".join(stat(lab, v, N, c) for lab, v, c, _ in stats)
-    cats = [(CAT.get(c, c) if zh else c) for c in (m.get("categories") or []) if c and c != "unknown"]
+    cats = [x.get("category") if isinstance(x, dict) else x for x in (d.get("categories") or m.get("categories") or [])]
+    cats = [(CAT.get(c, c) if zh else c) for c in cats if c and c != "unknown"][:5]
     lt = bj(m.get("last_trade_at"), lang)
     facts = []
     if cats: facts.append(L("主要市场类别：", "Main categories: ") + ("、" if zh else ", ").join(cats) + L("。", "."))
@@ -292,7 +316,7 @@ def leader(lang, l, rank, D):
     if w.get("x_username"): facts.append(L("X 账号：", "X account: ") + "@" + w["x_username"] + L("（自报，未核实）。", " (self-reported, unverified)."))
     fh = "".join(f"<li>{E(f)}</li>" for f in facts)
     body = f'''<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / <a href="/{lang}/leaderboard/">{L("排行榜", "Leaderboard")}</a> / {E(short(a))}</p>
-<h1>{E(nm)} <span class="mu rk num">#{rank}</span></h1><p class="addr num" title="{a}">{a}</p><p class="lead">{E(desc)}</p>
+<h1>{E(nm)}{f' <span class="mu rk num">#{rank}</span>' if rank else ""}</h1><p class="addr num" title="{a}">{a}</p><p class="lead">{E(desc)}</p>
 {f'<p class="mu sm">{L("数据截至", "Data as of")} {E(asof)} · {L("统计窗口：近 90 天", "Window: last 90 days")}</p>' if asof else ""}</section>
 <section class="card grid">{grid}</section>{spark(w.get("equity_curve"), lang)}
 {f'<section class="card"><ul class="facts">{fh}</ul></section>' if fh else ""}
@@ -322,7 +346,7 @@ def content(lang):
     zh = lang == "zh"; L = (lambda z, e: z if zh else e)
     article(lang, "how-it-works/", "how", L("我们怎么挑值得跟的 Polymarket 交易者", "How we pick Polymarket traders to follow"), [
       (L("统计口径", "What we measure"), [L("统计窗口是近 90 天，只算已经结算的市场。每个地址展示胜率、收益率（已实现加浮动，除以投入）、最大回撤、已结算市场数、平均买入价、单笔中位金额和持仓中位时长。", "The window is the last 90 days and only resolved markets count. For each wallet we show win rate, ROI (realized plus unrealized over capital invested), max drawdown, resolved markets, average entry price, median trade size and median holding time."),
-        L(f"已结算市场少于 {MIN_RESOLVED} 个的地址样本太小，不生成详情页。", f"Wallets with fewer than {MIN_RESOLVED} resolved markets are too small a sample and get no detail page.")]),
+        L("成交笔数太少的地址样本太小，不生成详情页。", "Wallets with too few trades are too small a sample and get no detail page.")]),
       (L("先排除，再排序", "Exclude first, then rank"), [L("单次重仓：收益大部分来自同一个事件的地址会被排除，这种结果靠运气的成分太大。", "One-off bets: wallets whose results mostly come from a single event are excluded; too much of that is luck."),
         L("刷量与自成交：成交量远大于收益、或者出现自己和自己成交的地址会被排除。", "Wash volume and self-crossing: wallets whose volume dwarfs their results, or that trade against themselves, are excluded."),
         L("做市：双边挂单比例高的地址赚的是价差，跟着它的方向下单复制不了，也会被排除。", "Market makers: wallets that quote both sides earn the spread, which copying their direction can't replicate, so they are excluded."),
@@ -377,9 +401,9 @@ def sitemap(D):
     static_lm = "2026-10-21"
     urls = [("", lm_data or static_lm), ("leaderboard/", lm_data or static_lm)]
     for k in ["how-it-works/", "copy-trading/", "faq/", "risk/", "privacy/", "terms/", "about/"]: urls.append((k, static_lm))
-    for l in D["leaders"]:
-        w = D["wallets"].get(l["address"]) or {}
-        urls.append((f"leader/{l['address']}/", iso(w.get("as_of") or D["as_of"]) or static_lm))
+    for a, u in D["pages"]:
+        d = D["details"].get(a) or {}
+        urls.append((f"leader/{a}/", iso(d.get("updated_at") or u) or static_lm))
     out = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
            f'<url><loc>{SITE}/</loc><lastmod>{static_lm}</lastmod><xhtml:link rel="alternate" hreflang="zh-CN" href="{SITE}/zh/"/><xhtml:link rel="alternate" hreflang="en" href="{SITE}/en/"/><xhtml:link rel="alternate" hreflang="x-default" href="{SITE}/"/></url>']
     for p, lm in urls:
@@ -391,13 +415,14 @@ def sitemap(D):
 
 def main():
     D = load()
-    print("data ok" if D["ok"] else "data FAILED: " + str(D["err"]), "| as_of", D["as_of"], "| leaders", len(D["leaders"]), "| wallets ok", sum(1 for v in D["wallets"].values() if v))
+    print("data ok" if D["ok"] else "data FAILED: " + str(D["err"]), "| as_of", D["as_of"], "| leaders", len(D["leaders"]), "| pages", len(D["pages"]), "| sitemap api", D["sitemap_ok"])
     for lang in ("zh", "en"):
         shutil.rmtree(os.path.join(ROOT, lang, "leader"), ignore_errors=True)
         home(lang, D); leaderboard(lang, D); content(lang)
-        for i, l in enumerate(D["leaders"]): leader(lang, l, i + 1, D)
+        rk = {l["address"].lower(): i + 1 for i, l in enumerate(D["leaders"])}
+        for a, u in D["pages"]: leader(lang, a, u, rk.get(a), D)
     root(D); sitemap(D)
-    json.dump({"built_at": BUILT.strftime("%Y-%m-%dT%H:%M:%SZ"), "data_as_of": D["as_of"], "source": API + (D["source"] or ""), "leaders": len(D["leaders"]), "min_resolved": MIN_RESOLVED, "error": D["err"]},
+    json.dump({"built_at": BUILT.strftime("%Y-%m-%dT%H:%M:%SZ"), "data_as_of": D["as_of"], "source": API + (D["source"] or ""), "leaders": len(D["leaders"]), "leader_pages": len(D["pages"]), "sitemap_api": D["sitemap_ok"], "error": D["err"]},
               open(os.path.join(ROOT, "build-info.json"), "w"), indent=1)
 
 if __name__ == "__main__": main()
