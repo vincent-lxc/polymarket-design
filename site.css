@@ -70,3 +70,12 @@ h1{font-size:var(--f1);line-height:1.12;letter-spacing:-.02em;font-weight:750}
 @media (max-width:420px){.top{gap:10px}.logo b{font-size:15px}.lead{font-size:16px}.card{padding:16px}.st{padding:12px 10px}.st:nth-child(-n+3) b{font-size:22px}.st b{font-size:18px}}
 .hero h1{font-size:clamp(32px,4.1vw,56px);text-wrap:balance}.hero{min-height:min(760px,calc(100vh - 64px))}
 .lt td a b{display:inline-block;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+
+/* live refresh */
+.live-skel{opacity:.45}
+.lt tbody.live-skel tr td{color:var(--dim)}
+.live-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mu)}
+.live-badge i{width:6px;height:6px;border-radius:50%;background:var(--gr);display:inline-block}
+.live-badge.err i{background:var(--rd)}
+.live-badge.load i{background:var(--or);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}

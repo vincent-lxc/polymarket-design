@@ -11,3 +11,7 @@
 /login.html /app/login.html 301
 /overview.html /app/overview.html 301
 /strategies.html /app/strategies.html 301
+/zh/leader/:addr /zh/leader/_shell/index.html 200
+/en/leader/:addr /en/leader/_shell/index.html 200
+/zh/leader/:addr/ /zh/leader/_shell/index.html 200
+/en/leader/:addr/ /en/leader/_shell/index.html 200

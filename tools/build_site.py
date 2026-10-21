@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Wakeloom 织迹 官网静态生成器。
 用法：python3 tools/build_site.py   （在仓库根目录运行，输出写到 zh/ en/ 及根目录的 index.html、sitemap.xml、robots.txt）
-数据：构建时读取 BFF 公开接口；接口不可用时生成占位页并写明。JSON-LD 静态写进 HTML。
+数据：构建时读公开接口生成 SEO 快照（排行榜 + 前 50 详情 + JSON-LD）；页面打开后由 site-live.js 再请求接口刷新数字。其余 leader 走 _shell + _redirects。
 """
 import json, os, re, sys, html, shutil, urllib.request, datetime as dt
 from concurrent.futures import ThreadPoolExecutor
@@ -42,6 +42,11 @@ def load():
         data["err"] = (data["err"] or "") + " sitemap: " + str(e)
         addrs = [(l["address"].lower(), data["as_of"]) for l in data["leaders"]]   # 退回：只用排行榜地址
     seen = set(); data["pages"] = [(a, u) for a, u in addrs if not (a in seen or seen.add(a))]
+    # 方案 2：构建只拉排行榜前 N 的详情作 SEO 快照；其余地址由客户端读接口。
+    # sitemap 仍收录全部公开地址，部署体积不再提交数千 HTML。
+    SNAP = int(os.environ.get("WAKELOOM_SEO_LEADERS", "50"))
+    snap_addrs = [l["address"].lower() for l in data["leaders"][:SNAP]]
+    # 详情页清单仍用 sitemap（给 sitemap.xml），但静态 HTML 只生成 snap
     def det(a):
         try: return a, (get("/v1/public/leaders/" + a) or {}).get("leader")
         except Exception: return a, None
@@ -49,11 +54,10 @@ def load():
         try: return a, get("/v1/public/wallets/" + a)     # 只为收益曲线
         except Exception: return a, None
     with ThreadPoolExecutor(16) as ex:
-        for a, j in ex.map(det, [a for a, _ in data["pages"]]): data["details"][a] = j
-        for a, j in ex.map(wal, [l["address"].lower() for l in data["leaders"]]): data["wallets"][a] = j
-    data["pages"] = [(a, u) for a, u in data["pages"] if data["details"].get(a)]
-    pg = {a for a, _ in data["pages"]}
-    data["leaders"] = [l for l in data["leaders"] if l["address"].lower() in pg]   # 榜单只列有详情页的
+        for a, j in ex.map(det, snap_addrs): data["details"][a] = j
+        for a, j in ex.map(wal, snap_addrs): data["wallets"][a] = j
+    data["snap_pages"] = [(a, data["as_of"]) for a in snap_addrs if data["details"].get(a)]
+    # 榜单保留接口原样（客户端会再刷）；构建时不过滤掉无详情的
     return data
 
 # ---------------- 格式 ----------------
@@ -144,10 +148,10 @@ FAQ = {
   ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。我们用近 90 天数据，同时看胜率、收益率、最大回撤和收益是否集中在一个事件上，样本太少或靠一次重仓的地址不进榜。"),
   ("Polymarket 排行榜第一名值得跟吗？", "不一定。按金额排的榜首常常是一次重仓押中，或者成交量里有大量刷量和做市对冲，这类表现很难复制。我们的排行榜先排除这些地址，再按长期表现排序，但上榜也不代表以后还会这样。"),
   ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。我们发现对方成交到自己下单之间有延迟，价格可能已经变了，薄盘口还会吃到更差的价。所以每一笔都记录和对方的成交价差，偏离超过阈值就放弃，先在模拟盘里算清楚扣掉成本后的结果。"),
-  ("Wakeloom 会托管我的私钥吗？", "不会。第一期只有模拟盘，不需要也不接收你的私钥；登录用钱包签一段文字，这个签名不能用来转账或下单。"),
+  ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。钱包登录只签署登录接口返回的那段文案（例如 Sign in to Wakeloom.），该签名不能用来转账，也不能授权交易。"),
   ("胜率和收益率哪个更重要？", "单看哪个都不够，要结合买入价格和回撤一起看。在 90¢ 买入的高胜率可能一次失手就抹掉多次收益，低胜率但买得便宜的人也可能长期为正，所以我们同时展示胜率、收益率、最大回撤和平均买入价。"),
   ("对方平仓了我怎么办？", "跟着平。跟单规则里对方减仓或平仓时，我们按同样比例减仓或平仓；如果你设了全局停止，所有跟随会立刻暂停。"),
-  ("数据从哪来？多久更新？", "来自 Polygon 链上成交记录和 Polymarket 的公开接口，官网页面每天重新生成一次。拿不到的数据显示「无数据」，不会用 0 填充；每页都写了数据截至时间（北京时间）。"),
+  ("数据从哪来？多久更新？", "来自 Polygon 链上成交记录和 Polymarket 的公开接口。排行榜和详情页打开时会向公开接口拉取最新数字；构建进仓库的是 SEO 用的快照。拿不到的数据显示「无数据」，不会用 0 填充；页面会写明数据截至时间（北京时间）。"),
   ("跟单有风险吗？会亏钱吗？", "有风险，也会亏钱。过去的表现不代表以后，对方可能改变风格或判断失误，延迟和手续费也会吃掉一部分结果。所以第一期只开放模拟盘，详见风险提示。"),
   ("Wakeloom 和 Polymarket 是什么关系？", "没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。"),
  ],
@@ -156,7 +160,7 @@ FAQ = {
   ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event; wallets with too few markets or one oversized bet are left out."),
   ("Is the #1 trader on a Polymarket leaderboard worth copying?", "Not necessarily. The top spot by dollars is often one large bet that paid off, or volume inflated by wash trades and market-making hedges, which you can't replicate. Our leaderboard removes those wallets first and then ranks by long-term results, but a ranking doesn't predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. By the time we see a fill and place our own order the price may have moved, and thin books give worse prices. We log the price gap on every trade, skip trades that deviate past a threshold, and measure net results after costs in paper trading first."),
-  ("Does Wakeloom hold my private key?", "No. Phase one is paper trading only, so we never need or accept your private key; you sign in by signing a text message with your wallet, and that signature cannot move funds or place orders."),
+  ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or custodied your private key. Wallet login only signs the nonce text returned by the API (e.g. Sign in to Wakeloom.); that signature cannot transfer funds or approve trades."),
   ("Which matters more, win rate or ROI?", "Neither alone; read them with entry price and drawdown. A high win rate bought at 90¢ can be wiped out by one loss, while a lower win rate bought cheaply can still come out ahead, so we show win rate, ROI, max drawdown and average entry price together."),
   ("What happens when the trader I follow closes a position?", "We close too. When the followed wallet reduces or exits, we reduce or exit by the same proportion, and a global stop pauses all copying at once."),
   ("Where does the data come from, and how often is it updated?", "From Polygon on-chain fills and Polymarket's public APIs; the website pages are rebuilt daily. Missing data is shown as \"No data\", never filled with 0, and every page states its data time in Beijing time."),
@@ -189,7 +193,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
 <nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="/app/">{t["cta"]}</a></div></header>
 <main>{body}</main>
 <footer class="ft"><div class="fl"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="22" height="22" alt=""><b>{t["name"]}</b></a><span>{t["tag"]}</span></div><nav>{foot}</nav><p>{E(t["indep"])}</p></footer>
-<script src="/site.js" defer></script></body></html>'''
+<script src="/site.js" defer></script><script src="/site-live.js" defer></script></body></html>'''
 
 def write(rel, s):
     p = os.path.join(ROOT, rel); os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -221,9 +225,9 @@ def home(lang, D):
 <p class="lead">{"从链上历史里筛掉单次重仓、刷量和做市地址，留下近 90 天表现稳定的交易者。看胜率、收益率和回撤，再用模拟盘记录真实的延迟和滑点。" if zh else "We filter out one-off bets, wash volume and market makers from on-chain history and keep traders with steady 90-day results. Read their win rate, ROI and drawdown, then paper-trade them while logging real latency and slippage."}</p>
 <div class="ctas"><a class="btn pri mag" href="/app/">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
 <p class="mu sm">{"第一期只有模拟盘，不动真钱，不需要私钥。" if zh else "Phase one is paper trading only: no real money, no private key."}</p></div>
-<div class="hv card rise"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b>{f'<span class="mu sm">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else ""}</div>
+<div class="hv card rise" data-live="home-top"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b><span class="live-badge" data-live-badge="home-top"></span>{f'<span class="mu sm" data-live-meta="home-top">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else '<span class="mu sm" data-live-meta="home-top"></span>'}</div>
 {f'<table class="lt"><thead>{lhead(lang, short=True)}</thead><tbody>{rows}</tbody></table>' if rows else f'<p class="nd pad">{T[lang]["nd"]}</p>'}
-<a class="more" href="/{lang}/leaderboard/">{"看全部" if zh else "View all"}{f" {n} " if n else " "}{"位 →" if zh else "traders →"}</a></div></section>''')
+<a class="more" data-live-more="home-top" href="/{lang}/leaderboard/">{"看全部" if zh else "View all"}{f" {n} " if n else " "}{"位 →" if zh else "traders →"}</a></div></section>''')
     feats = [
      ("01", "排除单次重仓与刷量" if zh else "No one-off whales or wash volume", "收益集中在一个事件、成交量远大于收益、自成交或双边做市的地址不进榜。" if zh else "Wallets whose results hinge on one event, whose volume dwarfs their results, or that self-cross or make markets are excluded.", "how-it-works/"),
      ("02", "每个地址一页数据" if zh else "A data page for every wallet", "近 90 天胜率、收益率、最大回撤、已结算市场数和收益曲线，缺的数据直接写「无数据」。" if zh else "90-day win rate, ROI, max drawdown, resolved markets and equity curve. Missing values say \"No data\".", "leaderboard/"),
@@ -265,9 +269,10 @@ def leaderboard(lang, D):
         tbl = f'<div class="tw"><table class="lt"><thead>{lhead(lang)}</thead><tbody>{rows}</tbody></table></div>'
     intro = ("按链上近 90 天表现排序。进榜前先排除单次重仓、刷量、自成交和做市地址，并且只收录成交笔数足够多的地址。排名不代表以后的表现。" if zh else
              f"Ranked by 90-day on-chain results. Before ranking we exclude one-off bets, wash volume, self-crossing and market makers, and we only list wallets with enough trades. A ranking does not predict future results.")
+    meta = f'<p class="mu sm"><span data-live-meta="leaderboard">{"数据截至" if zh else "Data as of"} {E(asof)} · {"共" if zh else ""} {len(D["leaders"])} {"位" if zh else "traders"}</span> · <span class="live-badge" data-live-badge="leaderboard"></span> · <a class="ln" href="/{lang}/how-it-works/">{"选人方法" if zh else "How we pick"} →</a></p>' if asof else '<p class="mu sm"><span data-live-meta="leaderboard"></span> <span class="live-badge" data-live-badge="leaderboard"></span></p>'
     body = f'''<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {"排行榜" if zh else "Leaderboard"}</p><h1>{"Polymarket 交易者排行榜" if zh else "Leaderboard of Polymarket traders"}</h1><p class="lead">{E(intro)}</p>
-{f'<p class="mu sm">{"数据截至" if zh else "Data as of"} {E(asof)} · {"共" if zh else ""} {len(D["leaders"])} {"位" if zh else "traders"} · <a class="ln" href="/{lang}/how-it-works/">{"选人方法" if zh else "How we pick"} →</a></p>' if asof else ""}</section>
-<section class="card">{tbl}</section>'''
+{meta}</section>
+<section class="card" data-live="leaderboard">{tbl}</section>'''
     il = {"@type": "ItemList", "name": DESC[lang]["leaderboard"][0], "numberOfItems": len(D["leaders"]),
           "itemListElement": [{"@type": "ListItem", "position": i + 1, "url": f"{SITE}/{lang}/leader/{l['address']}/", "name": dname(D["wallets"].get(l["address"]), l["address"])} for i, l in enumerate(D["leaders"])]}
     write(f"{lang}/leaderboard/index.html", page(lang, "leaderboard/", "leaderboard", body, [il, crumbs(lang, [("排行榜" if zh else "Leaderboard", "leaderboard/")])]))
@@ -315,12 +320,20 @@ def leader(lang, a, upd, rank, D):
     if lt: facts.append(L(f"最近一次成交：{lt}。", f"Last trade: {lt}."))
     if w.get("x_username"): facts.append(L("X 账号：", "X account: ") + "@" + w["x_username"] + L("（自报，未核实）。", " (self-reported, unverified)."))
     fh = "".join(f"<li>{E(f)}</li>" for f in facts)
-    body = f'''<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / <a href="/{lang}/leaderboard/">{L("排行榜", "Leaderboard")}</a> / {E(short(a))}</p>
-<h1>{E(nm)}{f' <span class="mu rk num">#{rank}</span>' if rank else ""}</h1><p class="addr num" title="{a}">{a}</p><p class="lead">{E(desc)}</p>
-{f'<p class="mu sm">{L("数据截至", "Data as of")} {E(asof)} · {L("统计窗口：近 90 天", "Window: last 90 days")}</p>' if asof else ""}</section>
-<section class="card grid">{grid}</section>{spark(w.get("equity_curve"), lang)}
-{f'<section class="card"><ul class="facts">{fh}</ul></section>' if fh else ""}
-<section class="card cta-row"><div><b>{L("想看他每个市场的买卖点、近 20 笔输赢？", "Want per-market buy/sell points and the last 20 trades?")}</b><p class="mu">{L("在应用里打开这个地址，或用模拟盘跟一跟。上榜不代表以后的表现。", "Open this wallet in the app or paper-trade it. A ranking does not predict future results.")}</p></div><a class="btn pri" href="/app/leader.html?addr={a}">{L("在应用中查看", "Open in the app")} →</a></section>'''
+    spark_html = spark(w.get("equity_curve"), lang)
+    # recent_results 公开接口目前恒为 null → 显示「无数据」；K 线买卖点未上线，CTA 继续引导进 App
+    rr_html = f'<section class="card" data-f="recent"><div class="hd"><b>{L("近 20 笔输赢", "Last 20 results")}</b></div><p class="nd pad">{N}</p></section>'
+    body = f'''<div data-live="leader" data-addr="{a}">
+<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / <a href="/{lang}/leaderboard/">{L("排行榜", "Leaderboard")}</a> / {E(short(a))}</p>
+<h1 data-f="name">{E(nm)}{f' <span class="mu rk num">#{rank}</span>' if rank else ""}</h1><p class="addr num" title="{a}">{a}</p><p class="lead" data-f="desc">{E(desc)}</p>
+<p class="mu sm" data-f="asof">{(L("数据截至", "Data as of") + " " + E(asof) + " · " + L("统计窗口：近 90 天", "Window: last 90 days")) if asof else ""}</p>
+<span class="live-badge" data-live-badge="leader"></span></section>
+<section class="card grid" data-f="grid">{grid}</section>
+<div data-f="spark">{spark_html}</div>
+<section class="card" data-f="facts"{"" if fh else " style=\"display:none\""}>{f"<ul class=\"facts\">{fh}</ul>" if fh else ""}</section>
+{rr_html}
+<section class="card cta-row"><div><b>{L("想看他每个市场的买卖点、近 20 笔输赢？", "Want per-market buy/sell points and the last 20 trades?")}</b><p class="mu">{L("在应用里打开这个地址，或用模拟盘跟一跟。上榜不代表以后的表现。", "Open this wallet in the app or paper-trade it. A ranking does not predict future results.")}</p></div><a class="btn pri" href="/app/leader.html?addr={a}">{L("在应用中查看", "Open in the app")} →</a></section>
+</div>'''
     vm = [{"@type": "PropertyValue", "name": lab, "propertyID": key, **({"value": v} if v is not None else {})} for lab, v, _, key in stats if v is not None]
     url = f"{SITE}/{lang}/leader/{a}/"
     mod = iso(asof_raw)
@@ -351,7 +364,7 @@ def content(lang):
         L("刷量与自成交：成交量远大于收益、或者出现自己和自己成交的地址会被排除。", "Wash volume and self-crossing: wallets whose volume dwarfs their results, or that trade against themselves, are excluded."),
         L("做市：双边挂单比例高的地址赚的是价差，跟着它的方向下单复制不了，也会被排除。", "Market makers: wallets that quote both sides earn the spread, which copying their direction can't replicate, so they are excluded."),
         L("通过筛选的地址再按长期表现综合排序。排序用的综合分是内部指标，不对外公布。", "Wallets that pass are ranked by long-term results. The composite used for ranking is internal and not published.")]),
-      (L("数据来源与更新", "Sources and updates"), [L("成交来自 Polygon 链上记录和 Polymarket 公开接口。官网页面每天重新生成，每页写明数据截至时间（北京时间）。拿不到的数值显示「无数据」，不用 0 填充。", "Fills come from Polygon on-chain records and Polymarket's public APIs. Website pages are rebuilt daily and show their data time in Beijing time. Values we can't get show \"No data\" and are never filled with 0.")]),
+      (L("数据来源与更新", "Sources and updates"), [L("成交来自 Polygon 链上记录和 Polymarket 公开接口。排行榜和详情页由浏览器请求公开接口刷新数字；仓库里的 HTML 是 SEO 快照。每页写明数据截至时间（北京时间）。拿不到的数值显示「无数据」，不用 0 填充。", "Fills come from Polygon on-chain records and Polymarket's public APIs. Website pages are rebuilt daily and show their data time in Beijing time. Values we can't get show \"No data\" and are never filled with 0.")]),
       (L("限制", "Limitations"), [L("过去 90 天的表现不代表以后。筛选规则能去掉明显的噪音，但去不掉所有运气，也看不到地址背后的人是否改变了策略。", "Past 90-day results don't predict the future. The filters remove obvious noise but not all luck, and they can't see whether the person behind a wallet has changed strategy.")]),
     ], L("选人方法", "How it works"))
     article(lang, "copy-trading/", "copy", L("用于 Polymarket 的模拟盘跟单", "Paper-trade copy trading for Polymarket"), [
@@ -413,16 +426,71 @@ def sitemap(D):
     write("sitemap.xml", "\n".join(out) + "\n")
     write("robots.txt", f"User-agent: *\nAllow: /\nDisallow: /app/\n\nSitemap: {SITE}/sitemap.xml\n")
 
+def leader_shell(lang):
+    """非前 50 地址的通用壳：路径或 ?addr= 解析地址，由 site-live.js 拉公开接口。"""
+    zh = lang == "zh"; L = (lambda z, e: z if zh else e)
+    N = T[lang]["nd"]
+    title = L("Polymarket 交易者数据 | Wakeloom 织迹", "Polymarket Trader Stats | Wakeloom")
+    desc = L("打开后从公开接口加载该地址的胜率、收益率与回撤。", "Loads win rate, ROI and drawdown for this wallet from the public API.")
+    body = f'''<div data-live="leader" data-addr="">
+<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / <a href="/{lang}/leaderboard/">{L("排行榜", "Leaderboard")}</a> / …</p>
+<h1 data-f="name">{L("加载中…", "Loading…")}</h1><p class="addr num" data-f="addr"></p><p class="lead" data-f="desc">{E(desc)}</p>
+<p class="mu sm" data-f="asof"></p><span class="live-badge" data-live-badge="leader"></span>
+<p class="nd pad" data-f="missing" hidden>{L("没有这个地址的公开数据，或接口暂不可用。", "No public data for this wallet, or the API is unavailable.")}</p></section>
+<section class="card grid" data-f="grid">{"".join(stat(lab, None, N) for lab in ([L("胜率（近90天）","Win rate (90d)"), L("收益率（近90天）","ROI (90d)"), L("最大回撤","Max drawdown"), L("已结算市场","Resolved markets")] ))}</section>
+<div data-f="spark"></div>
+<section class="card" data-f="facts" style="display:none"></section>
+<section class="card" data-f="recent"><div class="hd"><b>{L("近 20 笔输赢", "Last 20 results")}</b></div><p class="nd pad">{N}</p></section>
+<section class="card cta-row"><div><b>{L("在应用里打开这个地址", "Open this wallet in the app")}</b><p class="mu">{L("上榜不代表以后的表现。", "A ranking does not predict future results.")}</p></div><a class="btn pri" data-f="app" href="/app/">{L("进入应用", "Open the app")} →</a></section>
+</div>
+<script>
+(function(){{
+  var m=location.pathname.match(new RegExp("/leader/(0x[a-fA-F0-9]{{40}})/?"));
+  var a=(m&&m[1]||new URLSearchParams(location.search).get("addr")||"").toLowerCase();
+  var root=document.querySelector("[data-live=leader]");
+  if(root&&a){{root.setAttribute("data-addr",a);var el=document.querySelector("[data-f=addr]");if(el){{el.textContent=a;el.title=a;}}
+  var app=document.querySelector("[data-f=app]");if(app)app.href="/app/leader.html?addr="+a;
+  var can=document.querySelector('link[rel=canonical]');if(can)can.href="https://www.wakeloom.com/{lang}/leader/"+a+"/";
+  }}
+}})();
+</script>'''
+    # 壳页 path 用 leader/_shell/，JSON-LD 仅面包屑（具体 Person 由客户端刷新后不改 LD——SEO 依赖前 50 快照）
+    write(f"{lang}/leader/_shell/index.html", page(lang, "leader/_shell/", "x", body, [crumbs(lang, [(L("排行榜", "Leaderboard"), "leaderboard/")])], title=title, desc=desc, alt=False))
+
+def write_redirects():
+    lines = [
+        "/account.html /app/account.html 301",
+        "/board.html /app/board.html 301",
+        "/config.html /app/config.html 301",
+        "/health.html /app/health.html 301",
+        "/leader-5c1e.html /app/leader-5c1e.html 301",
+        "/leader-91d4.html /app/leader-91d4.html 301",
+        "/leader-avalon.html /app/leader-avalon.html 301",
+        "/leader-lunadegen.html /app/leader-lunadegen.html 301",
+        "/leader.html /app/leader.html 301",
+        "/leaders.html /app/leaders.html 301",
+        "/login.html /app/login.html 301",
+        "/overview.html /app/overview.html 301",
+        "/strategies.html /app/strategies.html 301",
+        # 无静态文件时回落到壳页（已有 /zh/leader/0x…/index.html 的仍优先）
+        "/zh/leader/:addr /zh/leader/_shell/index.html 200",
+        "/en/leader/:addr /en/leader/_shell/index.html 200",
+        "/zh/leader/:addr/ /zh/leader/_shell/index.html 200",
+        "/en/leader/:addr/ /en/leader/_shell/index.html 200",
+    ]
+    write("_redirects", "\n".join(lines) + "\n")
+
 def main():
     D = load()
-    print("data ok" if D["ok"] else "data FAILED: " + str(D["err"]), "| as_of", D["as_of"], "| leaders", len(D["leaders"]), "| pages", len(D["pages"]), "| sitemap api", D["sitemap_ok"])
+    snaps = D.get("snap_pages") or []
+    print("data ok" if D["ok"] else "data FAILED: " + str(D["err"]), "| as_of", D["as_of"], "| leaders", len(D["leaders"]), "| seo_snap", len(snaps), "| sitemap_addrs", len(D["pages"]), "| sitemap api", D["sitemap_ok"])
     for lang in ("zh", "en"):
         shutil.rmtree(os.path.join(ROOT, lang, "leader"), ignore_errors=True)
-        home(lang, D); leaderboard(lang, D); content(lang)
+        home(lang, D); leaderboard(lang, D); content(lang); leader_shell(lang)
         rk = {l["address"].lower(): i + 1 for i, l in enumerate(D["leaders"])}
-        for a, u in D["pages"]: leader(lang, a, u, rk.get(a), D)
-    root(D); sitemap(D)
-    json.dump({"built_at": BUILT.strftime("%Y-%m-%dT%H:%M:%SZ"), "data_as_of": D["as_of"], "source": API + (D["source"] or ""), "leaders": len(D["leaders"]), "leader_pages": len(D["pages"]), "sitemap_api": D["sitemap_ok"], "error": D["err"]},
+        for a, u in snaps: leader(lang, a, u, rk.get(a), D)
+    root(D); sitemap(D); write_redirects()
+    json.dump({"built_at": BUILT.strftime("%Y-%m-%dT%H:%M:%SZ"), "data_as_of": D["as_of"], "source": API + (D["source"] or ""), "leaders": len(D["leaders"]), "leader_pages_seo": len(snaps), "sitemap_addrs": len(D["pages"]), "mode": "client-live+seo-snap-50", "sitemap_api": D["sitemap_ok"], "error": D["err"]},
               open(os.path.join(ROOT, "build-info.json"), "w"), indent=1)
 
 if __name__ == "__main__": main()
