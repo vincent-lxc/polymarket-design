@@ -168,3 +168,10 @@ tr.rl{cursor:pointer;transition:opacity .2s}tr.rl:hover{opacity:.8}tr.rl a{color
 .pchart{min-height:220px}
 @media(max-width:900px){.kv .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.f label{white-space:nowrap}}
 .kv .lbl.fi:focus,.kv .lbl.fi:hover{overflow:visible}
+/* v4.6 chart hover */
+.hv-l,.hv-d,.hv-t{position:absolute;left:0;top:0;pointer-events:none;opacity:0;transition:opacity .18s,transform .35s var(--ease);z-index:5}
+.hv-l{width:1px;height:100%;background:rgba(237,237,240,.28)}
+.hv-d{width:10px;height:10px;border-radius:50%;background:var(--tx);box-shadow:0 0 0 3px rgba(14,14,16,.8)}
+.hv-t{background:#0b0b0d;border:1px solid #2a2a30;border-radius:8px;padding:7px 10px;font-size:12px;line-height:1.5;color:var(--tx);white-space:nowrap;display:flex;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.hv-t b{font-family:ui-monospace,Menlo,monospace;font-size:13px}.hv-t span{color:var(--mu);font-size:11px}
+.hbar{position:relative}
