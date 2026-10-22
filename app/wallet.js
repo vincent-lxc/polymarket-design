@@ -67,8 +67,10 @@
   ovl.id = "wfund";
   ovl.innerHTML =
     '<div class="mask" id="wfund-mask"></div><div class="modal" role="dialog" aria-modal="true" aria-labelledby="wfund-title">' +
-    '<div style="display:flex;align-items:center"><h2 id="wfund-title">充值</h2><button type="button" class="x" id="wfund-x" aria-label="关闭">✕</button></div>' +
-    '<p class="note" id="wfund-msg"></p><div class="wqr" id="w-qr"></div><div class="num wfund-addr" id="wfund-addr"></div>' +
+    '<div class="wfund-hd" style="display:flex;align-items:center;width:100%"><h2 id="wfund-title">充值到钱包</h2><button type="button" class="x" id="wfund-x" aria-label="关闭">✕</button></div>' +
+    '<div class="wqr" id="w-qr" aria-hidden="true"></div>' +
+    '<div class="num wfund-addr" id="wfund-addr"></div>' +
+    '<p class="note" id="wfund-msg"></p>' +
     '<div class="wops"><button type="button" class="btn" id="wfund-copy" hidden>复制地址</button>' +
     '<button type="button" class="btn pri" id="w-privy" hidden>用 Privy 充值</button></div>' +
     '<div id="w-privy-root"></div></div>';
@@ -161,11 +163,12 @@
     var cell = 4;
     var qz = 4;
     var size = (n + qz * 2) * cell;
-    var parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + " " + size + '" width="168" height="168" role="img" aria-label="收款地址二维码">'];
+    var parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + " " + size + '" width="216" height="216" role="img" aria-label="收款地址二维码">'];
+    parts.push('<rect width="' + size + '" height="' + size + '" fill="#ffffff"/>');
     for (var r = 0; r < n; r++) {
       for (var c = 0; c < n; c++) {
         if (!qr.isDark(r, c)) continue;
-        parts.push('<rect x="' + (c + qz) * cell + '" y="' + (r + qz) * cell + '" width="' + cell + '" height="' + cell + '" fill="#ededf0"/>');
+        parts.push('<rect x="' + (c + qz) * cell + '" y="' + (r + qz) * cell + '" width="' + cell + '" height="' + cell + '" fill="#0e0e10"/>');
       }
     }
     parts.push("</svg>");
@@ -194,9 +197,15 @@
   }
 
   function flash(btn, done) {
-    var prev = btn.textContent;
-    btn.textContent = done ? "已复制" : "复制失败";
-    setTimeout(function () { btn.textContent = prev; }, 1200);
+    if (btn._flashT) clearTimeout(btn._flashT);
+    var prev = btn.getAttribute("data-label") || btn.textContent;
+    btn.setAttribute("data-label", prev);
+    btn.classList.toggle("ok", !!done);
+    btn.textContent = done ? "✓ 已复制" : "复制失败";
+    btn._flashT = setTimeout(function () {
+      btn.textContent = prev;
+      btn.classList.remove("ok");
+    }, 2500);
   }
 
   var openBtnEl = document.getElementById("w-open");

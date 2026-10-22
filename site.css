@@ -6,7 +6,7 @@ a{color:inherit;text-decoration:none}
 .num{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
 .mu{color:var(--mu)}.sm{font-size:14px}.xs{font-size:12px}.up{color:var(--gr)}.dn{color:var(--rd)}
 .nd{color:var(--dim);font-weight:400}.pad{padding:18px 4px}
-.top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:24px;padding:14px max(20px,calc((100vw - 1180px)/2));background:rgba(13,13,16,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:24px;padding:14px max(20px,calc((100vw - 1180px)/2));background:rgba(13,13,16,.82);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .logo{display:flex;align-items:center;gap:10px;font-size:16px}.logo img{border-radius:7px}
 .nv{display:flex;gap:4px;position:relative}
 .nv a{padding:7px 12px;border-radius:8px;color:var(--mu);font-size:14px;display:inline-block;transition:transform .35s var(--ease),opacity .2s}
@@ -95,18 +95,21 @@ body.pick .pv{position:fixed;top:0;left:0;right:0;z-index:5}
 .wl-lab{display:block;font-size:14px;margin-bottom:8px;color:var(--tx)}.wl-sub{color:var(--dim)}
 .wl-row{display:flex;gap:8px}
 .wl-row input{flex:1;min-width:0;background:var(--card2);border:1px solid var(--line);color:var(--tx);border-radius:10px;padding:9px 12px;font:inherit;font-size:14px}
-.wl-row input:focus{outline:none;border-color:rgba(255,106,31,.6)}
+.wl-row input:focus{outline:none;border-color:rgba(255,106,31,.35)}.wl-row input:focus-visible{outline:none;border-color:transparent;box-shadow:0 0 0 2px #0d0d10,0 0 0 4px rgba(255,106,31,.55),inset 0 0 0 1px rgba(255,255,255,.08)}
 .wl-msg{min-height:1.4em;margin-top:6px;font-size:13px}.wl-msg.is-ok{color:var(--tx)}.wl-msg.is-dup{color:var(--mu)}.wl-msg.is-err{color:var(--or)}
 .wl-msg.is-ok::before{content:"✓ ";color:var(--or)}
 .wl-pv{font-size:12px;color:var(--dim)}
 .wl-card{margin-top:24px}.wl-card h2{margin-bottom:4px}.wl-card .wl-form{margin-top:14px;max-width:520px}
 /* App 功能截图 */
-.shots{margin-top:56px}.shots h2{font-size:var(--f2);margin-bottom:6px}
-.shot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:20px}
-.shot{padding:0;overflow:hidden;display:flex;flex-direction:column}
-.shot-img{position:relative;aspect-ratio:1200/1290;background:var(--card2);border-bottom:1px solid var(--line)}
+.shots{margin-top:64px}.shots>h2{font-size:var(--f2);margin-bottom:6px;font-weight:600}.shots>.mu{max-width:52ch}
+.shot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:28px}
+/* Image First：大图做主角，说明叠在图底渐隐区，橙标克制 */
+.shot{position:relative;padding:0;overflow:hidden;display:block;border:0;background:var(--card2);border-radius:18px;isolation:isolate}
+.shot-img{position:relative;aspect-ratio:3/4;background:#121216;border:0}
 .shot-img img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}
-.shot-tag{position:absolute;left:12px;top:12px;font-size:12px;padding:3px 10px;border-radius:999px;color:var(--or);background:rgba(13,13,16,.82);border:1px solid rgba(255,106,31,.45)}
-.shot figcaption{padding:16px 18px 20px}.shot h3{font-size:var(--f3);margin-bottom:6px}.shot p{font-size:14px;color:var(--mu)}
-@media (max-width:900px){.shot-grid{grid-template-columns:1fr}.shot-img{aspect-ratio:1200/900}}
+.shot-tag{position:absolute;left:12px;top:12px;z-index:2;font-size:11px;padding:3px 9px;border-radius:999px;color:rgba(255,106,31,.92);background:rgba(13,13,16,.55);border:1px solid rgba(255,106,31,.28);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.shot figcaption{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:56px 18px 18px;background:linear-gradient(180deg,rgba(13,13,16,0) 0%,rgba(13,13,16,.72) 42%,rgba(13,13,16,.92) 100%);pointer-events:none}
+.shot h3{font-size:15px;font-weight:560;letter-spacing:.01em;margin:0 0 4px;color:var(--tx)}
+.shot p{font-size:12.5px;line-height:1.55;color:rgba(154,154,163,.92);margin:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+@media (max-width:900px){.shot-grid{grid-template-columns:1fr;gap:16px}.shot-img{aspect-ratio:4/5}.shot p{-webkit-line-clamp:3}}
 .wl-hp{position:absolute!important;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
