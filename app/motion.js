@@ -9,8 +9,11 @@
     (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
 
   function bj(ms) {
-    var d = new Date(ms + 8 * 36e5), p = function (n) { return (n < 10 ? "0" : "") + n; };
-    return p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()) + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + "（北京时间）";
+    var d = new Date(ms);
+    var p = Object.fromEntries(new Intl.DateTimeFormat(undefined, {
+      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false
+    }).formatToParts(d).map(function (x) { return [x.type, x.value]; }));
+    return p.month + "-" + p.day + " " + p.hour + ":" + p.minute;
   }
   function usd(v) {
     return (v < 0 ? "−" : "") + "$" + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

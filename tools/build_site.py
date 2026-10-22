@@ -79,12 +79,25 @@ def dname(w, a):
     return "@" + n
 CAT = {"politics": "政治", "geopolitics": "地缘政治", "tech": "科技", "sports": "体育", "crypto": "加密货币", "economy": "经济", "finance": "金融", "business": "商业", "culture": "文化", "pop-culture": "文化娱乐", "weather": "天气", "science": "科学", "world": "国际", "elections": "选举", "esports": "电竞", "mentions": "言论"}
 def bj(iso_or_ts, lang):
+    """Parse API times as UTC; SEO snapshot shows UTC (no city name). Browser site-live.js rewrites to local TZ."""
     if iso_or_ts is None: return None
     try:
-        d = dt.datetime.fromtimestamp(iso_or_ts, dt.timezone.utc) if isinstance(iso_or_ts, (int, float)) else dt.datetime.fromisoformat(str(iso_or_ts).replace("Z", "+00:00"))
-    except Exception: return None
-    d = d.astimezone(dt.timezone(dt.timedelta(hours=8)))
-    return d.strftime("%Y-%m-%d %H:%M") + ("（北京时间）" if lang == "zh" else " (Beijing time, UTC+8)")
+        if isinstance(iso_or_ts, (int, float)):
+            d = dt.datetime.fromtimestamp(iso_or_ts, dt.timezone.utc)
+        else:
+            s = str(iso_or_ts).strip().replace(" ", "T")
+            if not (s.endswith("Z") or re.search(r"[+-]\d{2}:?\d{2}$", s)):
+                if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+                    s = s + "T00:00:00+00:00"
+                elif re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", s):
+                    s = s + "+00:00"
+            d = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=dt.timezone.utc)
+    except Exception:
+        return None
+    d = d.astimezone(dt.timezone.utc)
+    return d.strftime("%Y-%m-%d %H:%M") + " UTC"
 def iso(s):
     try: return dt.datetime.fromisoformat(str(s).replace("Z", "+00:00")).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     except Exception: return None
@@ -151,7 +164,7 @@ FAQ = {
   ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。钱包登录只签署登录接口返回的那段文案（例如 Sign in to Wakeloom.），该签名不能用来转账，也不能授权交易。"),
   ("胜率和收益率哪个更重要？", "单看哪个都不够，要结合买入价格和回撤一起看。在 90¢ 买入的高胜率可能一次失手就抹掉多次收益，低胜率但买得便宜的人也可能长期为正，所以我们同时展示胜率、收益率、最大回撤和平均买入价。"),
   ("对方平仓了我怎么办？", "跟着平。跟单规则里对方减仓或平仓时，我们按同样比例减仓或平仓。一键暂停所有跟随的全局停止即将推出。"),
-  ("数据从哪来？多久更新？", "来自 Polygon 链上成交记录和 Polymarket 的公开接口。排行榜和详情页打开时会向公开接口拉取最新数字；构建进仓库的是 SEO 用的快照。拿不到的数据显示「无数据」，不会用 0 填充；页面会写明数据截至时间（北京时间）。"),
+  ("数据从哪来？多久更新？", "来自 Polygon 链上成交记录和 Polymarket 的公开接口。排行榜和详情页打开时会向公开接口拉取最新数字；构建进仓库的是 SEO 用的快照。拿不到的数据显示「无数据」，不会用 0 填充；页面会写明数据截至时间（按你浏览器的本地时区显示）。"),
   ("跟单有风险吗？会亏钱吗？", "有风险，也会亏钱。过去的表现不代表以后，对方可能改变风格或判断失误，延迟和手续费也会吃掉一部分结果。所以第一期只开放模拟盘，详见风险提示。"),
   ("Wakeloom 和 Polymarket 是什么关系？", "没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。"),
  ],
@@ -163,7 +176,7 @@ FAQ = {
   ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or custodied your private key. Wallet login only signs the nonce text returned by the API (e.g. Sign in to Wakeloom.); that signature cannot transfer funds or approve trades."),
   ("Which matters more, win rate or ROI?", "Neither alone; read them with entry price and drawdown. A high win rate bought at 90¢ can be wiped out by one loss, while a lower win rate bought cheaply can still come out ahead, so we show win rate, ROI, max drawdown and average entry price together."),
   ("What happens when the trader I follow closes a position?", "We close too. When the followed wallet reduces or exits, we reduce or exit by the same proportion. A global stop that pauses all copying at once is coming soon."),
-  ("Where does the data come from, and how often is it updated?", "From Polygon on-chain fills and Polymarket's public APIs; the website pages are rebuilt daily. Missing data is shown as \"No data\", never filled with 0, and every page states its data time in Beijing time."),
+  ("Where does the data come from, and how often is it updated?", "From Polygon on-chain fills and Polymarket's public APIs; the website pages are rebuilt daily. Missing data is shown as \"No data\", never filled with 0, and every page states its data time in your local timezone."),
   ("Is copy trading risky? Can I lose money?", "Yes, it is risky and you can lose money. Past results don't predict future ones, traders change style or make mistakes, and latency and fees eat into results. That's why phase one is paper trading only; see the risk notice."),
   ("How is Wakeloom related to Polymarket?", "It isn't affiliated. Wakeloom is an independent analytics tool for Polymarket that only reads public on-chain and API data."),
  ]}
@@ -416,7 +429,7 @@ def content(lang):
         L("刷量与自成交：成交量远大于收益、或者出现自己和自己成交的地址会被排除。", "Wash volume and self-crossing: wallets whose volume dwarfs their results, or that trade against themselves, are excluded."),
         L("做市：双边挂单比例高的地址赚的是价差，跟着它的方向下单复制不了，也会被排除。", "Market makers: wallets that quote both sides earn the spread, which copying their direction can't replicate, so they are excluded."),
         L("通过筛选的地址再按长期表现综合排序。排序用的综合分是内部指标，不对外公布。", "Wallets that pass are ranked by long-term results. The composite used for ranking is internal and not published.")]),
-      (L("数据来源与更新", "Sources and updates"), [L("成交来自 Polygon 链上记录和 Polymarket 公开接口。排行榜和详情页由浏览器请求公开接口刷新数字；仓库里的 HTML 是 SEO 快照。每页写明数据截至时间（北京时间）。拿不到的数值显示「无数据」，不用 0 填充。", "Fills come from Polygon on-chain records and Polymarket's public APIs. Website pages are rebuilt daily and show their data time in Beijing time. Values we can't get show \"No data\" and are never filled with 0.")]),
+      (L("数据来源与更新", "Sources and updates"), [L("成交来自 Polygon 链上记录和 Polymarket 公开接口。排行榜和详情页由浏览器请求公开接口刷新数字；仓库里的 HTML 是 SEO 快照。每页写明数据截至时间（按你浏览器的本地时区显示）。拿不到的数值显示「无数据」，不用 0 填充。", "Fills come from Polygon on-chain records and Polymarket's public APIs. Website pages are rebuilt daily and show their data time in your local timezone. Values we can't get show \"No data\" and are never filled with 0.")]),
       (L("限制", "Limitations"), [L("过去 90 天的表现不代表以后。筛选规则能去掉明显的噪音，但去不掉所有运气，也看不到地址背后的人是否改变了策略。", "Past 90-day results don't predict the future. The filters remove obvious noise but not all luck, and they can't see whether the person behind a wallet has changed strategy.")]),
     ], L("选人方法", "How it works"))
     article(lang, "copy-trading/", "copy", L("用于 Polymarket 的模拟盘跟单", "Paper-trade copy trading for Polymarket"), [

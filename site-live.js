@@ -32,13 +32,39 @@
   function tone(x) {
     return x == null ? "" : x > 0 ? "up" : x < 0 ? "dn" : "";
   }
+  /* 接口时间按 UTC 解析；显示用浏览器本地时区，不写死城市名 */
+  function parseUtc(iso) {
+    if (iso == null || iso === "") return null;
+    if (typeof iso === "number") {
+      var dn = new Date(iso);
+      return isNaN(dn) ? null : dn;
+    }
+    var s = String(iso).trim();
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      var dn2 = new Date(Number(s));
+      return isNaN(dn2) ? null : dn2;
+    }
+    if (/[zZ]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) {
+      var d0 = new Date(s);
+      return isNaN(d0) ? null : d0;
+    }
+    s = s.replace(" ", "T");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      var d1 = new Date(s + "T00:00:00Z");
+      return isNaN(d1) ? null : d1;
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) {
+      var d2 = new Date(s + "Z");
+      return isNaN(d2) ? null : d2;
+    }
+    var d3 = new Date(s);
+    return isNaN(d3) ? null : d3;
+  }
   function bj(iso) {
-    if (!iso) return null;
-    var d = new Date(iso);
-    if (isNaN(d)) return null;
+    var d = parseUtc(iso);
+    if (!d) return null;
     var p = Object.fromEntries(
-      new Intl.DateTimeFormat("zh-CN", {
-        timeZone: "Asia/Shanghai",
+      new Intl.DateTimeFormat(undefined, {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -51,8 +77,7 @@
           return [x.type, x.value];
         })
     );
-    var base = p.year + "-" + p.month + "-" + p.day + " " + p.hour + ":" + p.minute;
-    return lang === "zh" ? base + "（北京时间）" : base + " (Beijing time, UTC+8)";
+    return p.year + "-" + p.month + "-" + p.day + " " + p.hour + ":" + p.minute;
   }
   function dname(l, a) {
     var n = (l && (l.user_name || l.name)) || "";

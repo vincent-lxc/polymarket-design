@@ -1,4 +1,4 @@
-(function(){function bj(ms){var d=new Date(ms+8*36e5),p=function(n){return (n<10?"0":"")+n};return p(d.getUTCMonth()+1)+"-"+p(d.getUTCDate())+" "+p(d.getUTCHours())+":"+p(d.getUTCMinutes())+"（北京时间）"}
+(function(){function bj(ms){var d=new Date(ms),p=Object.fromEntries(new Intl.DateTimeFormat(undefined,{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(d).map(function(x){return[x.type,x.value]}));return p.month+"-"+p.day+" "+p.hour+":"+p.minute}
 var el=document.getElementById("pc");if(!el)return;
 var st={mode:"line",side:el.dataset.def||"Yes",range:"1d"};
 var N={"1h":60,"1d":96,"1w":168,"all":220},DT={"1h":6e4,"1d":9e5,"1w":36e5,"all":864e5};
