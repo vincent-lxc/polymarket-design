@@ -8,6 +8,8 @@ const PAGE=document.body.dataset.page||"";
 const PUBLIC_PAGES=new Set(["board","login"]);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+/* 市场名：有 event_slug / slug 才链到 polymarket.com/event/，否则纯文本。 */
+function marketHtml(name, row){ return window.PMMarket?PMMarket.html(name, row):esc(name==null||String(name).trim()===""?"无数据":name); }
 
 /* ---------- 显示规则 ---------- */
 const ND='<span class="nd">无数据</span>';
@@ -50,14 +52,29 @@ function keepMock(){ document.querySelectorAll("a[href]").forEach(a=>{const href
 function fallback(reason){ badge("demo",reason); keepMock(); }
 
 /* ---------- 渲染：总览 ---------- */
+/* reasons.equity_curve_omitted 非空：曲线只覆盖已统计实例，和上方合计净值不是同一口径。 */
+function applyCurveNote(reasons){
+  const raw=reasons&&typeof reasons==="object"?reasons.equity_curve_omitted:undefined;
+  const n=window.PMEquity?PMEquity.omittedEquityCount(raw):0;
+  const cap=$("#ov-curve-cap"), miss=$("#ov-curve-miss"), svg=document.querySelector("#ov-chart svg");
+  const partial=n>0;
+  if(cap) cap.textContent=partial?"已统计实例净值":"合计净值曲线 · 每 60 秒一点";
+  if(miss){ miss.hidden=!partial; miss.textContent=partial?"曲线不完整：缺 "+n+" 个实例":""; }
+  if(svg){
+    svg.setAttribute("aria-label", partial?"已统计实例净值":"迷你净值曲线，可拖动查看");
+    try{ const ds=JSON.parse(svg.dataset.series||"{}"); ds.label=partial?"已统计实例净值":"合计净值"; svg.dataset.series=JSON.stringify(ds); }catch(e){}
+  }
+}
+
 function rows(sec,headHtml,bodyHtml){ const t=sec&&sec.querySelector("table"); if(!t)return; t.innerHTML=headHtml+bodyHtml; sec.querySelectorAll(".xp").forEach(b=>b.remove()); }
 function rejectTag(code,zh,known){ if(!code)return NA; return `<span class="tag" title="${esc(code)}">${esc(zh||"其他原因")}${known===false?` <span class="fk" style="display:inline">${esc(code)}</span>`:""}</span>`; }
 function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*100)+"¢":null;
   const L=m.leader_notional_usd!=null?`${usd(m.leader_notional_usd)}${lp?" @ "+lp:""}`:null;
   const me=m.fill_usd!=null?`${usd(m.fill_usd)} @ ${Math.round(m.fill_price*100)}¢`:null;
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已跟</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
-  return `<tr><td title="${esc(bj(m.decided_at)||"")}（北京时间）">${esc(m.market||"无数据")}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r ${me?"num":"na"}">${me||"—"}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":"—"}</td><td>${res}</td></tr>`; }
+  return `<tr><td title="${esc(bj(m.decided_at)||"")}（北京时间）">${marketHtml(m.market, m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r ${me?"num":"na"}">${me||"—"}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":"—"}</td><td>${res}</td></tr>`; }
 function renderOverview(d){
+  applyCurveNote(d&&d.reasons);
   const t=d.totals, R=Object.assign({},d.reasons);
   if(!t){ $("#ov-eq").innerHTML=nd(R.copy_db||"no_totals"); $("#ov-note").textContent=""; }
   else{
@@ -93,7 +110,7 @@ async function renderAccount(){
   const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
   m.querySelector(".kv").innerHTML=[["现金",a.cash_usd],["持仓市值",a.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason],["当日已实现",a.daily_realized_usd,R.daily_realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
-  if(d.positions) rows($("#ac-pos"),'<tr><th>市场</th><th class="hm">方向</th><th class="r hm">股数</th><th class="r hm">均价 / 现价</th><th class="r">浮动</th></tr>',d.positions.map(p=>`<tr><td>${esc(p.title||"无数据")}</td><td class="hm">${esc(p.outcome||"—")}</td><td class="r num hm">${p.shares}</td><td class="r num hm">${Math.round(p.avg_price*100)}¢ / ${p.last_mark==null?"—":Math.round(p.last_mark*100)+"¢"}</td><td class="r num ${cls(p.unrealized_usd)}">${M(p.unrealized_usd,x=>usd(x,true),p.reasons&&p.reasons.unrealized_usd)}</td></tr>`).join(""));
+  if(d.positions) rows($("#ac-pos"),'<tr><th>市场</th><th class="hm">方向</th><th class="r hm">股数</th><th class="r hm">均价 / 现价</th><th class="r">浮动</th></tr>',d.positions.map(p=>`<tr><td>${marketHtml(p.title, p)}</td><td class="hm">${esc(p.outcome||"—")}</td><td class="r num hm">${p.shares}</td><td class="r num hm">${Math.round(p.avg_price*100)}¢ / ${p.last_mark==null?"—":Math.round(p.last_mark*100)+"¢"}</td><td class="r num ${cls(p.unrealized_usd)}">${M(p.unrealized_usd,x=>usd(x,true),p.reasons&&p.reasons.unrealized_usd)}</td></tr>`).join(""));
 }
 async function renderLeaders(){
   const accs=(await api("/v1/accounts")).accounts||[]; const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s)return;
@@ -122,7 +139,7 @@ async function renderStrategies(){
   rows($("#st-mine"),'<tr><th>名称</th><th class="hm">模板</th><th>状态</th><th class="r">操作</th></tr>',(d.strategies||[]).map(s=>`<tr><td><b>${esc(s.name)}</b> <span class="tag">模拟盘</span></td><td class="hm mu">${esc(s.template_id||"空白")}</td><td><span class="tag ${s.state==="running"?"live":"idle"}">${s.state==="running"?"运行中":"已暂停"}</span></td><td class="r"><a class="btn sm" href="#edit">修改参数</a></td></tr>`).join("")||`<tr><td colspan="4">${nd("no_strategies")}</td></tr>`);
 }
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
-window.PM={api,token,usd,pct,bj,short,
+window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,
   saveDraft:(id,params,name)=>api("/v1/me/strategies/"+encodeURIComponent(id),{method:"PATCH",body:{params,mode:"paper"},confirm:name}),
   createDraft:(name,template_id,params)=>api("/v1/me/strategies",{method:"POST",body:{name,template_id,params,mode:"paper"},confirm:name})};
 
