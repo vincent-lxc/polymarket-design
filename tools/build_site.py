@@ -178,6 +178,7 @@ def wl_form(where, lang):
     src = "banner" if where == "bar" else "footer"
     return (f'<form class="wl-form wl-{where}" data-endpoint="{E(WAITLIST_API)}" data-lang="{lang}" data-source="{src}" novalidate>'
             f'<label class="wl-lab" for="wl-{where}">{"上线通知我" if zh else "Notify me at launch"}<span class="wl-sub"> / {"Notify me at launch" if zh else "上线通知我"}</span></label>'
+            f'<div class="wl-hp" aria-hidden="true"><label for="wl-{where}-web">Website</label><input id="wl-{where}-web" name="website" type="text" tabindex="-1" autocomplete="off" value=""></div>'
             f'<div class="wl-row"><input id="wl-{where}" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="254" placeholder="you@example.com">'
             f'<button class="btn pri" type="submit">{"通知我" if zh else "Notify me"}</button></div>'
             f'<p class="wl-msg" role="status" aria-live="polite"></p>'
