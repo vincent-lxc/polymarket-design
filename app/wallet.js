@@ -389,6 +389,7 @@
   function renderIdentity(me) {
     var privy = hasPrivy();
     elAcct.hidden = !privy || !token();
+    var out = document.getElementById("logout"); if (out) out.hidden = !token();
     if (!token()) { elIdLbl.textContent = "登录身份"; elId.textContent = "未登录"; elId.title = ""; return; }
     var mail = (privyId && (privyId.email || privyId.google)) || (me && (me.email || me.google_email)) || "";
     if (mail) {
