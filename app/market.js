@@ -20,7 +20,7 @@
     return "https://polymarket.com/event/" + encodeURIComponent(slug);
   }
   function html(name, row) {
-    var text = name == null || String(name).trim() === "" ? "无数据" : String(name);
+    var text = name == null || String(name).trim() === "" ? "未命名市场" : String(name);
     var safe = esc(text);
     var slug = pick(row);
     if (!slug) return safe;

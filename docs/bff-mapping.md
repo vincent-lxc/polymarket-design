@@ -13,7 +13,7 @@
 | 前端需求 | BFF | 状态 |
 |---|---|---|
 | 时间，转北京时间显示 | 绝大多数为 ISO UTC | ⚠ 公开接口 `metrics.last_trade_at` 仍是 unix 秒（例：1792555046），不是 ISO |
-| 缺失显示「无数据」，无效显示「—」 | 字段为 `null`，并给出 `reasons{}` | ✅ 前端把原因放进 title |
+| 缺失显示「无数据」/「暂未汇总」，无效显示「—」 | 字段为 `null`，并给出 `reasons{}`；`not_yet_aggregated` →「暂未汇总」 | ✅ 前端把原因放进 title；优先「暂未汇总」 |
 | 心跳「10-21 12:40:12 · 20 秒内」 | `overview.heartbeat`（结构未写进文档） | ⚠ 文档没写 heartbeat 的字段，前端目前只显示 `as_of` |
 | 右栏「需要注意」「持仓占用 Top」 | 无 | ❌ 没有汇总接口。实时模式下右栏这两块先隐藏 |
 | 顶栏「运行中」状态 | `health.services.copy.state` | ⚠ 只在 /v1/health 里，其它页要多请求一次 |
@@ -26,13 +26,13 @@
 | 「= N 个策略实例合计」 | `totals.account_count`，以及前端自己数 | ✅ |
 | 本金合计 | `totals.capital_usd` | ✅ |
 | 扣费净盈亏 / 收益率 | `totals.net_pnl_usd` / `net_pct` | ⚠ 缺失时同样整体为 null，前端改为按可用实例自算 |
-| 现金、持仓市值、浮动、已实现 | `totals.cash_usd` / `positions_value_usd` / `unrealized_usd` / `realized_usd` | ✅ |
-| 成交、未结算持仓、当日已实现 | `totals.fills` / `open_positions` / `daily_realized_usd` | ✅（当日按 UTC 零点算，不是北京时间零点 ⚠） |
+| 现金、持仓市值、浮动、已实现 | `totals.cash_usd` / `positions_value_usd` / `unrealized_usd` / `realized_usd` | ⚠ 浮动/已实现仍常为 `null` + `not_yet_aggregated` →「暂未汇总」 |
+| 成交、未结算持仓、当日已实现 | `totals.fills` / `open_positions` / `daily_realized_usd` | ⚠ fills / 当日已实现常未聚合 →「暂未汇总」；持仓数只用 `open_positions`，不用 `positions.length` |
 | 合计净值曲线 | `equity_curve[]` | ✅（文档没写点的字段，前端按 `{t,equity}` 读） |
 | 当前主力 leader | `main_leader`：address、user_name、score、weight、selected_at | ✅ |
 | 主力卡「近 N 笔输赢」「跟此人累计」「进行中镜像」 | 无 | ❌ 总览不带，要再请求 `/v1/leaders/{addr}` |
 | 镜像单 8 条 | `recent_mirrors[]` | ⚠ 有 leader_notional_usd、fill_usd、slippage_bps、reason_zh，但没有单笔手续费，页面上的「手续费」「滑点成本 $」两列没有数据，改成显示滑点 bps |
-| 利润归属分段条 | `attribution[]` | ✅（以前是「后端未提供」，现在有了） |
+| 利润归属分段条 | `attribution[]` | ⚠ 过时：BFF 仍未聚合，字段为 `null` + `not_yet_aggregated`；前端显示「暂未汇总」，不再假装已齐 |
 | 策略实例对比 | `accounts[]`：strategy、net_pnl_usd、net_pct、equity_usd、open_positions、max_open_positions、run_state_zh | ✅ |
 | 对比表「主力 / 对照」标签 | 无 | ❌ |
 | ⋯ 菜单：暂停 / 调参 | 只能改草稿的 state | ⚠ 改的是草稿标记，不暂停正在跑的引擎 |
@@ -41,19 +41,19 @@
 | 页面字段 | BFF | 状态 |
 |---|---|---|
 | 净值、本金、扣费净盈亏 | `account.equity_usd` / `capital_usd` / `net_pnl_usd` / `net_pct` | ✅ |
-| 最大回撤 | `max_drawdown_pct` | ✅（正负号文档没写，前端按绝对值显示成负数） |
+| 最大回撤 | `max_drawdown_pct` | ⚠ 常为 `null` + `not_yet_aggregated` →「暂未汇总」 |
 | 现金、持仓市值、敞口、当日已实现 | `account.cash_usd` / `positions_value_usd` / `exposure_usd` / `daily_realized_usd` | ✅ |
 | 今日亏损 / 日亏上限进度 | `params.daily_loss_limit_usd` 有，今日亏损没有 | ❌ |
-| 持仓表 | `positions[]`：title、outcome、shares、avg_price、last_mark、unrealized_usd | ✅ |
+| 持仓表 | `positions[]`：title、outcome、shares、avg_price、last_mark、unrealized_usd；表头数量用 `open_positions` | ✅ 缺 title →「未命名市场」；`unrealized_usd` null →「暂未汇总」 |
 | 平仓按钮 | 无写接口 | ❌（第一期不下单，建议页面隐藏） |
-| 成交与拒单 10 条 | `activity[]` | ⚠ 文档没写字段，这次没有对接 |
+| 成交与拒单 10 条 | `activity[]`（同 `recent_mirrors`） | ✅ 已接；缺 `market` →「未命名市场」；`fill_usd` null →「暂未汇总」 |
 | 关键参数 | `params`：sizing_ratio、max_per_trade_usd、max_open_positions、daily_loss_limit_usd、leaders_mode{value,zh} 等 | ⚠ 每个参数是 `{value, reason}`，没有 max_per_market_usd |
 
 ## Leaders `GET /v1/accounts/{strategy}/leaders`
 | 页面字段 | BFF | 状态 |
 |---|---|---|
 | 在跟、已移出 | `active[]` / `removed[]` | ✅ |
-| 我方累计 / 占比 | `our_total_usd` / `our_share` | ✅（以前是「待后端计算」） |
+| 我方累计 / 占比 | `our_total_usd` / `our_share` | ⚠ 常为 `null` + `not_yet_aggregated` →「暂未汇总」 |
 | 胜率（每行） | 无 | ❌ 要逐个请求 leader 详情 |
 | 最近一次筛选 | `last_screen{screened_at,selected,rejected,duration_ms,rows[]}`，rows 里有 rank、selected、reason{code,zh} | ⚠ rows 没有胜率列 |
 | 白名单 / 排除名单 | `manual.include` / `manual.exclude` | ✅ |
