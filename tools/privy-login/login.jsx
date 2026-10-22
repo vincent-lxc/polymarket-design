@@ -1,14 +1,10 @@
 import { createRoot } from "react-dom/client";
 import { useRef, useState } from "react";
 import { polygon } from "viem/chains";
-import {
-  PrivyProvider,
-  getIdentityToken,
-  useLogin,
-  usePrivy,
-} from "@privy-io/react-auth";
+import { PrivyProvider, useIdentityToken, useLogin, usePrivy } from "@privy-io/react-auth";
 import { PRIVY_APP_ID, privyAppIdConfigured } from "./config.js";
-import { privyAuthMessage } from "./errors.js";
+import { IDENTITY_TOKEN_NOT_READY, privyAuthMessage } from "./errors.js";
+import { shouldCompletePrivyLogin } from "./flow.js";
 
 const privyConfig = {
   loginMethods: ["email", "google"],
@@ -31,15 +27,6 @@ function bridge() {
   return window.PMLogin || null;
 }
 
-async function waitIdentityToken() {
-  for (let i = 0; i < 20; i++) {
-    const token = await getIdentityToken();
-    if (token) return token;
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  return null;
-}
-
 function SocialButton({ disabled, closed, onClick }) {
   return (
     <button
@@ -57,38 +44,74 @@ function SocialButton({ disabled, closed, onClick }) {
 }
 
 function ActiveLogin() {
-  const { ready } = usePrivy();
+  const { ready, authenticated } = usePrivy();
+  // 只读 Privy 已经放进内存的 identity token，不会请求 /api/v1/users/me。
+  const { identityToken } = useIdentityToken();
+  const tokenRef = useRef(identityToken);
+  tokenRef.current = identityToken;
   const [busy, setBusy] = useState(false);
-  const lock = useRef(false);
+  const clicked = useRef(false);
+  const started = useRef(false);
+
+  async function exchange() {
+    if (started.current) return;
+    started.current = true;
+    clicked.current = false;
+    setBusy(true);
+    const pm = bridge();
+    if (!pm) {
+      started.current = false;
+      setBusy(false);
+      return;
+    }
+    pm.say("正在完成登录…");
+    // 登录回调可能比 React 提交 store 更早。只等一次，不再请求 Privy。
+    let token = tokenRef.current;
+    if (!token) {
+      await new Promise((r) => setTimeout(r, 300));
+      token = tokenRef.current;
+    }
+    if (!token) {
+      pm.say(IDENTITY_TOKEN_NOT_READY, true);
+      started.current = false;
+      setBusy(false);
+      return;
+    }
+    try {
+      const session = await pm.api("/v1/auth/privy", {
+        method: "POST",
+        auth: false,
+        body: { id_token: token },
+      });
+      pm.finish(session);
+    } catch (e) {
+      started.current = false;
+      setBusy(false);
+      const text = privyAuthMessage(e);
+      if (text) pm.say(text, true);
+    }
+  }
+
   const { login } = useLogin({
-    onComplete: async () => {
-      const pm = bridge();
-      if (!pm || lock.current) return;
-      lock.current = true;
-      setBusy(true);
-      pm.say("正在完成登录…");
-      try {
-        const idToken = await waitIdentityToken();
-        if (!idToken) throw new Error("没有拿到登录凭证");
-        const session = await pm.api("/v1/auth/privy", {
-          method: "POST",
-          auth: false,
-          body: { id_token: idToken },
-        });
-        pm.finish(session);
-      } catch (e) {
-        lock.current = false;
-        setBusy(false);
-        const text = privyAuthMessage(e);
-        if (text) pm.say(text, true);
+    onComplete: (params) => {
+      if (
+        !shouldCompletePrivyLogin({
+          userInitiated: clicked.current,
+          wasAlreadyAuthenticated: params.wasAlreadyAuthenticated,
+          alreadyHandled: started.current,
+        })
+      ) {
+        return;
       }
+      void exchange();
     },
     onError: (error) => {
+      clicked.current = false;
+      started.current = false;
+      setBusy(false);
       const pm = bridge();
       const text = privyAuthMessage(error);
       if (pm && text) pm.say(text, true);
-      lock.current = false;
-      setBusy(false);
     },
   });
 
@@ -97,7 +120,14 @@ function ActiveLogin() {
       disabled={!ready || busy}
       closed={false}
       onClick={() => {
-        if (!ready || busy) return;
+        if (!ready || busy || clicked.current || started.current) return;
+        // 已有会话时不要再打开登录框。有 token 就换一次；没有就提示，不再打 Privy。
+        if (authenticated) {
+          clicked.current = true;
+          void exchange();
+          return;
+        }
+        clicked.current = true;
         login();
       }}
     />
