@@ -21,6 +21,18 @@ export function isPrivyExit(e) {
   return bits.includes("exited_auth_flow") || bits.includes("user_exited") || bits.includes("exited");
 }
 
+/** Privy HTTP 429。默认文案是 TooManyRequestsError：「Too many requests. Please wait to try again.」 */
+export function isPrivyRateLimit(e) {
+  if (e == null) return false;
+  if (typeof e === "string") return e === "too_many_requests" || /too many requests/i.test(e);
+  if (e.status === 429 || e.name === "TooManyRequestsError") return true;
+  const codes = [errorCode(e), e.code, e.privyErrorCode].filter((x) => typeof x === "string");
+  if (codes.includes("too_many_requests")) return true;
+  return typeof e.message === "string" && /too many requests/i.test(e.message);
+}
+
+export const IDENTITY_TOKEN_NOT_READY = "登录凭证未就绪，请联系管理员开启 identity token";
+
 export function privyAuthMessage(e) {
   const code = errorCode(e);
   const status = e && e.status;
@@ -29,6 +41,7 @@ export function privyAuthMessage(e) {
   if (status === 409 && code === "account_conflict") return "该账号关联了多个钱包用户，请联系我们";
   if (e && e.offline) return "连不上接口，请稍后再试。";
   if (isPrivyExit(e)) return "";
+  if (isPrivyRateLimit(e)) return "请求过于频繁，请稍后再试";
   const m = (e && e.message) || "";
   return m ? "登录失败：" + m : "登录失败";
 }
