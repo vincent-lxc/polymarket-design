@@ -105,6 +105,25 @@ function fillLeadCard(ml,R){
   if(ml&&ml.address){ const h=box.querySelector(".h"); if(h&&!h.querySelector("a")){ h.innerHTML=h.innerHTML.replace(/^([^<]+)/,`<a href="/leader?addr=${encodeURIComponent(ml.address)}">$1</a>`); } }
 }
 
+/* today_pnl_usd 有 7 个实例缺日初基线时，合计只含其余实例，写明不含几个。 */
+function todayMissList(t){ return ((t&&t.missing_accounts)||[]).filter(m=>(m.fields||[]).includes("today_pnl_usd")).map(m=>m.strategy); }
+function todayMiss(t){ const m=todayMissList(t); return m.length&&t.today_pnl_usd!=null?`<span class="mu">（不含 ${m.length} 个实例）</span>`:""; }
+function todayTitle(t){ const m=todayMissList(t); return m.length?` title="缺日初基线：${esc(m.join("、"))}"`:""; }
+/* 实时模式下，接口没覆盖到的静态示例块（无 id 的卡片、右栏示例）换成「无数据」，不再把示例当实时数据展示。 */
+function stripDemo(){
+  /* #pc 是 chart.js 随机生成的示意价格图，没有接口，实时模式一并撤掉。 */
+  document.querySelectorAll("main section.card:not([id]), main section#pc").forEach(sec=>{
+    if(sec.id!=="pc"&&sec.querySelector("form,input,select,textarea,[id]"))return;
+    const hd=sec.querySelector(".hd"); const h=hd?hd.outerHTML:"";
+    sec.innerHTML=h+'<div class="ndbox"><span class="nd" title="no_endpoint">无数据</span><span>接口暂未提供这一块的数据。</span></div>';
+    sec.querySelectorAll(".hd .r,.hd .seg,.hd .tag,.hd .btn").forEach(e=>e.remove());
+  });
+  document.querySelectorAll(".rail > .rc:not(.note)").forEach(rc=>{
+    const h=rc.querySelector("h2"); const title=h?h.textContent:"";
+    rc.innerHTML=`<h2>${esc(title)}</h2><div class="ndbox" style="margin-top:8px"><span class="nd" title="not_yet_aggregated">无数据</span><span>持仓数接口还没聚合。</span></div>`;
+  });
+}
+
 function rows(sec,headHtml,bodyHtml){ const t=sec&&sec.querySelector("table"); if(!t)return; t.innerHTML=headHtml+bodyHtml; sec.querySelectorAll(".xp").forEach(b=>b.remove()); }
 function rejectTag(code,zh,known){ if(!code)return NA; return `<span class="tag" title="${esc(code)}">${esc(zh||"其他原因")}${known===false?` <span class="fk" style="display:inline">${esc(code)}</span>`:""}</span>`; }
 function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*100)+"¢":null;
@@ -125,14 +144,14 @@ function renderOverview(d){
     const pnl=eq==null?null:eq-cap, p=pnl!=null&&cap>0?pnl/cap:null;
     $("#ov-eq").innerHTML=V(eq,usd,"no_equity");
     $("#ov-note").textContent=`= ${ok.length} 个策略实例合计`+(miss.length?`（不含 ${miss.join("、")}）`:"");
-    $("#ov-sub").innerHTML=`<span class="${cls(pnl)} num">扣费净盈亏 ${M(pnl,x=>usd(x,true))} · ${M(p,pct)}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span>当日已实现 ${V(t.daily_realized_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,R.daily_realized_usd||"no_fills_today")}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString())}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString())}</b></span>`;
+    $("#ov-sub").innerHTML=`<span class="${cls(pnl)} num">扣费净盈亏 ${M(pnl,x=>usd(x,true))} · ${M(p,pct)}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span${todayTitle(t)}>今日盈亏 ${V(t.today_pnl_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,"no_daily_baseline")}${todayMiss(t)}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString())}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString())}</b></span>`;
     const kv=(l,x,s)=>`<div><span class="lbl">${l}</span><b class="${s?cls(x):""}">${V(x,v=>usd(v,s))}</b></div>`;
     $("#ov-kv").innerHTML=kv("现金合计",t.cash_usd)+kv("持仓市值合计",t.positions_value_usd)+kv("浮动盈亏合计",t.unrealized_usd,1)+kv("已实现盈亏合计",t.realized_usd,1);
     const cv=$("#shcv"); if(cv){ cv.dataset.eq=usd(eq)||"无数据"; cv.dataset.pnl=usd(pnl,true)||"—"; cv.dataset.pct=pct(p)||"—"; cv.dataset.up=pnl>=0?1:0; cv.dataset.note=$("#ov-note").textContent;
       if(d.equity_curve&&d.equity_curve.length){ cv.dataset.v=JSON.stringify(d.equity_curve.map(x=>x.equity)); cv.dataset.range=`${bj(d.equity_curve[0].t)} – ${bj(d.equity_curve.at(-1).t)}（北京时间）`; } }
     drawCurve(d.equity_curve, partial(d.reasons));
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
-      acc.map(a=>`<tr><td><a href="/account?s=${encodeURIComponent(a.strategy)}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
+      acc.map(a=>`<tr><td><a href="/account?s=${encodeURIComponent(a.strategy)}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
   }
   if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
   const ml=d.main_leader, lead=$("#ov-lead .h");
@@ -212,10 +231,10 @@ function publicOnly(w){
     else{ const v=pts.map(p=>p.equity), mn=Math.min(...v), mx=Math.max(...v)||1, k=mx-mn||1;
       const P=v.map((x,i)=>`${(i*600/(v.length-1)).toFixed(1)},${(110-(x-mn)/k*100).toFixed(1)}`).join(" "); const up=v.at(-1)>=v[0];
       const t0=new Date(pts[0].t).getTime(), dt=pts.length>1?(new Date(pts.at(-1).t).getTime()-t0)/(pts.length-1):0;
-      host.innerHTML=`<svg viewBox="0 0 600 120" width="100%" height="120" preserveAspectRatio="none" aria-label="他的收益曲线" data-series='${JSON.stringify({kind:"usd",label:"他的权益",t0,dt,v:v.map(x=>+x.toFixed(2))})}'><polyline points="${P}" fill="none" stroke="${up?"#2fd47a":"#ff5a5f"}" stroke-width="2"/></svg>`; } }
+      host.innerHTML=`<svg viewBox="0 0 600 120" width="100%" height="120" preserveAspectRatio="none" aria-label="他的累计盈亏曲线" data-series='${JSON.stringify({kind:"usd",label:"累计盈亏（已实现+浮动）",t0,dt,v:v.map(x=>+x.toFixed(2))})}'><polyline points="${P}" fill="none" stroke="${up?"#2fd47a":"#ff5a5f"}" stroke-width="2"/></svg>`; } }
   const lg=$("#ld-perf .lgrid"); if(lg) lg.remove();
   const secs=[...document.querySelectorAll("main section.card")].filter(s=>s.id!=="ld-perf"); secs.forEach(s=>s.remove());
-  const n=document.createElement("section"); n.className="card"; n.innerHTML=`<div class="hd"><h2>我方镜像 · 价格买卖点 · 他的成交与持仓</h2></div><div class="ndbox"><span class="nd">需登录</span><span>这些块读跟单账本，公开接口不提供。<a href="/login?next=${encodeURIComponent("/leader?addr="+w.address)}">登录后查看 →</a></span></div>`;
+  const n=document.createElement("section"); n.className="card"; n.id="ld-login"; n.innerHTML=`<div class="hd"><h2>我方镜像 · 价格买卖点 · 他的成交与持仓</h2></div><div class="ndbox"><span class="nd">需登录</span><span>这些块读跟单账本，公开接口不提供。<a href="/login?next=${encodeURIComponent("/leader?addr="+w.address)}">登录后查看 →</a></span></div>`;
   $("#ld-perf").after(n);
 }
 
@@ -226,7 +245,7 @@ async function renderBoard(win){
   const lb=d.leaderboard;
   if(!lb||!lb.leaders){ tb.innerHTML=`<tr><td colspan="6">${nd(d.reason||"analytics_unavailable")}</td></tr>`; $("#bd-asof").textContent=""; return; }
   $("#bd-asof").textContent=`截至 ${bj(lb.as_of)}（北京时间）· 共 ${lb.leaders.length} 个`;
-  tb.innerHTML=lb.leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};return `<tr class="rl" onclick="location.href='/leader?addr=${l.address}'"><td><a href="/leader?addr=${l.address}" title="${esc(l.address)}"><b>${esc(short(l.address))}</b></a></td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?'<span class="tag live">通过</span>':`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">未通过</span>`}</td></tr>`}).join("");
+  tb.innerHTML=lb.leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};return `<tr class="rl" onclick="location.href='/leader?addr=${l.address}'"><td><a href="/leader?addr=${l.address}" title="${esc(l.address)}"><b>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?"@"+esc(l.user_name):esc(short(l.address))}</b></a>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?`<div class="fk">${esc(short(l.address))}</div>`:""}</td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?'<span class="tag live">通过</span>':`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">未通过</span>`}</td></tr>`}).join("");
   $("#bd-src").textContent="数据来自分析服务（"+(d.source==="analytics_sqlite"?"本地快照":"实时")+"）；胜率算不出来时显示「—」。";
   document.querySelectorAll(".tw .xp").forEach(b=>b.remove());
   const tw=tb.closest(".tw"), trs=[...tb.querySelectorAll("tr")], L=innerWidth<900?10:20;
@@ -269,11 +288,11 @@ async function boot(){
   const lo=$("#logout"); if(lo) lo.onclick=async e=>{e.preventDefault(); try{await api("/v1/auth/logout",{method:"POST"})}catch(_){} token.clear(); location.href="/login";};
   if(MOCK){ if(PAGE==="board")return renderBoard("90d").then(()=>badge("live","公开接口")).catch(()=>fallback("接口连不上")); return fallback("?mock=1"); }
   try{
-    if(PAGE==="board"){ document.querySelectorAll("#bd-win span").forEach(s=>s.onclick=()=>{document.querySelectorAll("#bd-win span").forEach(x=>x.classList.toggle("on",x===s));renderBoard(s.dataset.w).catch(e=>fallback(e.message))}); await renderBoard("90d"); return badge("live","公开接口"); }
-    if(PAGE==="leader"){ const r=await renderLeader(); return r==="static"?fallback("示例 leader 页（无 addr 参数）"):badge("live"); }
+    if(PAGE==="board"){ document.querySelectorAll("#bd-win span").forEach(s=>s.onclick=()=>{document.querySelectorAll("#bd-win span").forEach(x=>x.classList.toggle("on",x===s));renderBoard(s.dataset.w).catch(e=>fallback(e.message))}); await renderBoard("90d"); stripDemo(); return badge("live","公开接口"); }
+    if(PAGE==="leader"){ const r=await renderLeader(); if(r==="static")return fallback("示例 leader 页（无 addr 参数）"); stripDemo(); return badge("live"); }
     if(!R[PAGE])return;
     if(!token.get())return toLogin();
-    await R[PAGE](); badge("live","BFF");
+    await R[PAGE](); stripDemo(); badge("live","BFF");
   }catch(e){ if(e.status===401)return; fallback(e.offline?"接口连不上，已回退到示例数据":"接口出错："+e.message); }
 }
 document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();
