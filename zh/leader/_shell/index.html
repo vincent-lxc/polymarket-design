@@ -6,7 +6,7 @@
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://www.wakeloom.com/#org","name":"Wakeloom","alternateName":"Wakeloom 织迹","url":"https://www.wakeloom.com/","logo":"https://www.wakeloom.com/icons/favicon-512.png"},{"@type":"WebSite","@id":"https://www.wakeloom.com/#website","name":"Wakeloom","alternateName":"Wakeloom 织迹","url":"https://www.wakeloom.com/","inLanguage":["zh-CN","en"],"publisher":{"@id":"https://www.wakeloom.com/#org"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"首页","item":"https://www.wakeloom.com/zh/"},{"@type":"ListItem","position":2,"name":"排行榜","item":"https://www.wakeloom.com/zh/leaderboard/"}]}]}</script>
 </head><body>
 <header class="top"><a class="logo" href="/zh/"><img src="/icons/wakeloom.svg" width="28" height="28" alt=""><b>Wakeloom 织迹</b></a>
-<nav class="nv"><a href="/zh/leaderboard/">排行榜</a><a href="/zh/how-it-works/">选人方法</a><a href="/zh/copy-trading/">模拟盘跟单</a><a href="/zh/faq/">常见问题</a></nav><div class="tr"><a class="lg" href="/en/leader/_shell/" hreflang="en">English</a><a class="btn pri sm" href="/app/">进入应用</a></div></header>
+<nav class="nv"><a href="/zh/leaderboard/">排行榜</a><a href="/zh/how-it-works/">选人方法</a><a href="/zh/copy-trading/">模拟盘跟单</a><a href="/zh/faq/">常见问题</a></nav><div class="tr"><a class="lg" href="/en/leader/_shell/" hreflang="en">English</a><a class="btn pri sm" href="https://app.wakeloom.com/">进入应用</a></div></header>
 <main><div data-live="leader" data-addr="">
 <section class="ph"><p class="crumb"><a href="/zh/">首页</a> / <a href="/zh/leaderboard/">排行榜</a> / …</p>
 <h1 data-f="name">加载中…</h1><p class="addr num" data-f="addr"></p><p class="lead" data-f="desc">打开后从公开接口加载该地址的胜率、收益率与回撤。</p>
@@ -16,7 +16,7 @@
 <div data-f="spark"></div>
 <section class="card" data-f="facts" style="display:none"></section>
 <section class="card" data-f="recent"><div class="hd"><b>近 20 笔输赢</b></div><p class="nd pad">无数据</p></section>
-<section class="card cta-row"><div><b>在应用里打开这个地址</b><p class="mu">上榜不代表以后的表现。</p></div><a class="btn pri" data-f="app" href="/app/">进入应用 →</a></section>
+<section class="card cta-row"><div><b>在应用里打开这个地址</b><p class="mu">上榜不代表以后的表现。</p></div><a class="btn pri" data-f="app" href="https://app.wakeloom.com/">进入应用 →</a></section>
 </div>
 <script>
 (function(){
@@ -24,7 +24,7 @@
   var a=(m&&m[1]||new URLSearchParams(location.search).get("addr")||"").toLowerCase();
   var root=document.querySelector("[data-live=leader]");
   if(root&&a){root.setAttribute("data-addr",a);var el=document.querySelector("[data-f=addr]");if(el){el.textContent=a;el.title=a;}
-  var app=document.querySelector("[data-f=app]");if(app)app.href="/app/leader.html?addr="+a;
+  var app=document.querySelector("[data-f=app]");if(app)app.href="https://app.wakeloom.com/leader?addr="+a;
   var can=document.querySelector('link[rel=canonical]');if(can)can.href="https://www.wakeloom.com/zh/leader/"+a+"/";
   }
 })();

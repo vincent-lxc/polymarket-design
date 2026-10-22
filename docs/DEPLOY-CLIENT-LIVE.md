@@ -21,7 +21,14 @@
 ```bash
 # 可选：刷新 SEO 快照（需能访问 api.wakeloom.com）
 python3 tools/build_site.py
-# 发布：把仓库根目录作为 Workers Assets / Pages 输出目录；构建命令留空
 ```
 
-CORS 已放行 `www.wakeloom.com`。`/app/` 可测钱包登录。
+App 在独立子域 `app.wakeloom.com`，配置是 `wrangler.app.toml`（只上传 `app/`）。官网是 `wrangler.toml`。接口仍是 `api.wakeloom.com`。
+
+上线顺序：
+
+1. 部署 App Worker 并绑定 `app.wakeloom.com`：`npx wrangler deploy -c wrangler.app.toml`
+2. 后端给 `https://app.wakeloom.com` 加 CORS，并把 `BFF_DOMAIN` 设为 `app.wakeloom.com`
+3. 再发官网。`workers/www.mjs` 把 `www.wakeloom.com/app/*` 301 到 `https://app.wakeloom.com/*`（保留路径和 query）：`npx wrangler deploy`
+
+不要把第 3 步放在第 1、2 步前面。Privy 脚本只在 App 登录页加载。

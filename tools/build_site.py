@@ -190,7 +190,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
 <script type="application/ld+json">{json.dumps(graph, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")}</script>
 </head><body>
 <header class="top"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="28" height="28" alt=""><b>{t["name"]}</b></a>
-<nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="/app/">{t["cta"]}</a></div></header>
+<nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="https://app.wakeloom.com/">{t["cta"]}</a></div></header>
 <main>{body}</main>
 <footer class="ft"><div class="fl"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="22" height="22" alt=""><b>{t["name"]}</b></a><span>{t["tag"]}</span></div><nav>{foot}</nav><p>{E(t["indep"])}</p></footer>
 <script src="/site.js" defer></script><script src="/site-live.js" defer></script></body></html>'''
@@ -223,7 +223,7 @@ def home(lang, D):
     hero = (f'''<section class="hero"><div class="hx"><p class="eyebrow">{"用于 Polymarket 的钱包分析 · 模拟盘" if zh else "Wallet analytics & paper trading for Polymarket"}</p>
 <h1>{"看清谁在长期稳定地交易，<br>先用模拟盘跟一跟" if zh else "See who trades consistently,<br>then paper-trade copying them"}</h1>
 <p class="lead">{"从链上历史里筛掉单次重仓、刷量和做市地址，留下近 90 天表现稳定的交易者。看胜率、收益率和回撤，再用模拟盘记录真实的延迟和滑点。" if zh else "We filter out one-off bets, wash volume and market makers from on-chain history and keep traders with steady 90-day results. Read their win rate, ROI and drawdown, then paper-trade them while logging real latency and slippage."}</p>
-<div class="ctas"><a class="btn pri mag" href="/app/">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
+<div class="ctas"><a class="btn pri mag" href="https://app.wakeloom.com/">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
 <p class="mu sm">{"第一期只有模拟盘，不动真钱，不需要私钥。" if zh else "Phase one is paper trading only: no real money, no private key."}</p></div>
 <div class="hv card rise" data-live="home-top"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b><span class="live-badge" data-live-badge="home-top"></span>{f'<span class="mu sm" data-live-meta="home-top">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else '<span class="mu sm" data-live-meta="home-top"></span>'}</div>
 {f'<table class="lt"><thead>{lhead(lang, short=True)}</thead><tbody>{rows}</tbody></table>' if rows else f'<p class="nd pad">{T[lang]["nd"]}</p>'}
@@ -237,7 +237,7 @@ def home(lang, D):
     steps = (["选一个地址：在排行榜里看长期数据", "设规则：比例、单笔上限、单市场上限、偏离阈值", "跑模拟盘：记录每笔的价差、延迟和扣费结果", "再决定：结果说得通，才考虑小额实盘"] if zh else
              ["Pick a wallet from the leaderboard's long-term data", "Set rules: ratio, per-trade cap, per-market cap, deviation limit", "Run paper trading: log price gap, delay and net result per trade", "Then decide: consider small live size only if the numbers hold up"])
     sh = "".join(f'<li><span class="num">{i}</span>{E(s)}</li>' for i, s in enumerate(steps, 1))
-    body = hero + f'<section class="feats">{fh}</section><section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="/app/">{T[lang]["cta"]} →</a></section>'
+    body = hero + f'<section class="feats">{fh}</section><section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/">{T[lang]["cta"]} →</a></section>'
     write(f"{lang}/index.html", page(lang, "", "home", body, [softapp(lang), crumbs(lang, []), {"@type": "WebPage", "url": f"{SITE}/{lang}/", "name": DESC[lang]["home"][0], "inLanguage": T[lang]["html"], "isPartOf": {"@id": SITE + "/#website"}}]))
 
 def lhead(lang, short=False):
@@ -332,7 +332,7 @@ def leader(lang, a, upd, rank, D):
 <div data-f="spark">{spark_html}</div>
 <section class="card" data-f="facts"{"" if fh else " style=\"display:none\""}>{f"<ul class=\"facts\">{fh}</ul>" if fh else ""}</section>
 {rr_html}
-<section class="card cta-row"><div><b>{L("想看他每个市场的买卖点、近 20 笔输赢？", "Want per-market buy/sell points and the last 20 trades?")}</b><p class="mu">{L("在应用里打开这个地址，或用模拟盘跟一跟。上榜不代表以后的表现。", "Open this wallet in the app or paper-trade it. A ranking does not predict future results.")}</p></div><a class="btn pri" href="/app/leader.html?addr={a}">{L("在应用中查看", "Open in the app")} →</a></section>
+<section class="card cta-row"><div><b>{L("想看他每个市场的买卖点、近 20 笔输赢？", "Want per-market buy/sell points and the last 20 trades?")}</b><p class="mu">{L("在应用里打开这个地址，或用模拟盘跟一跟。上榜不代表以后的表现。", "Open this wallet in the app or paper-trade it. A ranking does not predict future results.")}</p></div><a class="btn pri" href="https://app.wakeloom.com/leader?addr={a}">{L("在应用中查看", "Open in the app")} →</a></section>
 </div>'''
     vm = [{"@type": "PropertyValue", "name": lab, "propertyID": key, **({"value": v} if v is not None else {})} for lab, v, _, key in stats if v is not None]
     url = f"{SITE}/{lang}/leader/{a}/"
@@ -382,6 +382,7 @@ def content(lang):
         L("Wakeloom 第一期只提供模拟盘，展示的跟单结果都是模拟结果，不是真实成交。请遵守你所在地区关于预测市场的法律。", "Wakeloom's phase one offers paper trading only; any copy results shown are simulated, not real fills. Follow the laws on prediction markets where you live."),
         L("本站内容仅供研究，不构成投资建议。", "Nothing on this site is investment advice.")]),
      "privacy": (L("隐私说明", "Privacy"), [L("官网页面只展示公开的链上地址数据。使用应用时，我们保存你的钱包地址、登录会话和你设置的模拟盘规则，用来提供服务。", "Website pages show only public on-chain wallet data. When you use the app we store your wallet address, sign-in session and the paper-trading rules you set, to provide the service."),
+        L("用 Google 或邮箱登录时，我们会收集你的邮箱。登录信息由 Privy 托管。", "When you sign in with Google or email, we collect your email address. Sign-in information is hosted by Privy."),
         L("我们不收集也不保存你的私钥。不出售个人数据。如需删除数据，请联系我们。", "We never collect or store your private key, and we don't sell personal data. Contact us to delete your data.")]),
      "terms": (L("使用条款", "Terms of use"), [L("Wakeloom 按现状提供，数据可能延迟、缺失或有误。你对自己的交易决定负责。", "Wakeloom is provided as is; data may be delayed, missing or wrong. You are responsible for your own trading decisions."),
         L("Wakeloom 是独立工具，与 Polymarket 无隶属或合作关系。页面上的地址统计来自公开数据，可在注明来源的前提下引用。", "Wakeloom is independent and not affiliated with Polymarket. Wallet stats come from public data and may be cited with attribution.")]),
@@ -441,7 +442,7 @@ def leader_shell(lang):
 <div data-f="spark"></div>
 <section class="card" data-f="facts" style="display:none"></section>
 <section class="card" data-f="recent"><div class="hd"><b>{L("近 20 笔输赢", "Last 20 results")}</b></div><p class="nd pad">{N}</p></section>
-<section class="card cta-row"><div><b>{L("在应用里打开这个地址", "Open this wallet in the app")}</b><p class="mu">{L("上榜不代表以后的表现。", "A ranking does not predict future results.")}</p></div><a class="btn pri" data-f="app" href="/app/">{L("进入应用", "Open the app")} →</a></section>
+<section class="card cta-row"><div><b>{L("在应用里打开这个地址", "Open this wallet in the app")}</b><p class="mu">{L("上榜不代表以后的表现。", "A ranking does not predict future results.")}</p></div><a class="btn pri" data-f="app" href="https://app.wakeloom.com/">{L("进入应用", "Open the app")} →</a></section>
 </div>
 <script>
 (function(){{
@@ -449,7 +450,7 @@ def leader_shell(lang):
   var a=(m&&m[1]||new URLSearchParams(location.search).get("addr")||"").toLowerCase();
   var root=document.querySelector("[data-live=leader]");
   if(root&&a){{root.setAttribute("data-addr",a);var el=document.querySelector("[data-f=addr]");if(el){{el.textContent=a;el.title=a;}}
-  var app=document.querySelector("[data-f=app]");if(app)app.href="/app/leader.html?addr="+a;
+  var app=document.querySelector("[data-f=app]");if(app)app.href="https://app.wakeloom.com/leader?addr="+a;
   var can=document.querySelector('link[rel=canonical]');if(can)can.href="https://www.wakeloom.com/{lang}/leader/"+a+"/";
   }}
 }})();
@@ -458,20 +459,25 @@ def leader_shell(lang):
     write(f"{lang}/leader/_shell/index.html", page(lang, "leader/_shell/", "x", body, [crumbs(lang, [(L("排行榜", "Leaderboard"), "leaderboard/")])], title=title, desc=desc, alt=False))
 
 def write_redirects():
+    app = "https://app.wakeloom.com"
+    # 旧的根路径和 /app 前缀都送到 App 子域，路径原样保留。query 由 workers/www.mjs 附上。
     lines = [
-        "/account.html /app/account.html 301",
-        "/board.html /app/board.html 301",
-        "/config.html /app/config.html 301",
-        "/health.html /app/health.html 301",
-        "/leader-5c1e.html /app/leader-5c1e.html 301",
-        "/leader-91d4.html /app/leader-91d4.html 301",
-        "/leader-avalon.html /app/leader-avalon.html 301",
-        "/leader-lunadegen.html /app/leader-lunadegen.html 301",
-        "/leader.html /app/leader.html 301",
-        "/leaders.html /app/leaders.html 301",
-        "/login.html /app/login.html 301",
-        "/overview.html /app/overview.html 301",
-        "/strategies.html /app/strategies.html 301",
+        f"/account.html {app}/account.html 301",
+        f"/board.html {app}/board.html 301",
+        f"/config.html {app}/config.html 301",
+        f"/health.html {app}/health.html 301",
+        f"/leader-5c1e.html {app}/leader-5c1e.html 301",
+        f"/leader-91d4.html {app}/leader-91d4.html 301",
+        f"/leader-avalon.html {app}/leader-avalon.html 301",
+        f"/leader-lunadegen.html {app}/leader-lunadegen.html 301",
+        f"/leader.html {app}/leader.html 301",
+        f"/leaders.html {app}/leaders.html 301",
+        f"/login.html {app}/login.html 301",
+        f"/overview.html {app}/overview.html 301",
+        f"/strategies.html {app}/strategies.html 301",
+        f"/app {app}/ 301",
+        f"/app/ {app}/ 301",
+        f"/app/* {app}/:splat 301",
         # 无静态文件时回落到壳页（已有 /zh/leader/0x…/index.html 的仍优先）
         "/zh/leader/:addr /zh/leader/_shell/index.html 200",
         "/en/leader/:addr /en/leader/_shell/index.html 200",
