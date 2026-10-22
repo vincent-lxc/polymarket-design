@@ -9,19 +9,20 @@ const PUBLIC_PAGES=new Set(["board","login"]);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 /* 市场名：有 event_slug / slug 才链到 polymarket.com/event/，否则纯文本。 */
-function marketHtml(name, row){ return window.PMMarket?PMMarket.html(name, row):esc(name==null||String(name).trim()===""?"无数据":name); }
+function marketHtml(name, row){ return window.PMMarket?PMMarket.html(name, row):esc(name==null||String(name).trim()===""?"未命名市场":name); }
 
 /* ---------- 显示规则 ---------- */
+/* not_yet_aggregated →「暂未汇总」；其它缺失 →「无数据」；算不出 → —。永不补 0 / 假数字 */
 const ND='<span class="nd">无数据</span>';
 const NA='<span class="na">—</span>';
 const why=r=>r?` title="${esc(r)}"`:"";
-const nd=r=>`<span class="nd"${why(r)}>无数据</span>`;
+const isPending=r=>r==="not_yet_aggregated"||(typeof r==="string"&&/(^|,)\s*not_yet_aggregated\s*(,|$)/.test(r));
+const nd=r=>isPending(r)?`<span class="nd"${why(r)}>暂未汇总</span>`:`<span class="nd"${why(r)}>无数据</span>`;
 function usd(x,sign){ if(x==null||!isFinite(x))return null; const s=sign&&x>0?"+":x<0?"−":""; return s+"$"+Math.abs(x).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function pct(f,sign=true,d=2){ if(f==null||!isFinite(f))return null; const v=f*100; return (sign&&v>0?"+":v<0?"−":"")+Math.abs(v).toFixed(d)+"%"; }
 const cls=x=>x==null?"na":x>0?"up":x<0?"dn":"";
-/* 缺失 → 无数据；算不出（指标无效）→ —。永不补 0 */
-const V=(x,f,r)=>{const s=x==null?null:f(x);return s==null?nd(r):s};
-const M=(x,f,r)=>{const s=x==null?null:f(x);return s==null?`<span class="na"${why(r)}>—</span>`:s};
+const V=(x,f,r)=>{if(x==null&&isPending(r))return nd(r);const s=x==null?null:f(x);return s==null?nd(r):s};
+const M=(x,f,r)=>{if(x==null&&isPending(r))return nd(r);const s=x==null?null:f(x);return s==null?`<span class="na"${why(r)}>—</span>`:s};
 /* 接口时间按 UTC 解析（Z/偏移原样；裸 ISO 当 UTC）；显示用浏览器本地时区，不写死城市名 */
 function parseUtc(iso){ if(iso==null||iso==="")return null;
   if(typeof iso==="number"){const d=new Date(iso);return isNaN(d)?null:d;}
@@ -131,17 +132,38 @@ function stripDemo(){
   });
   document.querySelectorAll(".rail > .rc:not(.note)").forEach(rc=>{
     const h=rc.querySelector("h2"); const title=h?h.textContent:"";
-    rc.innerHTML=`<h2>${esc(title)}</h2><div class="ndbox" style="margin-top:8px"><span class="nd" title="not_yet_aggregated">无数据</span><span>持仓数接口还没聚合。</span></div>`;
+    rc.innerHTML=`<h2>${esc(title)}</h2><div class="ndbox" style="margin-top:8px"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>持仓数接口还没聚合。</span></div>`;
   });
 }
 
 function rows(sec,headHtml,bodyHtml){ const t=sec&&sec.querySelector("table"); if(!t)return; t.innerHTML=headHtml+bodyHtml; sec.querySelectorAll(".xp").forEach(b=>b.remove()); }
 function rejectTag(code,zh,known){ if(!code)return NA; return `<span class="tag" title="${esc(code)}">${esc(zh||"其他原因")}${known===false?` <span class="fk" style="display:inline">${esc(code)}</span>`:""}</span>`; }
+function fillCell(m){
+  /* fill_usd 为 null：不显示空或 $0，统一「暂未汇总」（含未成交 / 未记金额） */
+  if(m.fill_usd==null) return `<span class="nd"${why(m.fill_usd_reason||(m.reasons&&m.reasons.fill_usd)||"not_yet_aggregated")}>暂未汇总</span>`;
+  const px=m.fill_price!=null?` @ ${Math.round(m.fill_price*100)}¢`:"";
+  return `${usd(m.fill_usd)}${px}`;
+}
 function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*100)+"¢":null;
   const L=m.leader_notional_usd!=null?`${usd(m.leader_notional_usd)}${lp?" @ "+lp:""}`:null;
-  const me=m.fill_usd!=null?`${usd(m.fill_usd)} @ ${Math.round(m.fill_price*100)}¢`:null;
+  const me=fillCell(m);
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已跟</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
-  return `<tr><td title="${esc(bj(m.decided_at)||"")}">${marketHtml(m.market, m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r ${me?"num":"na"}">${me||"—"}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":"—"}</td><td>${res}</td></tr>`; }
+  return `<tr><td title="${esc(bj(m.decided_at)||"")}">${marketHtml(m.market, m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r">${me}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":"—"}</td><td>${res}</td></tr>`; }
+function activityRow(m){
+  const side=m.side==="SELL"?"卖出":m.side==="BUY"?"买入":(m.purpose_zh||m.purpose||"—");
+  const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已成交</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
+  return `<tr><td class="num mu hm" title="${esc(bj(m.decided_at)||"")}">${bj(m.decided_at,false)||"—"}</td><td>${marketHtml(m.market, m)}</td><td class="hm">${esc(side)}</td><td class="r">${fillCell(m)}</td><td>${res}</td></tr>`; }
+function fillAttr(d){
+  const box=$("#ov-attr"); if(!box)return;
+  const R=(d&&d.reasons)||{};
+  const attr=d&&d.attribution;
+  if(attr==null||(Array.isArray(attr)&&!attr.length)){
+    const hd=box.querySelector(".hd"); const h=hd?hd.outerHTML:"";
+    box.innerHTML=h+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>按 leader 的利润归属尚未聚合。</span></div>';
+    box.querySelectorAll(".hd .r,.hd .attr-actions,.hd .btn").forEach(e=>e.remove());
+    return;
+  }
+}
 function renderOverview(d){
   applyCurveNote(d&&d.reasons);
   const t=d.totals, R=Object.assign({},d.reasons);
@@ -155,9 +177,9 @@ function renderOverview(d){
     const pnl=eq==null?null:eq-cap, p=pnl!=null&&cap>0?pnl/cap:null;
     $("#ov-eq").innerHTML=V(eq,usd,"no_equity");
     $("#ov-note").textContent=`= ${ok.length} 个策略实例合计`+(miss.length?`（不含 ${miss.join("、")}）`:"");
-    $("#ov-sub").innerHTML=`<span class="${cls(pnl)} num">扣费净盈亏 ${M(pnl,x=>usd(x,true))} · ${M(p,pct)}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span${todayTitle(t)}>今日盈亏 ${V(t.today_pnl_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,"no_daily_baseline")}${todayMiss(t)}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString())}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString())}</b></span>`;
-    const kv=(l,x,s)=>`<div><span class="lbl">${l}</span><b class="${s?cls(x):""}">${V(x,v=>usd(v,s))}</b></div>`;
-    $("#ov-kv").innerHTML=kv("现金合计",t.cash_usd)+kv("持仓市值合计",t.positions_value_usd)+kv("浮动盈亏合计",t.unrealized_usd,1)+kv("已实现盈亏合计",t.realized_usd,1);
+    $("#ov-sub").innerHTML=`<span class="${cls(pnl)} num">扣费净盈亏 ${M(pnl,x=>usd(x,true))} · ${M(p,pct)}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span${todayTitle(t)}>今日盈亏 ${V(t.today_pnl_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,"no_daily_baseline")}${todayMiss(t)}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString(),R.fills)}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString(),R.open_positions)}</b></span>`;
+    const kv=(l,x,s,r)=>`<div><span class="lbl">${l}</span><b class="${s?cls(x):""}">${V(x,v=>usd(v,s),r)}</b></div>`;
+    $("#ov-kv").innerHTML=kv("现金合计",t.cash_usd,0,R.cash_usd)+kv("持仓市值合计",t.positions_value_usd,0,R.positions_value_usd)+kv("浮动盈亏合计",t.unrealized_usd,1,R.unrealized_usd)+kv("已实现盈亏合计",t.realized_usd,1,R.realized_usd);
     const cv=$("#shcv"); if(cv){ cv.dataset.eq=usd(eq)||"无数据"; cv.dataset.pnl=usd(pnl,true)||"—"; cv.dataset.pct=pct(p)||"—"; cv.dataset.up=pnl>=0?1:0; cv.dataset.note=$("#ov-note").textContent;
       if(d.equity_curve&&d.equity_curve.length){ cv.dataset.v=JSON.stringify(d.equity_curve.map(x=>x.equity)); cv.dataset.range=`${bj(d.equity_curve[0].t)} – ${bj(d.equity_curve.at(-1).t)}`; } }
     drawCurve(d.equity_curve, partial(d.reasons));
@@ -165,6 +187,7 @@ function renderOverview(d){
       acc.map(a=>`<tr><td><a href="/account?s=${encodeURIComponent(a.strategy)}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
   }
   if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
+  fillAttr(d);
   const ml=d.main_leader, lead=$("#ov-lead .h");
   if(lead) lead.innerHTML=ml?`${who(ml.user_name,ml.address)} <span class="tag live">${esc(ml.status_zh)}</span>`:nd(R.main_leader||"no_main_leader");
   fillLeadCard(ml,R);
@@ -180,8 +203,16 @@ async function renderAccount(){
   const steps=document.querySelector(".steps"); if(steps) steps.innerHTML=accs.map(x=>`<a class="${x.strategy===s?"on":""}" href="/account?s=${encodeURIComponent(x.strategy)}">${esc(x.strategy)}</a>`).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略管理 →</a>';
   const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
-  m.querySelector(".kv").innerHTML=[["现金",a.cash_usd],["持仓市值",a.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason],["当日已实现",a.daily_realized_usd,R.daily_realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
-  if(d.positions) rows($("#ac-pos"),'<tr><th>市场</th><th class="hm">方向</th><th class="r hm">股数</th><th class="r hm">均价 / 现价</th><th class="r">浮动</th></tr>',d.positions.map(p=>`<tr><td>${marketHtml(p.title, p)}</td><td class="hm">${esc(p.outcome||"—")}</td><td class="r num hm">${p.shares}</td><td class="r num hm">${Math.round(p.avg_price*100)}¢ / ${p.last_mark==null?"—":Math.round(p.last_mark*100)+"¢"}</td><td class="r num ${cls(p.unrealized_usd)}">${M(p.unrealized_usd,x=>usd(x,true),p.reasons&&p.reasons.unrealized_usd)}</td></tr>`).join(""));
+  m.querySelector(".kv").innerHTML=[["现金",a.cash_usd,R.cash_usd],["持仓市值",a.positions_value_usd,R.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason||R.exposure_usd],["当日已实现",a.daily_realized_usd,R.daily_realized_usd],["浮动盈亏",a.unrealized_usd,R.unrealized_usd],["已实现盈亏",a.realized_usd,R.realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
+  /* 持仓数用 open_positions（与 max_open_positions 同口径），不用 positions.length */
+  const posLab=$("#ac-pos .hd .lbl");
+  if(posLab){
+    if(a.open_positions==null) posLab.innerHTML=nd(R.open_positions||"not_yet_aggregated");
+    else posLab.textContent=a.open_positions+" 个市场"+(a.max_open_positions!=null?" / 上限 "+a.max_open_positions:"");
+  }
+  if(d.positions) rows($("#ac-pos"),'<tr><th>市场</th><th class="hm">方向</th><th class="r hm">股数</th><th class="r hm">均价 / 现价</th><th class="r">浮动</th></tr>',d.positions.map(p=>`<tr><td>${marketHtml(p.title, p)}</td><td class="hm">${esc(p.outcome||"—")}</td><td class="r num hm">${p.shares}</td><td class="r num hm">${Math.round(p.avg_price*100)}¢ / ${p.last_mark==null?"—":Math.round(p.last_mark*100)+"¢"}</td><td class="r num ${cls(p.unrealized_usd)}">${M(p.unrealized_usd,x=>usd(x,true),(p.reasons&&p.reasons.unrealized_usd)||"not_yet_aggregated")}</td></tr>`).join(""));
+  if(d.activity) rows($("#ac-act"),'<tr><th class="hm">时间</th><th>市场</th><th class="hm">用途</th><th class="r">金额</th><th>结果</th></tr>',d.activity.map(activityRow).join(""));
+  else if($("#ac-act")){ const sec=$("#ac-act"); const hd=sec.querySelector(".hd"); sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>'; }
 }
 async function renderLeaders(){
   const accs=(await api("/v1/accounts")).accounts||[]; const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s)return;
