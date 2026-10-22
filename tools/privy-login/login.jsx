@@ -30,15 +30,16 @@ function bridge() {
 function SocialButton({ disabled, closed, onClick }) {
   return (
     <button
-      className={"btn big" + (disabled ? " dis" : "")}
+      className={"btn big" + (closed ? " soon" : disabled ? " dis" : "")}
       id="lg-privy-btn"
       type="button"
-      disabled={disabled}
-      title={closed ? "社交登录暂未开放" : undefined}
+      disabled={disabled || closed}
+      aria-disabled={disabled || closed ? "true" : undefined}
+      title={closed ? "即将推出" : undefined}
       onClick={onClick}
     >
       Google / 邮箱登录
-      {closed ? <span className="tag">暂未开放</span> : null}
+      {closed ? <em>即将推出</em> : null}
     </button>
   );
 }
@@ -135,7 +136,9 @@ function ActiveLogin() {
 }
 
 function App() {
-  if (!privyAppIdConfigured()) return <SocialButton disabled closed />;
+  /* 社交登录未对公开放：一律「即将推出」（soon），不要灰掉像坏了。开好后把 SOCIAL_OPEN 改 true。 */
+  const SOCIAL_OPEN = false;
+  if (!SOCIAL_OPEN || !privyAppIdConfigured()) return <SocialButton disabled closed />;
   return (
     <PrivyProvider appId={PRIVY_APP_ID} config={privyConfig}>
       <ActiveLogin />

@@ -235,7 +235,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
 </head><body>
 {banner(lang)}
 <header class="top"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="28" height="28" alt=""><b>{t["name"]}</b></a>
-<nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="https://app.wakeloom.com/">{t["cta"]}</a></div></header>
+<nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="https://app.wakeloom.com/board">{t["cta"]}</a></div></header>
 <main>{body}</main>
 <footer class="ft"><div class="fl"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="22" height="22" alt=""><b>{t["name"]}</b></a><span>{t["tag"]}</span></div><nav>{foot}</nav><p>{E(t["indep"])}</p></footer>
 <script src="/site.js" defer></script><script src="/site-live.js" defer></script></body></html>'''
@@ -269,7 +269,7 @@ def home(lang, D):
     hero = (f'''<section class="hero"><div class="hx"><p class="eyebrow">{"用于 Polymarket 的钱包分析 · 模拟盘" if zh else "Wallet analytics & paper trading for Polymarket"}</p>
 <h1>{"Polymarket 跟单前，先看清谁靠实力、谁靠运气" if zh else "Before you copy a Polymarket trader, see if it's skill or luck"}</h1>
 <p class="lead">{"排除刷量、做市和单次重仓，看近 90 天胜率、回撤与收益；先用模拟盘跟单，零资金看真实滑点（公测中）" if zh else "Filter wash trading, market makers, and one-hit wonders. See 90-day win rate, drawdown, and returns — then paper-copy with zero capital to feel real slippage (public beta)."}</p>
-<div class="ctas"><a class="btn pri mag" href="https://app.wakeloom.com/">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
+<div class="ctas"><a class="btn pri mag" href="https://app.wakeloom.com/board">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
 <p class="mu sm">{"第一期只有模拟盘，不动真钱，不需要私钥。" if zh else "Phase one is paper trading only: no real money, no private key."}</p></div>
 <div class="hv card rise" data-live="home-top"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b><span class="live-badge" data-live-badge="home-top"></span>{f'<span class="mu sm" data-live-meta="home-top">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else '<span class="mu sm" data-live-meta="home-top"></span>'}</div>
 {f'<table class="lt"><thead>{lhead(lang, short=True)}</thead><tbody>{rows}</tbody></table>' if rows else f'<p class="nd pad">{T[lang]["nd"]}</p>'}
@@ -302,7 +302,7 @@ def home(lang, D):
     ]
     sc = "".join(f'<figure class="shot card shot-imgfirst"><div class="shot-img"><img src="/assets/screens/{f}.webp" width="1200" height="1290" loading="lazy" decoding="async" alt="{E(alt)}"><span class="shot-tag">{"测试版 · 模拟盘" if zh else "Beta · Paper trading"}</span></div><figcaption><h3>{E(h)}</h3><p>{E(t)}</p></figcaption></figure>' for f, h, t, alt in shots)
     shots_html = f'<section class="shots"><h2>{"应用里能做什么" if zh else "Inside the app"}</h2><p class="mu sm">{"截图来自测试版，使用演示数据，不含真实地址。" if zh else "Screenshots from the beta with demo data; no real wallets shown."}</p><div class="shot-grid">{sc}</div></section>'
-    body = hero + f'<section class="feats">{fh}</section>' + shots_html + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
+    body = hero + f'<section class="feats">{fh}</section>' + shots_html + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/board">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
     write(f"{lang}/index.html", page(lang, "", "home", body, [softapp(lang), crumbs(lang, []), {"@type": "WebPage", "url": f"{SITE}/{lang}/", "name": DESC[lang]["home"][0], "inLanguage": T[lang]["html"], "isPartOf": {"@id": SITE + "/#website"}}]))
 
 def lhead(lang, short=False):
@@ -508,7 +508,7 @@ def leader_shell(lang):
 <div data-f="spark"></div>
 <section class="card" data-f="facts" style="display:none"></section>
 <section class="card" data-f="recent"><div class="hd"><b>{L("近 20 笔输赢", "Last 20 results")}</b></div><p class="nd pad">{N}</p></section>
-<section class="card cta-row"><div><b>{L("在应用里打开这个地址", "Open this wallet in the app")}</b><p class="mu">{L("上榜不代表以后的表现。", "A ranking does not predict future results.")}</p></div><a class="btn pri" data-f="app" href="https://app.wakeloom.com/">{L("进入应用", "Open the app")} →</a></section>
+<section class="card cta-row"><div><b>{L("在应用里打开这个地址", "Open this wallet in the app")}</b><p class="mu">{L("上榜不代表以后的表现。", "A ranking does not predict future results.")}</p></div><a class="btn pri" data-f="app" href="https://app.wakeloom.com/board">{L("进入应用", "Open the app")} →</a></section>
 </div>
 <script>
 (function(){{

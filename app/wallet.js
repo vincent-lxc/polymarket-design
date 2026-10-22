@@ -37,11 +37,21 @@
     '<div class="waddr"><div class="lbl">当前地址</div><div class="waddr-row"><b class="num" id="w-short">未登录</b><button type="button" class="btn sm dis" id="w-copy" disabled>复制</button></div></div>' +
     '<div class="wbal"><div><span class="lbl">USDC · Polygon</span><b class="num" id="w-usdc"><span class="nd">无数据</span></b>' +
     '<div class="wsub"><span>USDC.e</span><b class="num" id="w-usdce"><span class="nd">无数据</span></b></div></div>' +
-    '<div><span class="lbl">pUSD · Polygon <span class="tag or">可下单</span></span><b class="num" id="w-pusd"><span class="nd">无数据</span></b></div>' +
+    '<div><span class="lbl">pUSD · Polygon <span class="tag or" id="w-tradable">可下单</span></span><b class="num" id="w-pusd"><span class="nd">无数据</span></b></div>' +
     '<div><span class="lbl">POL · Polygon</span><b class="num" id="w-pol"><span class="nd">无数据</span></b></div></div>' +
     '<div class="wops"><button type="button" class="btn pri" id="w-dep">充值</button>' +
     '<button type="button" class="btn soon" id="w-wd" disabled aria-disabled="true" title="即将上线：实盘前需确认">提现<em>即将上线</em></button></div>';
   rail.insertBefore(wrail, rail.firstChild);
+  /* 未登录 / 公开页：不展示「充值」「可下单」，避免像能真下单 */
+  (function gatePaperUi(){
+    var logged = !!token();
+    var dep = document.getElementById("w-dep");
+    var tag = document.getElementById("w-tradable");
+    if (!logged) {
+      if (dep) dep.hidden = true;
+      if (tag) tag.hidden = true;
+    }
+  })();
   var note = rail.querySelector(".rc.note");
   if (note) rail.appendChild(note);
 
