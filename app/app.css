@@ -282,3 +282,6 @@ body.wrail-open{overflow:hidden}
  .rail.open{transform:translateY(0);opacity:1;pointer-events:auto}
  .rail>.rc:not(.note){display:none}
 }
+a.mkt{color:inherit}
+a.mkt:hover{color:var(--or)}
+a.mkt .ext{display:inline-block;width:12px;height:12px;margin-left:4px;vertical-align:-2px;color:var(--or)}
