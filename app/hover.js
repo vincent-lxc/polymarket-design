@@ -26,5 +26,5 @@ function bars(box){var ds=JSON.parse(box.dataset.series),B=[].slice.call(box.chi
  function mv(cx){var hr=box.getBoundingClientRect(),i=0,b=1e9;B.forEach(function(e,j){var r=e.getBoundingClientRect(),dd=Math.abs(r.left+r.width/2-cx);if(dd<b){b=dd;i=j}});
   var r=B[i].getBoundingClientRect();show(box,r.left+r.width/2-hr.left,r.top-hr.top,'<b>'+fmt(ds.kind,ds.v[i])+'</b><span>'+(ds.label||"")+'</span><span>'+bj(ds.t0+i*ds.dt)+'</span>',-58)}
  box.addEventListener("pointermove",function(e){mv(e.clientX)});box.addEventListener("pointerdown",function(e){mv(e.clientX)});box.addEventListener("pointerleave",function(){hide(box)});box.style.touchAction="pan-y"}
-window.hvInit=function(root){(root||document).querySelectorAll("svg[data-series]").forEach(function(s){if(!s._b){s._b=1;bind(s)}});(root||document).querySelectorAll("div[data-series]").forEach(function(s){if(!s._b){s._b=1;bars(s)}})};
+window.hvInit=function(root){(root||document).querySelectorAll("svg[data-series]").forEach(function(s){if(s.dataset.probe)return;if(!s._b){s._b=1;bind(s)}});(root||document).querySelectorAll("div[data-series]").forEach(function(s){if(!s._b){s._b=1;bars(s)}})};
 window.hvBase=BASE;hvInit()})();
