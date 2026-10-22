@@ -531,6 +531,46 @@
     });
   }
 
+  function t(zh, en) { return window.PMLang ? PMLang.t(zh, en) : zh; }
+  /* 公开榜在市场壳的 ?tab=board（/board 只是跳进来的兼容入口）。其它市场 Tab 不放这颗按钮。 */
+  function boardTab() {
+    var t = (new URLSearchParams(location.search).get("tab") || "board").toLowerCase();
+    if (t === "rank" || t === "leaderboard") return "board";
+    return t;
+  }
+  function isPublicBoard() {
+    var path = location.pathname.replace(/\/index\.html$/, "").replace(/\.html$/, "").replace(/\/$/, "") || "/";
+    if (path === "/board") return true;
+    if (path === "/markets") return boardTab() === "board";
+    return false;
+  }
+  function mountPublicLogin() {
+    var existing = document.getElementById("pub-login");
+    if (!isPublicBoard()) {
+      if (existing) existing.remove();
+      return;
+    }
+    var top = document.querySelector(".main .top") || document.querySelector(".top");
+    if (!top) return;
+    var a = document.getElementById("pub-login");
+    if (!a) {
+      a = document.createElement("a");
+      a.id = "pub-login";
+      a.className = "btn pri";
+      top.appendChild(a);
+    }
+    a.classList.add("btn", "pri");
+    var logged = !!token();
+    if (logged) {
+      a.textContent = t("打开模拟盘", "Open paper trading");
+      a.href = "/overview";
+    } else {
+      a.textContent = t("登录 / 打开模拟盘", "Log in / Open paper trading");
+      a.href = "/login?next=" + encodeURIComponent(location.pathname + location.search);
+    }
+  }
+
   window.PMWallet = { accountSay: accountSay, setIdentity: setIdentity, say: say, openDeposit: openFund, refresh: refresh, showAddress: showAddress };
+  mountPublicLogin();
   refresh();
 })();
