@@ -18,6 +18,13 @@ assert.equal(
   appRedirect(host + "/login.html?next=%2Foverview"),
   "https://app.wakeloom.com/login.html?next=%2Foverview",
 );
+assert.equal(appRedirect(host + "/board.html"), "https://app.wakeloom.com/markets?tab=board");
+assert.equal(
+  appRedirect(host + "/app/board.html?window=90d"),
+  "https://app.wakeloom.com/markets?window=90d&tab=board",
+);
+assert.equal(appRedirect(host + "/app/board/?from=home"), "https://app.wakeloom.com/markets?from=home&tab=board");
+assert.equal(appRedirect(host + "/markets.html"), "https://app.wakeloom.com/markets.html");
 assert.equal(appRedirect(host + "/zh/"), null);
 assert.equal(appRedirect(host + "/app-not"), null);
 assert.equal(appRedirect(host + "/application"), null);

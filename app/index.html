@@ -1,1 +1,9 @@
-<!doctype html><html lang="zh-CN"><head><meta name="robots" content="noindex"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/board"><title>跟单 · 模拟盘</title></head><body><a href="/board">进入排行</a></body></html>
+<!doctype html><html lang="zh-CN"><head><meta name="robots" content="noindex"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/markets?tab=board"><title>跟单 · 模拟盘</title><script>
+(function(){
+  var u=new URL("/markets", location.origin);
+  var q=new URLSearchParams(location.search);
+  q.forEach(function(v,k){ if(k!=="tab") u.searchParams.append(k,v); });
+  u.searchParams.set("tab","board");
+  location.replace(u.pathname + u.search + location.hash);
+})();
+</script></head><body><a href="/markets?tab=board">进入市场排行</a></body></html>

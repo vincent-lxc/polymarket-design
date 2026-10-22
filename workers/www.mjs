@@ -15,6 +15,7 @@ export const LEGACY_APP_PAGES = [
   "/leader.html",
   "/leaders.html",
   "/login.html",
+  "/markets.html",
   "/overview.html",
   "/strategies.html",
 ];
@@ -31,6 +32,14 @@ export function appRedirect(input) {
   else if (path.startsWith("/app/")) rest = path.slice("/app".length);
   else if (LEGACY_APP_PAGES.includes(path)) rest = path;
   if (rest == null) return null;
+  if (rest === "/board" || rest === "/board/" || rest === "/board.html") {
+    const dest = new URL("/markets", APP_ORIGIN);
+    url.searchParams.forEach((value, key) => {
+      if (key !== "tab") dest.searchParams.append(key, value);
+    });
+    dest.searchParams.set("tab", "board");
+    return dest.toString();
+  }
   return APP_ORIGIN + rest + url.search;
 }
 
