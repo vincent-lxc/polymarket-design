@@ -1,0 +1,17 @@
+# App Worker。只托管 app/ 目录，站点根就是 app.wakeloom.com。
+# /login.html 会 307 到 /login，/overview.html 会 307 到 /overview（html_handling 默认）。
+# 部署：npx wrangler deploy -c wrangler.app.toml
+# 本文件不执行部署。先部署这个、绑定域名，再改后端 CORS / BFF_DOMAIN，最后才发官网 301。
+name = "wakeloom-app"
+compatibility_date = "2026-10-22"
+workers_dev = false
+
+[assets]
+directory = "./app"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+
+# 自定义域名。部署时才会真正绑定，这次不要部署。
+[[routes]]
+pattern = "app.wakeloom.com"
+custom_domain = true

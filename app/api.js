@@ -28,7 +28,7 @@ const who=(name,addr)=>name?("@"+esc(name)):esc(short(addr));
 
 /* ---------- token / 请求 ---------- */
 const token={get:()=>localStorage.getItem(TK),set:t=>localStorage.setItem(TK,t),clear:()=>localStorage.removeItem(TK)};
-function toLogin(){ const next=location.pathname.split("/").pop()+location.search; location.href="login.html?next="+encodeURIComponent(next); }
+function toLogin(){ const next=location.pathname.split("/").pop()+location.search; location.href="/login?next="+encodeURIComponent(next); }
 class ApiError extends Error{constructor(status,body,offline){super((body&&body.message)||("HTTP "+status));this.status=status;this.body=body;this.offline=!!offline}}
 async function api(path,{method="GET",body,auth=true,confirm}={}){
   const h={"Accept":"application/json"};
@@ -46,7 +46,7 @@ async function api(path,{method="GET",body,auth=true,confirm}={}){
 /* ---------- 示例数据标记 ---------- */
 function badge(kind,title){ document.querySelectorAll(".demo-badge,.live-badge").forEach(e=>e.remove());
   const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?"示例数据":"实时数据"; b.title=title||""; document.body.appendChild(b); document.body.classList.toggle("live",kind!=="demo"); }
-function keepMock(){ document.querySelectorAll('a[href$=".html"],a[href*=".html#"],a[href*=".html?"]').forEach(a=>{const u=new URL(a.getAttribute("href"),location.href);u.searchParams.set("mock","1");a.href=u.pathname.split("/").pop()+u.search+u.hash;}); }
+function keepMock(){ document.querySelectorAll("a[href]").forEach(a=>{const href=a.getAttribute("href"); if(!href||href.startsWith("#")||/^[a-z]+:/i.test(href))return; let u; try{u=new URL(href,location.href);}catch(e){return;} if(u.origin!==location.origin)return; u.searchParams.set("mock","1"); a.href=u.pathname+u.search+u.hash; }); }
 function fallback(reason){ badge("demo",reason); keepMock(); }
 
 /* ---------- 渲染：总览 ---------- */
@@ -75,7 +75,7 @@ function renderOverview(d){
     const cv=$("#shcv"); if(cv){ cv.dataset.eq=usd(eq)||"无数据"; cv.dataset.pnl=usd(pnl,true)||"—"; cv.dataset.pct=pct(p)||"—"; cv.dataset.up=pnl>=0?1:0; cv.dataset.note=$("#ov-note").textContent;
       if(d.equity_curve&&d.equity_curve.length){ cv.dataset.v=JSON.stringify(d.equity_curve.map(x=>x.equity)); cv.dataset.range=`${bj(d.equity_curve[0].t)} – ${bj(d.equity_curve.at(-1).t)}（北京时间）`; } }
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
-      acc.map(a=>`<tr><td><a href="account.html?s=${encodeURIComponent(a.strategy)}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
+      acc.map(a=>`<tr><td><a href="/account?s=${encodeURIComponent(a.strategy)}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
   }
   if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
   const ml=d.main_leader, lead=$("#ov-lead .h");
@@ -89,7 +89,7 @@ async function renderAccount(){
   const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
   const d=await api("/v1/accounts/"+encodeURIComponent(s)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+s;
-  const steps=document.querySelector(".steps"); if(steps) steps.innerHTML=accs.map(x=>`<a class="${x.strategy===s?"on":""}" href="account.html?s=${encodeURIComponent(x.strategy)}">${esc(x.strategy)}</a>`).join("")+'<a href="strategies.html" class="dim" style="margin-left:auto;font-size:13px">策略管理 →</a>';
+  const steps=document.querySelector(".steps"); if(steps) steps.innerHTML=accs.map(x=>`<a class="${x.strategy===s?"on":""}" href="/account?s=${encodeURIComponent(x.strategy)}">${esc(x.strategy)}</a>`).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略管理 →</a>';
   const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
   m.querySelector(".kv").innerHTML=[["现金",a.cash_usd],["持仓市值",a.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason],["当日已实现",a.daily_realized_usd,R.daily_realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
@@ -100,7 +100,7 @@ async function renderLeaders(){
   const d=await api("/v1/accounts/"+encodeURIComponent(s)+"/leaders");
   const on=(d.active||[]);
   rows($("#ld-on"),'<tr><th>Leader</th><th class="r">评分</th><th class="r">权重</th><th class="r hm">组合市值</th><th class="r hm">我方累计 / 占比</th><th class="hm">选入（北京时间）</th></tr>',
-    on.map(l=>`<tr><td><a href="leader.html?addr=${l.address}"><b>${who(l.user_name,l.address)}</b></a><div class="fk" title="${esc(l.address)}">${esc(short(l.address))}</div></td><td class="r num">${M(l.score,x=>Math.round(x))}</td><td class="r num">${M(l.weight,x=>pct(x,false,0))}</td><td class="r num hm">${V(l.portfolio_value_usd,usd)}</td><td class="r hm num">${V(l.our_total_usd,x=>usd(x,true),l.reasons&&l.reasons.our_total_usd)} / ${M(l.our_share,x=>pct(x,false,0),l.reasons&&l.reasons.share)}</td><td class="num mu hm">${bj(l.selected_at)||"—"}</td></tr>`).join(""));
+    on.map(l=>`<tr><td><a href="/leader?addr=${l.address}"><b>${who(l.user_name,l.address)}</b></a><div class="fk" title="${esc(l.address)}">${esc(short(l.address))}</div></td><td class="r num">${M(l.score,x=>Math.round(x))}</td><td class="r num">${M(l.weight,x=>pct(x,false,0))}</td><td class="r num hm">${V(l.portfolio_value_usd,usd)}</td><td class="r hm num">${V(l.our_total_usd,x=>usd(x,true),l.reasons&&l.reasons.our_total_usd)} / ${M(l.our_share,x=>pct(x,false,0),l.reasons&&l.reasons.share)}</td><td class="num mu hm">${bj(l.selected_at)||"—"}</td></tr>`).join(""));
   const sc=d.last_screen; if(sc&&sc.rows) rows($("#ld-screen"),'<tr><th class="r">#</th><th>钱包</th><th>结果</th><th>落选原因</th></tr>',sc.rows.map(r=>`<tr><td class="r num">${r.rank??"—"}</td><td title="${esc(r.address)}">${esc(short(r.address))}</td><td><span class="tag ${r.selected?"live":""}">${r.selected?"入选":"落选"}</span></td><td>${r.reason?`<span title="${esc(r.reason.code)}">${esc(r.reason.zh)}</span>`:NA}</td></tr>`).join(""));
 }
 const RPCTAG={"live":'<span class="tag live">live</span>',"待机":'<span class="tag idle">待机</span>',"已踢出":'<span class="tag kick">已踢出</span>'};
@@ -138,7 +138,7 @@ async function renderLeader(){
   if(token.get()){ const d=await api(`/v1/leaders/${addr}?window=90d&n=20`); const p=d.profile||{}; if(h)h.lastChild.textContent=p.user_name?"@"+p.user_name:short(addr); fillPerf(Object.assign({},d.metrics,{reasons:d.metric_reasons}),p); return; }
   const w=await api(`/v1/public/wallets/${addr}?window=90d`,{auth:false});
   if(h)h.lastChild.textContent=w.user_name?"@"+w.user_name:short(addr);
-  const idl=$("#ld-idl"); if(idl) idl.innerHTML=`<a href="board.html" class="dim">排行</a> / <span title="${esc(addr)}">${esc(short(addr))}</span>${w.x_username?" · X @"+esc(w.x_username):""} · 截至 ${bj(w.as_of)}（北京时间）· 公开数据，未登录不显示我方镜像`;
+  const idl=$("#ld-idl"); if(idl) idl.innerHTML=`<a href="/board" class="dim">排行</a> / <span title="${esc(addr)}">${esc(short(addr))}</span>${w.x_username?" · X @"+esc(w.x_username):""} · 截至 ${bj(w.as_of)}（北京时间）· 公开数据，未登录不显示我方镜像`;
   fillPerf(Object.assign({},w.metrics,{smart_score:w.smart_score,gate_pass:w.gate_pass,reasons:w.metric_reasons}),w);
   publicOnly(w);
 }
@@ -157,7 +157,7 @@ function publicOnly(w){
       host.innerHTML=`<svg viewBox="0 0 600 120" width="100%" height="120" preserveAspectRatio="none" aria-label="他的收益曲线" data-series='${JSON.stringify({kind:"usd",label:"他的权益",t0,dt,v:v.map(x=>+x.toFixed(2))})}'><polyline points="${P}" fill="none" stroke="${up?"#2fd47a":"#ff5a5f"}" stroke-width="2"/></svg>`; } }
   const lg=$("#ld-perf .lgrid"); if(lg) lg.remove();
   const secs=[...document.querySelectorAll("main section.card")].filter(s=>s.id!=="ld-perf"); secs.forEach(s=>s.remove());
-  const n=document.createElement("section"); n.className="card"; n.innerHTML=`<div class="hd"><h2>我方镜像 · 价格买卖点 · 他的成交与持仓</h2></div><div class="ndbox"><span class="nd">需登录</span><span>这些块读跟单账本，公开接口不提供。<a href="login.html?next=${encodeURIComponent("leader.html?addr="+w.address)}">登录后查看 →</a></span></div>`;
+  const n=document.createElement("section"); n.className="card"; n.innerHTML=`<div class="hd"><h2>我方镜像 · 价格买卖点 · 他的成交与持仓</h2></div><div class="ndbox"><span class="nd">需登录</span><span>这些块读跟单账本，公开接口不提供。<a href="/login?next=${encodeURIComponent("/leader?addr="+w.address)}">登录后查看 →</a></span></div>`;
   $("#ld-perf").after(n);
 }
 
@@ -168,7 +168,7 @@ async function renderBoard(win){
   const lb=d.leaderboard;
   if(!lb||!lb.leaders){ tb.innerHTML=`<tr><td colspan="6">${nd(d.reason||"analytics_unavailable")}</td></tr>`; $("#bd-asof").textContent=""; return; }
   $("#bd-asof").textContent=`截至 ${bj(lb.as_of)}（北京时间）· 共 ${lb.leaders.length} 个`;
-  tb.innerHTML=lb.leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};return `<tr class="rl" onclick="location.href='leader.html?addr=${l.address}'"><td><a href="leader.html?addr=${l.address}" title="${esc(l.address)}"><b>${esc(short(l.address))}</b></a></td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?'<span class="tag live">通过</span>':`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">未通过</span>`}</td></tr>`}).join("");
+  tb.innerHTML=lb.leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};return `<tr class="rl" onclick="location.href='/leader?addr=${l.address}'"><td><a href="/leader?addr=${l.address}" title="${esc(l.address)}"><b>${esc(short(l.address))}</b></a></td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?'<span class="tag live">通过</span>':`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">未通过</span>`}</td></tr>`}).join("");
   $("#bd-src").textContent="数据来自分析服务（"+(d.source==="analytics_sqlite"?"本地快照":"实时")+"）；胜率算不出来时显示「—」。";
   document.querySelectorAll(".tw .xp").forEach(b=>b.remove());
   const tw=tb.closest(".tw"), trs=[...tb.querySelectorAll("tr")], L=innerWidth<900?10:20;
@@ -178,6 +178,13 @@ async function renderBoard(win){
 /* ---------- 登录：EIP-1193 钱包签名 ---------- */
 function initLogin(){
   const msg=$("#lg-msg"), btn=$("#lg-wallet"); const say=(t,bad)=>{msg.textContent=t;msg.style.color=bad?"#ff5a5f":""};
+  function finishLogin(v){
+    if(!v||typeof v.token!=="string"||!v.token) throw new Error("服务端没有返回登录令牌");
+    token.set(v.token); say("登录成功，正在跳转…");
+    location.href=Q.get("next")||"/overview";
+  }
+  /* 登录页上的 Privy 包复用同一套提示、请求和成功后的跳转。其它页不挂这个对象。 */
+  window.PMLogin={say,api,finish:finishLogin};
   if(!window.ethereum){ say("没有检测到浏览器钱包。请安装 MetaMask 等支持 EIP-1193 的钱包后刷新本页。",true); btn.classList.add("dis"); }
   btn.onclick=async()=>{
     if(!window.ethereum)return say("没有检测到浏览器钱包。请安装 MetaMask 等支持 EIP-1193 的钱包后刷新本页。",true);
@@ -185,13 +192,13 @@ function initLogin(){
     try{
       say("请在钱包里选择账户…");
       const [address]=await window.ethereum.request({method:"eth_requestAccounts"});
+      /* domain / uri 用当前页面的主机，没有写死。部署到 app.wakeloom.com 后就是这个域名。 */
       const n=await api("/v1/auth/nonce",{method:"POST",auth:false,body:{address,domain:location.host||"localhost",uri:location.origin,chain_id:137}});
       if(!n||typeof n.message!=="string"||!n.message) throw new Error("服务端没有返回签名内容");
       say("请在钱包里签名（不会发起交易）…");
       const signature=await window.ethereum.request({method:"personal_sign",params:[n.message,address]});
       const v=await api("/v1/auth/verify",{method:"POST",auth:false,body:{address,message:n.message,signature}});
-      token.set(v.token); say("登录成功，正在跳转…");
-      location.href=Q.get("next")||"overview.html";
+      finishLogin(v);
     }catch(e){ say(e.code===4001?"你取消了签名。":e.status===401?"签名已过期或已使用，请重试。":e.offline?"连不上接口，请稍后再试。":"登录失败："+e.message,true); }
     finally{btn.disabled=false;}
   };
@@ -201,7 +208,7 @@ function initLogin(){
 const R={overview:async()=>renderOverview(await api("/v1/overview?range=24h")),account:renderAccount,leaders:renderLeaders,health:renderHealth,config:renderConfig,strategies:renderStrategies};
 async function boot(){
   if(PAGE==="login")return initLogin();
-  const lo=$("#logout"); if(lo) lo.onclick=async e=>{e.preventDefault(); try{await api("/v1/auth/logout",{method:"POST"})}catch(_){} token.clear(); location.href="login.html";};
+  const lo=$("#logout"); if(lo) lo.onclick=async e=>{e.preventDefault(); try{await api("/v1/auth/logout",{method:"POST"})}catch(_){} token.clear(); location.href="/login";};
   if(MOCK){ if(PAGE==="board")return renderBoard("90d").then(()=>badge("live","公开接口")).catch(()=>fallback("接口连不上")); return fallback("?mock=1"); }
   try{
     if(PAGE==="board"){ document.querySelectorAll("#bd-win span").forEach(s=>s.onclick=()=>{document.querySelectorAll("#bd-win span").forEach(x=>x.classList.toggle("on",x===s));renderBoard(s.dataset.w).catch(e=>fallback(e.message))}); await renderBoard("90d"); return badge("live","公开接口"); }

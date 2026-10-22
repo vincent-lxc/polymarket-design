@@ -1,0 +1,20 @@
+# 官网 Worker。只在 Vincent 按上线顺序发官网时部署，不要和 App Worker 一起先发。
+# 部署：npx wrangler deploy
+# 本文件不执行部署。
+name = "wakeloom-www"
+main = "workers/www.mjs"
+compatibility_date = "2026-10-22"
+workers_dev = false
+
+[assets]
+directory = "."
+binding = "ASSETS"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+# 所有请求先过 Worker，/app/* 才能在静态文件之前 301，并带上 query。
+run_worker_first = true
+
+# 自定义域名。部署时才会真正绑定，这次不要部署。
+[[routes]]
+pattern = "www.wakeloom.com"
+custom_domain = true
