@@ -227,17 +227,7 @@
           (lang === "zh" ? " 位" : " traders");
       }
 
-      var recent = root.querySelector("[data-f=recent]");
-      if (recent) {
-        var rr = d.recent_results;
-        var label = lang === "zh" ? "近 20 笔输赢" : "Last 20 results";
-        if (rr == null || (Array.isArray(rr) && rr.length === 0)) {
-          recent.innerHTML = '<div class="hd"><b>' + esc(label) + '</b></div><p class="nd pad">' + ND + "</p>";
-        } else {
-          // 有数据时仍先显示无数据块结构；完整列表等公开接口字段稳定后再渲染
-          recent.innerHTML = '<div class="hd"><b>' + esc(label) + '</b></div><p class="nd pad">' + ND + "</p>";
-        }
-      }
+      /* 排行榜页无 recent 块；勿引用未定义的 root/d，否则成功刷新后仍会落入 catch 显示红字 */
       setBadge(badge, "", lang === "zh" ? "实时数据" : "Live");
     } catch (e) {
       tbody.classList.remove("live-skel");

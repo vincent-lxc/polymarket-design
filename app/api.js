@@ -58,8 +58,9 @@ async function api(path,{method="GET",body,auth=true,confirm}={}){
 }
 
 /* ---------- 示例数据标记 ---------- */
-function badge(kind,title){ document.querySelectorAll(".demo-badge,.live-badge").forEach(e=>e.remove());
-  const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?"示例数据":"实时数据"; b.title=title||""; document.body.appendChild(b); document.body.classList.toggle("live",kind!=="demo"); }
+function badge(kind,title){ document.querySelectorAll(".demo-badge,.live-badge,.demo-banner").forEach(e=>e.remove());
+  const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?"示例，不是你的账户":"实时数据"; b.title=title||""; document.body.appendChild(b); document.body.classList.toggle("live",kind!=="demo");
+  if(kind==="demo"){ const ban=document.createElement("div"); ban.className="demo-banner"; ban.setAttribute("role","status"); ban.textContent="示例，不是你的账户"; const main=document.querySelector(".main")||document.body; main.prepend(ban); document.documentElement.classList.add("mock-demo"); } }
 function keepMock(){ document.querySelectorAll("a[href]").forEach(a=>{const href=a.getAttribute("href"); if(!href||href.startsWith("#")||/^[a-z]+:/i.test(href))return; let u; try{u=new URL(href,location.href);}catch(e){return;} if(u.origin!==location.origin)return; u.searchParams.set("mock","1"); a.href=u.pathname+u.search+u.hash; }); }
 function fallback(reason){ badge("demo",reason); keepMock(); }
 
@@ -233,7 +234,7 @@ async function renderHealth(){
 }
 async function renderConfig(){
   const [w,r]=await Promise.all([api("/v1/config/wallet"),api("/v1/config/rpc")]);
-  $("#cf-wallet .kv").innerHTML=w.bound?`<div><span class="lbl">钱包地址</span><b title="${esc(w.address)}">${esc(short(w.address))}</b></div><div><span class="lbl">私钥 / API 凭证</span><b>••••${esc(w.private_key_hint||"")}</b></div><div><span class="lbl">绑定状态</span><b class="up">已绑定</b></div>`:`<div><span class="lbl">绑定状态</span><b>未绑定</b></div><div><span class="lbl">钱包地址</span><b>${nd("not_bound")}</b></div>`;
+  $("#cf-wallet .kv").innerHTML=w.bound?`<div><span class="lbl">钱包地址</span><b title="${esc(w.address)}">${esc(short(w.address))}</b></div><div><span class="lbl">绑定状态</span><b class="up">已绑定</b></div>`:`<div><span class="lbl">绑定状态</span><b>未绑定</b></div><div><span class="lbl">钱包地址</span><b>${nd("not_bound")}</b></div>`;
   rows($("#cf-rpc"),'<tr><th class="r hm">#</th><th>名称</th><th>状态</th><th class="hm">Endpoint / Key</th></tr>',(r.providers||[]).map((p,i)=>`<tr><td class="r mu hm">${i+1}</td><td><b>${esc(p.name)}</b></td><td>${RPCTAG[p.status]||esc(p.status)}</td><td class="num mu hm">${esc(p.endpoint_hint||"")}${p.key_hint?" · ••••"+esc(p.key_hint):""}</td></tr>`).join("")||`<tr><td colspan="4">${nd("no_rpc")}</td></tr>`);
 }
 async function renderStrategies(){
@@ -271,9 +272,13 @@ function publicOnly(w){
   if(curveBox){ const host=curveBox.parentNode;
     if(pts.length<2){ host.innerHTML=`<div class="ndbox" style="height:120px;justify-content:center;align-items:center">${nd(w.reasons&&w.reasons.equity_curve||"no_equity_points")}</div>`; }
     else{ const v=pts.map(p=>p.equity), mn=Math.min(...v), mx=Math.max(...v)||1, k=mx-mn||1;
-      const P=v.map((x,i)=>`${(i*600/(v.length-1)).toFixed(1)},${(110-(x-mn)/k*100).toFixed(1)}`).join(" "); const up=v.at(-1)>=v[0];
+      const P=v.map((x,i)=>`${(40+i*560/(v.length-1)).toFixed(1)},${(110-(x-mn)/k*100).toFixed(1)}`).join(" "); const up=v.at(-1)>=v[0];
       const t0=new Date(pts[0].t).getTime(), dt=pts.length>1?(new Date(pts.at(-1).t).getTime()-t0)/(pts.length-1):0;
-      host.innerHTML=`<svg viewBox="0 0 600 120" width="100%" height="120" preserveAspectRatio="none" aria-label="他的累计盈亏曲线" data-series='${JSON.stringify({kind:"usd",label:"累计盈亏（已实现+浮动）",t0,dt,v:v.map(x=>+x.toFixed(2))})}'><polyline points="${P}" fill="none" stroke="${up?"#2fd47a":"#ff5a5f"}" stroke-width="2"/></svg>`; } }
+      const yHi=usd(mx)||"", yLo=usd(mn)||"";
+      host.innerHTML=`<div class="spark-wrap"><svg viewBox="0 0 600 120" width="100%" height="120" preserveAspectRatio="none" aria-label="他的累计盈亏曲线" data-series='${JSON.stringify({kind:"usd",label:"累计盈亏（已实现+浮动）",t0,dt,v:v.map(x=>+x.toFixed(2))})}'><polyline points="${P}" fill="none" stroke="${up?"#2fd47a":"#ff5a5f"}" stroke-width="2"/></svg><div class="sp-y num mu"><span>${esc(yHi)}</span><span>${esc(yLo)}</span></div></div>`; } }
+  const idlEl=$("#ld-idl"); if(idlEl&&!/统计窗口/.test(idlEl.textContent||"")) idlEl.insertAdjacentHTML("beforeend"," · 统计窗口：近 90 天");
+  const cats=(w.categories||(w.metrics&&w.metrics.categories)||[]).map(x=>typeof x==="object"?x.category:x).filter(c=>c&&c!=="unknown").slice(0,5);
+  if(cats.length){ const facts=document.createElement("p"); facts.className="mu sm"; facts.style.marginTop="8px"; facts.textContent="主要市场类别："+cats.join("、"); const perf=$("#ld-perf"); if(perf) perf.appendChild(facts); }
   const lg=$("#ld-perf .lgrid"); if(lg) lg.remove();
   const secs=[...document.querySelectorAll("main section.card")].filter(s=>s.id!=="ld-perf"); secs.forEach(s=>s.remove());
   const n=document.createElement("section"); n.className="card"; n.id="ld-login"; n.innerHTML=`<div class="hd"><h2>我方镜像 · 价格买卖点 · 他的成交与持仓</h2></div><div class="ndbox"><span class="nd">需登录</span><span>这些块读跟单账本，公开接口不提供。<a href="/login?next=${encodeURIComponent("/leader?addr="+w.address)}">登录后查看 →</a></span></div>`;
@@ -285,9 +290,9 @@ async function renderBoard(win){
   const tb=$("#bd-rows"), sk=tb.dataset.sk||(tb.dataset.sk=tb.innerHTML); tb.innerHTML=sk; $("#bd-asof").textContent="加载中…";
   const d=await api(`/v1/public/leaderboard?window=${win}&metric=smart_score&limit=50`,{auth:false});
   const lb=d.leaderboard;
-  if(!lb||!lb.leaders){ tb.innerHTML=`<tr><td colspan="6">${nd(d.reason||"analytics_unavailable")}</td></tr>`; $("#bd-asof").textContent=""; return; }
+  if(!lb||!lb.leaders){ tb.innerHTML=`<tr><td colspan="8">${nd(d.reason||"analytics_unavailable")}</td></tr>`; $("#bd-asof").textContent=""; return; }
   $("#bd-asof").textContent=`截至 ${bj(lb.as_of)} · 共 ${lb.leaders.length} 个`;
-  tb.innerHTML=lb.leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};return `<tr class="rl" onclick="location.href='/leader?addr=${l.address}'"><td><a href="/leader?addr=${l.address}" title="${esc(l.address)}"><b>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?"@"+esc(l.user_name):esc(short(l.address))}</b></a>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?`<div class="fk">${esc(short(l.address))}</div>`:""}</td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?'<span class="tag live">通过</span>':`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">未通过</span>`}</td></tr>`}).join("");
+  tb.innerHTML=lb.leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};return `<tr class="rl" onclick="location.href='/leader?addr=${l.address}'"><td><a href="/leader?addr=${l.address}" title="${esc(l.address)}"><b>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?"@"+esc(l.user_name):esc(short(l.address))}</b></a>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?`<div class="fk">${esc(short(l.address))}</div>`:""}</td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm">${M(m.max_drawdown,x=>pct(x,false,1),R.max_drawdown)}</td><td class="r num hm">${M(m.resolved_markets,x=>x.toLocaleString(),R.resolved_markets)}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?'<span class="tag live">通过</span>':`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">未通过</span>`}</td></tr>`}).join("");
   $("#bd-src").textContent="数据来自分析服务（"+(d.source==="analytics_sqlite"?"本地快照":"实时")+"）；胜率算不出来时显示「—」。";
   document.querySelectorAll(".tw .xp").forEach(b=>b.remove());
   const tw=tb.closest(".tw"), trs=[...tb.querySelectorAll("tr")], L=innerWidth<900?10:20;
@@ -296,29 +301,31 @@ async function renderBoard(win){
 
 /* ---------- 登录：EIP-1193 钱包签名 ---------- */
 function initLogin(){
-  const msg=$("#lg-msg"), btn=$("#lg-wallet"); const say=(t,bad)=>{msg.textContent=t;msg.style.color=bad?"#ff5a5f":""};
+  const msg=$("#lg-msg"), wmsg=$("#lg-wallet-msg"), btn=$("#lg-wallet");
+  const sayWallet=(t,bad)=>{if(wmsg){wmsg.textContent=t;wmsg.className="note"+(bad?" err":"");} if(msg)msg.textContent="";};
+  const sayPrivy=(t,bad)=>{if(msg){msg.textContent=t;msg.className="note"+(bad?" err":"");msg.style.color=bad?"#ff5a5f":"";}};
   function finishLogin(v){
     if(!v||typeof v.token!=="string"||!v.token) throw new Error("服务端没有返回登录令牌");
-    token.set(v.token); say("登录成功，正在跳转…");
+    token.set(v.token); sayWallet("登录成功，正在跳转…");
     location.href=Q.get("next")||"/overview";
   }
   /* 登录页上的 Privy 包复用同一套提示、请求和成功后的跳转。其它页不挂这个对象。 */
-  window.PMLogin={say,api,finish:finishLogin};
-  if(!window.ethereum){ say("没有检测到浏览器钱包。请安装 MetaMask 等支持 EIP-1193 的钱包后刷新本页。",true); btn.classList.add("dis"); }
+  window.PMLogin={say:sayPrivy,api,finish:finishLogin};
+  if(!window.ethereum){ sayWallet("没有检测到浏览器钱包。请安装 MetaMask 等支持 EIP-1193 的钱包后刷新本页。",true); btn.classList.add("dis"); }
   btn.onclick=async()=>{
-    if(!window.ethereum)return say("没有检测到浏览器钱包。请安装 MetaMask 等支持 EIP-1193 的钱包后刷新本页。",true);
+    if(!window.ethereum)return sayWallet("没有检测到浏览器钱包。请安装 MetaMask 等支持 EIP-1193 的钱包后刷新本页。",true);
     btn.disabled=true;
     try{
-      say("请在钱包里选择账户…");
+      sayWallet("请在钱包里选择账户…");
       const [address]=await window.ethereum.request({method:"eth_requestAccounts"});
       /* domain / uri 用当前页面的主机，没有写死。部署到 app.wakeloom.com 后就是这个域名。 */
       const n=await api("/v1/auth/nonce",{method:"POST",auth:false,body:{address,domain:location.host||"localhost",uri:location.origin,chain_id:137}});
       if(!n||typeof n.message!=="string"||!n.message) throw new Error("服务端没有返回签名内容");
-      say("请在钱包里签名（不会发起交易）…");
+      sayWallet("请在钱包里签名（不会发起交易）…");
       const signature=await window.ethereum.request({method:"personal_sign",params:[n.message,address]});
       const v=await api("/v1/auth/verify",{method:"POST",auth:false,body:{address,message:n.message,signature}});
       finishLogin(v);
-    }catch(e){ say(e.code===4001?"你取消了签名。":e.status===401?"签名已过期或已使用，请重试。":e.offline?"连不上接口，请稍后再试。":"登录失败："+e.message,true); }
+    }catch(e){ sayWallet(e.code===4001?"你取消了签名。":e.status===401?"签名已过期或已使用，请重试。":e.offline?"连不上接口，请稍后再试。":"登录失败："+e.message,true); }
     finally{btn.disabled=false;}
   };
 }
@@ -335,7 +342,10 @@ async function boot(){
     if(!R[PAGE])return;
     if(!token.get())return toLogin();
     await R[PAGE](); stripDemo(); badge("live","BFF");
-  }catch(e){ if(e.status===401)return; fallback(e.offline?"接口连不上，已回退到示例数据":"接口出错："+e.message); }
+  }catch(e){ if(e.status===401)return;
+    /* 公开页失败不要贴「示例，不是你的账户」——那是个人账本 mock 的标 */
+    if(PAGE==="board"||PAGE==="leader"||PAGE==="health"){ console.warn(e); return; }
+    fallback(e.offline?"接口连不上，已回退到示例数据":"接口出错："+e.message); }
 }
 document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();
 })();

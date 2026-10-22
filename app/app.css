@@ -312,3 +312,11 @@ a.mkt .ext{display:inline-block;width:12px;height:12px;margin-left:4px;vertical-
 .wid-acct{margin-top:8px;width:100%}
 .wacct-list{display:grid;gap:8px;margin:12px 0}
 .wacct-list .btn{justify-content:flex-start;text-align:left;width:100%}
+
+/* UX P0: mock 大标 + 登录钱包报错 + 公开曲线纵轴 */
+.demo-banner{margin:0 0 12px;padding:10px 14px;border-radius:10px;background:#FF6A1F;color:#111;font-weight:700;font-size:14px;letter-spacing:.02em;text-align:center}
+.note.err{color:#ff5a5f}
+#lg-wallet-msg{min-height:1.2em;margin-top:-4px}
+.spark-wrap{position:relative}
+.spark-wrap .sp-y{position:absolute;right:4px;top:4px;bottom:4px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;font-size:11px}
+html.mock-demo .demo-banner{display:block}
