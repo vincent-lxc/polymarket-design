@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { privyAppIdConfigured, PRIVY_APP_ID } from "./config.js";
 import { privyAuthMessage } from "./errors.js";
 
-assert.equal(PRIVY_APP_ID, "");
+assert.equal(PRIVY_APP_ID, "cmvj6wa8m03ut0hjrdnr0a3g8");
+assert.equal(privyAppIdConfigured(), true);
 assert.equal(privyAppIdConfigured(""), false);
 assert.equal(privyAppIdConfigured("   "), false);
 assert.equal(privyAppIdConfigured("clplaceholder"), true);
