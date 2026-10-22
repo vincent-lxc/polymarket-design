@@ -254,8 +254,8 @@ def home(lang, D):
     rows = "".join(lrow(lang, i + 1, l, D) for i, l in enumerate(top))
     asof = bj(D["as_of"], lang)
     hero = (f'''<section class="hero"><div class="hx"><p class="eyebrow">{"用于 Polymarket 的钱包分析 · 模拟盘" if zh else "Wallet analytics & paper trading for Polymarket"}</p>
-<h1>{"看清谁在长期稳定地交易，<br>先用模拟盘跟一跟" if zh else "See who trades consistently,<br>then paper-trade copying them"}</h1>
-<p class="lead">{"从链上历史里筛掉单次重仓、刷量和做市地址，留下近 90 天表现稳定的交易者。看胜率、收益率和回撤，再用模拟盘记录真实的延迟和滑点。" if zh else "We filter out one-off bets, wash volume and market makers from on-chain history and keep traders with steady 90-day results. Read their win rate, ROI and drawdown, then paper-trade them while logging real latency and slippage."}</p>
+<h1>{"Polymarket 跟单前，先看清谁靠实力、谁靠运气" if zh else "Before you copy a Polymarket trader, see if it's skill or luck"}</h1>
+<p class="lead">{"排除刷量、做市和单次重仓，看近 90 天胜率、回撤与收益；先用模拟盘跟单，零资金看真实滑点（公测中）" if zh else "Filter wash trading, market makers, and one-hit wonders. See 90-day win rate, drawdown, and returns — then paper-copy with zero capital to feel real slippage (public beta)."}</p>
 <div class="ctas"><a class="btn pri mag" href="https://app.wakeloom.com/">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
 <p class="mu sm">{"第一期只有模拟盘，不动真钱，不需要私钥。" if zh else "Phase one is paper trading only: no real money, no private key."}</p></div>
 <div class="hv card rise" data-live="home-top"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b><span class="live-badge" data-live-badge="home-top"></span>{f'<span class="mu sm" data-live-meta="home-top">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else '<span class="mu sm" data-live-meta="home-top"></span>'}</div>
