@@ -50,6 +50,20 @@ function keepMock(){ document.querySelectorAll("a[href]").forEach(a=>{const href
 function fallback(reason){ badge("demo",reason); keepMock(); }
 
 /* ---------- 渲染：总览 ---------- */
+/* reasons.equity_curve_omitted 非空：曲线只覆盖已统计实例，和上方合计净值不是同一口径。 */
+function applyCurveNote(reasons){
+  const raw=reasons&&typeof reasons==="object"?reasons.equity_curve_omitted:undefined;
+  const n=window.PMEquity?PMEquity.omittedEquityCount(raw):0;
+  const cap=$("#ov-curve-cap"), miss=$("#ov-curve-miss"), svg=document.querySelector("#ov-chart svg");
+  const partial=n>0;
+  if(cap) cap.textContent=partial?"已统计实例净值":"合计净值曲线 · 每 60 秒一点";
+  if(miss){ miss.hidden=!partial; miss.textContent=partial?"曲线不完整：缺 "+n+" 个实例":""; }
+  if(svg){
+    svg.setAttribute("aria-label", partial?"已统计实例净值":"迷你净值曲线，可拖动查看");
+    try{ const ds=JSON.parse(svg.dataset.series||"{}"); ds.label=partial?"已统计实例净值":"合计净值"; svg.dataset.series=JSON.stringify(ds); }catch(e){}
+  }
+}
+
 function rows(sec,headHtml,bodyHtml){ const t=sec&&sec.querySelector("table"); if(!t)return; t.innerHTML=headHtml+bodyHtml; sec.querySelectorAll(".xp").forEach(b=>b.remove()); }
 function rejectTag(code,zh,known){ if(!code)return NA; return `<span class="tag" title="${esc(code)}">${esc(zh||"其他原因")}${known===false?` <span class="fk" style="display:inline">${esc(code)}</span>`:""}</span>`; }
 function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*100)+"¢":null;
@@ -58,6 +72,7 @@ function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*1
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已跟</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
   return `<tr><td title="${esc(bj(m.decided_at)||"")}（北京时间）">${esc(m.market||"无数据")}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r ${me?"num":"na"}">${me||"—"}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":"—"}</td><td>${res}</td></tr>`; }
 function renderOverview(d){
+  applyCurveNote(d&&d.reasons);
   const t=d.totals, R=Object.assign({},d.reasons);
   if(!t){ $("#ov-eq").innerHTML=nd(R.copy_db||"no_totals"); $("#ov-note").textContent=""; }
   else{
@@ -122,7 +137,7 @@ async function renderStrategies(){
   rows($("#st-mine"),'<tr><th>名称</th><th class="hm">模板</th><th>状态</th><th class="r">操作</th></tr>',(d.strategies||[]).map(s=>`<tr><td><b>${esc(s.name)}</b> <span class="tag">模拟盘</span></td><td class="hm mu">${esc(s.template_id||"空白")}</td><td><span class="tag ${s.state==="running"?"live":"idle"}">${s.state==="running"?"运行中":"已暂停"}</span></td><td class="r"><a class="btn sm" href="#edit">修改参数</a></td></tr>`).join("")||`<tr><td colspan="4">${nd("no_strategies")}</td></tr>`);
 }
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
-window.PM={api,token,usd,pct,bj,short,
+window.PM={api,token,usd,pct,bj,short,applyCurveNote,
   saveDraft:(id,params,name)=>api("/v1/me/strategies/"+encodeURIComponent(id),{method:"PATCH",body:{params,mode:"paper"},confirm:name}),
   createDraft:(name,template_id,params)=>api("/v1/me/strategies",{method:"POST",body:{name,template_id,params,mode:"paper"},confirm:name})};
 
