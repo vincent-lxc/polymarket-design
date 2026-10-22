@@ -131,6 +131,24 @@
         big.textContent = (live == null || Math.abs(live - endV) < 0.02) ? usd(endV) : restText;
       } else big.textContent = usd(val);
     }
+    /* api.js 用实时 equity_curve 重画曲线后派发 pm:curve；这里重读序列、点位和静止读数，不再沿用示例值。 */
+    chart.addEventListener("pm:curve", function () {
+      try { ds = JSON.parse(svg.dataset.series); } catch (e) { return; }
+      series = ds.v || [];
+      raw = [];
+      for (var k = 0; k < line.points.numberOfItems; k++) {
+        var q = line.points.getItem(k);
+        raw.push({ x: q.x, y: q.y });
+      }
+      last = raw.length - 1;
+      col = line.getAttribute("stroke") || col;
+      chart.style.setProperty("--probe", col);
+      restText = (big.textContent || "").trim();
+      hasNd = !!big.querySelector(".nd");
+      currentF = last;
+      atRest = true;
+      if (raw.length) render(true);
+    });
     function idxFromClient(clientX) {
       var pt = svg.createSVGPoint();
       pt.x = clientX; pt.y = 0;

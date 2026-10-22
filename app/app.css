@@ -285,3 +285,11 @@ body.wrail-open{overflow:hidden}
 a.mkt{color:inherit}
 a.mkt:hover{color:var(--or)}
 a.mkt .ext{display:inline-block;width:12px;height:12px;margin-left:4px;vertical-align:-2px;color:var(--or)}
+/* 钱包栏顶部：登录身份 + 登出 + 账户与安全 */
+.wid{padding-bottom:12px;border-bottom:1px solid var(--line,#1f1f24);margin-bottom:12px}
+.wid-row{display:flex;align-items:center;gap:8px;margin-top:4px}
+.wid-v{font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.wid-out{font-size:12px;color:var(--mu);flex:none}.wid-out:hover{color:var(--tx,#ededf0)}
+.wid-acct{margin-top:8px;width:100%}
+.wacct-list{display:grid;gap:8px;margin:12px 0}
+.wacct-list .btn{justify-content:flex-start;text-align:left;width:100%}

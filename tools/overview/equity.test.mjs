@@ -20,7 +20,11 @@ assert.equal(omittedEquityCount("3"), 3);
 assert.equal(omittedEquityCount(" 4 "), 4);
 assert.equal(omittedEquityCount("0"), 0);
 assert.equal(omittedEquityCount("missing"), 1);
-assert.equal(omittedEquityCount("缺 5 个"), 5);
+assert.equal(omittedEquityCount("缺 5 个"), -1);
+// 2026-10-22 线上真实结构：逗号分隔的实例名，不能把 catunknown20000 里的 20000 当成个数
+assert.equal(omittedEquityCount("catunknown20000,example,fees2000,paper2000,papertight2000,v2maker2000,v2taker2000"), 7);
+assert.equal(omittedEquityCount("catunknown20000"), 1);
+assert.deepEqual(globalThis.PMEquity.omittedEquityNames("a, b,,c"), ["a", "b", "c"]);
 assert.equal(omittedEquityCount([]), 0);
 assert.equal(omittedEquityCount(["a", "b"]), 2);
 assert.equal(omittedEquityCount({ strategies: ["a"] }), 1);
@@ -31,6 +35,7 @@ assert.equal(omittedEquityCount({ n: "2" }), 2);
 assert.equal(omittedEquityCount({ a: 1, b: 1 }), 2);
 
 assert.equal(equityCurveCaption(0), null);
+assert.deepEqual(equityCurveCaption(-1), { title: "已统计实例净值", note: "曲线不完整" });
 assert.deepEqual(equityCurveCaption(2), {
   title: "已统计实例净值",
   note: "曲线不完整：缺 2 个实例",
