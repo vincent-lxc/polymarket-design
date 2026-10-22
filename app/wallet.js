@@ -32,7 +32,9 @@
   wrail.innerHTML =
     '<div class="whd"><h2>钱包</h2><button type="button" class="wclose" id="w-close" aria-label="关闭钱包">✕</button></div>' +
     '<div class="waddr"><div class="lbl">当前地址</div><div class="waddr-row"><b class="num" id="w-short">未登录</b><button type="button" class="btn sm dis" id="w-copy" disabled>复制</button></div></div>' +
-    '<div class="wbal"><div><span class="lbl">pUSD · Polygon</span><b class="num" id="w-pusd"><span class="nd">无数据</span></b></div>' +
+    '<div class="wbal"><div><span class="lbl">USDC · Polygon</span><b class="num" id="w-usdc"><span class="nd">无数据</span></b>' +
+    '<div class="wsub"><span>USDC.e</span><b class="num" id="w-usdce"><span class="nd">无数据</span></b></div></div>' +
+    '<div><span class="lbl">pUSD · Polygon <span class="tag or">可下单</span></span><b class="num" id="w-pusd"><span class="nd">无数据</span></b></div>' +
     '<div><span class="lbl">POL · Polygon</span><b class="num" id="w-pol"><span class="nd">无数据</span></b></div></div>' +
     '<div class="wops"><button type="button" class="btn pri" id="w-dep">充值</button>' +
     '<button type="button" class="btn soon" id="w-wd" disabled aria-disabled="true" title="即将上线：实盘前需确认">提现<em>即将上线</em></button></div>';
@@ -71,6 +73,8 @@
 
   var elShort = document.getElementById("w-short");
   var elCopy = document.getElementById("w-copy");
+  var elUsdc = document.getElementById("w-usdc");
+  var elUsdce = document.getElementById("w-usdce");
   var elPusd = document.getElementById("w-pusd");
   var elPol = document.getElementById("w-pol");
   var elMsg = document.getElementById("wfund-msg");
@@ -106,16 +110,11 @@
       say("登录后才能显示收款地址");
       return;
     }
-    say(pusdAddr() ? "Polygon 收款地址。可转入 POL 或 pUSD。" : "Polygon 收款地址。可转入 POL。pUSD 合约未配置。");
+    say("Polygon 收款地址。可转入 POL、USDC、USDC.e 或 pUSD。pUSD 是可下单的抵押币。");
     elFull.textContent = full;
     elFundCopy.hidden = false;
     if (hasPrivy()) elPrivy.hidden = false;
     loadQr().then(function () { drawQr(elQr, full); }).catch(function () { say("二维码没有生成，请复制地址。"); });
-  }
-
-  function pusdAddr() {
-    var p = cfg.pusd;
-    return typeof p === "string" && ADDR.test(p.trim()) ? p.trim() : "";
   }
 
   function loadQr() {
@@ -224,6 +223,8 @@
       elShort.textContent = token() ? "无数据" : "未登录";
       elCopy.disabled = true;
       elCopy.classList.add("dis");
+      nd(elUsdc);
+      nd(elUsdce);
       nd(elPusd);
       nd(elPol);
       return;
@@ -262,39 +263,50 @@
     });
   }
 
+  function configured(key) {
+    var p = cfg[key];
+    return typeof p === "string" && ADDR.test(p.trim()) ? p.trim() : "";
+  }
+
+  function readErc20(holder, token, el, suffix, decimalsHint) {
+    if (!token) { nd(el); return Promise.resolve(); }
+    el.innerHTML = '<span class="dim">读取中</span>';
+    var data = "0x70a08231" + holder.slice(2).toLowerCase().padStart(64, "0");
+    var balance = rpc("eth_call", [{ to: token, data: data }, "latest"]);
+    var decimals = decimalsHint == null ? rpc("eth_call", [{ to: token, data: "0x313ce567" }, "latest"]).then(function (d) {
+      var n = Number(BigInt(d));
+      if (!Number.isFinite(n) || n < 0 || n > 36) throw new Error("dec");
+      return n;
+    }) : Promise.resolve(decimalsHint);
+    return Promise.all([balance, decimals]).then(function (pair) {
+      var n = formatUnits(pair[0], pair[1]);
+      el.textContent = n == null ? "" : n + " " + suffix;
+      if (n == null) nd(el);
+    }).catch(function () { nd(el); });
+  }
+
   function loadBalances(addr) {
-    elPusd.innerHTML = '<span class="dim">读取中</span>';
-    elPol.innerHTML = '<span class="dim">读取中</span>';
-    var pusd = pusdAddr();
-    if (!pusd) nd(elPusd);
+    [elUsdc, elUsdce, elPusd, elPol].forEach(function (el) {
+      el.innerHTML = '<span class="dim">读取中</span>';
+    });
     rpc("eth_chainId", []).then(function (id) {
       if (String(id).toLowerCase() !== "0x89") throw new Error("chain");
-      var jobs = [rpc("eth_getBalance", [addr, "latest"]).then(function (hex) {
-        var n = formatUnits(hex, 18);
-        elPol.textContent = n == null ? "" : n + " POL";
-        if (n == null) nd(elPol);
-      })];
-      if (pusd) {
-        var data = "0x70a08231" + addr.slice(2).toLowerCase().padStart(64, "0");
-        jobs.push(rpc("eth_call", [{ to: pusd, data: data }, "latest"]).then(function (hex) {
-          var dec = cfg.pusdDecimals;
-          var next = dec == null ? rpc("eth_call", [{ to: pusd, data: "0x313ce567" }, "latest"]).then(function (d) {
-            var n = Number(BigInt(d));
-            if (!Number.isFinite(n) || n < 0 || n > 36) throw new Error("dec");
-            return n;
-          }) : Promise.resolve(dec);
-          return next.then(function (d) {
-            var n = formatUnits(hex, d);
-            elPusd.textContent = n == null ? "" : n + " pUSD";
-            if (n == null) nd(elPusd);
-          });
-        }));
-      }
-      return Promise.all(jobs);
+      var dec = cfg.pusdDecimals;
+      var pusdDec = typeof dec === "number" && dec >= 0 && dec <= 36 ? dec : null;
+      return Promise.all([
+        rpc("eth_getBalance", [addr, "latest"]).then(function (hex) {
+          var n = formatUnits(hex, 18);
+          elPol.textContent = n == null ? "" : n + " POL";
+          if (n == null) nd(elPol);
+        }),
+        readErc20(addr, configured("usdc"), elUsdc, "USDC", null),
+        readErc20(addr, configured("usdce"), elUsdce, "USDC.e", null),
+        readErc20(addr, configured("pusd"), elPusd, "pUSD", pusdDec)
+      ]);
     }).catch(function () {
-      if (pusd && elPusd.querySelector(".dim")) nd(elPusd);
-      if (!elPol.textContent) nd(elPol);
-      if (elPol.querySelector && elPol.querySelector(".dim")) nd(elPol);
+      [elUsdc, elUsdce, elPusd, elPol].forEach(function (el) {
+        if (!el.textContent || (el.querySelector && el.querySelector(".dim"))) nd(el);
+      });
     });
   }
 

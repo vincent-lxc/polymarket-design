@@ -26,11 +26,7 @@ function say(text) {
 }
 
 function fundOptions() {
-  const cfg = window.PM_WALLET || {};
-  const pusd = typeof cfg.pusd === "string" ? cfg.pusd.trim() : "";
-  if (/^0x[0-9a-fA-F]{40}$/.test(pusd)) {
-    return { chain: polygon, amount: "1", asset: { erc20: pusd } };
-  }
+  // Privy 这条入口充 Polygon 原生币。pUSD 是 CLOB 抵押币，不从这里买。
   return { chain: polygon };
 }
 

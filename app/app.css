@@ -245,7 +245,10 @@ body.login{min-height:100vh;display:grid;place-items:center;padding:20px}
 .waddr-row{display:flex;align-items:center;gap:8px;margin-top:4px}.waddr-row b{font-size:15px;min-width:0}
 .wbal{display:grid;gap:8px}
 .wbal>div{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-.wbal b{display:block;margin-top:2px;font-size:15px;font-weight:600}
+.wbal>div>b{display:block;margin-top:2px;font-size:15px;font-weight:600}
+.wsub{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--mu)}
+.wsub b{font-size:13px;font-weight:600;color:var(--tx)}
+.lbl .tag{margin-left:6px;vertical-align:1px}
 .wops{display:flex;gap:8px}.wops .btn{flex:1;justify-content:center}
 button[hidden]{display:none !important}
 .wmask{position:fixed;inset:0;background:rgba(6,6,8,.62);opacity:0;pointer-events:none;transition:opacity .28s ease;z-index:64}

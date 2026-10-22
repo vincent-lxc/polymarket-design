@@ -37,8 +37,13 @@ assert.deepEqual(equityCurveCaption(2), {
 });
 
 const cfg = readFileSync(new URL("../../app/wallet-config.js", import.meta.url), "utf8");
-assert.match(cfg, /pusd:\s*""/);
-assert.equal(cfg.includes("0x"), false);
+assert.match(cfg, /usdc:\s*"0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"/);
+assert.match(cfg, /usdce:\s*"0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"/);
+assert.match(cfg, /pusd:\s*"0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB"/);
+assert.match(cfg, /developers\.circle\.com\/stablecoins\/usdc-contract-addresses/);
+assert.match(cfg, /docs\.polymarket\.com\/concepts\/pusd/);
+assert.match(cfg, /docs\.polymarket\.com\/resources\/contracts/);
+assert.match(cfg, /docs\.polygon\.technology\/pos\/reference\/mapped-tokens/);
 
 const fund = readFileSync(new URL("../privy-login/fund.jsx", import.meta.url), "utf8");
 assert.equal(fund.includes("getIdentityToken"), false);
@@ -48,6 +53,9 @@ assert.equal((fund.match(/<PrivyProvider/g) || []).length, 1);
 const wallet = readFileSync(new URL("../../app/wallet.js", import.meta.url), "utf8");
 assert.equal(wallet.includes("eth_getBalance"), true);
 assert.equal(wallet.includes("0x70a08231"), true);
+assert.equal(wallet.includes("可下单"), true);
+assert.equal(wallet.includes("USDC.e"), true);
+assert.equal(wallet.includes('id="w-usdc"'), true);
 assert.equal(wallet.includes("即将上线"), true);
 assert.equal(wallet.includes("toLogin"), false);
 
