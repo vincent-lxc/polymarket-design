@@ -101,7 +101,7 @@
 | 新增、修改（唯一写入） | POST / PATCH，正文 `confirm` 加请求头 `X-Confirm-Phrase`（encodeURIComponent），mode=paper | ✅ api.js 里有 `PM.createDraft` / `PM.saveDraft` |
 | 删除 | 无 | ✅ 本期本来就不做 |
 
-## 排行（新页 board.html）`GET /v1/public/leaderboard`
+## 排行（市场页 `/markets?tab=board`，原 board.html 301 / 客户端跳转）`GET /v1/public/leaderboard`
 | 页面字段 | BFF | 状态 |
 |---|---|---|
 | 地址、综合分、胜率、ROI、已实现、门槛 | `leaders[].address`、`smart_score`、`metrics.*`、`gate_pass`、`gate_failures` | ✅ |

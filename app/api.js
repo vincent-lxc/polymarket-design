@@ -5,7 +5,7 @@ const Q=new URLSearchParams(location.search);
 const MOCK=Q.get("mock")==="1";
 const TK="pm_bff_token";
 const PAGE=document.body.dataset.page||"";
-const PUBLIC_PAGES=new Set(["board","login"]);
+const PUBLIC_PAGES=new Set(["board","markets","login"]);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 /* 市场名：有 event_slug / slug 才链到 polymarket.com/event/，否则纯文本。 */
@@ -201,7 +201,7 @@ async function renderAccount(){
   const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
   const d=await api("/v1/accounts/"+encodeURIComponent(s)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+s;
-  const steps=document.querySelector(".steps"); if(steps) steps.innerHTML=accs.map(x=>`<a class="${x.strategy===s?"on":""}" href="/account?s=${encodeURIComponent(x.strategy)}">${esc(x.strategy)}</a>`).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略管理 →</a>';
+  const steps=document.querySelector(".steps"); if(steps) steps.innerHTML=accs.map(x=>`<a class="${x.strategy===s?"on":""}" href="/account?s=${encodeURIComponent(x.strategy)}">${esc(x.strategy)}</a>`).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
   const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
   m.querySelector(".kv").innerHTML=[["现金",a.cash_usd,R.cash_usd],["持仓市值",a.positions_value_usd,R.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason||R.exposure_usd],["当日已实现",a.daily_realized_usd,R.daily_realized_usd],["浮动盈亏",a.unrealized_usd,R.unrealized_usd],["已实现盈亏",a.realized_usd,R.realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
@@ -258,7 +258,7 @@ async function renderLeader(){
   if(token.get()){ const d=await api(`/v1/leaders/${addr}?window=90d&n=20`); const p=d.profile||{}; if(h)h.lastChild.textContent=p.user_name?"@"+p.user_name:short(addr); fillPerf(Object.assign({},d.metrics,{reasons:d.metric_reasons}),p); return; }
   const w=await api(`/v1/public/wallets/${addr}?window=90d`,{auth:false});
   if(h)h.lastChild.textContent=w.user_name?"@"+w.user_name:short(addr);
-  const idl=$("#ld-idl"); if(idl) idl.innerHTML=`<a href="/board" class="dim">排行</a> / <span title="${esc(addr)}">${esc(short(addr))}</span>${w.x_username?" · X @"+esc(w.x_username):""} · 截至 ${bj(w.as_of)} · 公开数据，未登录不显示我方镜像`;
+  const idl=$("#ld-idl"); if(idl) idl.innerHTML=`<a href="/markets?tab=board" class="dim">市场</a> / <span title="${esc(addr)}">${esc(short(addr))}</span>${w.x_username?" · X @"+esc(w.x_username):""} · 截至 ${bj(w.as_of)} · 公开数据，未登录不显示我方镜像`;
   fillPerf(Object.assign({},w.metrics,{smart_score:w.smart_score,gate_pass:w.gate_pass,reasons:w.metric_reasons}),w);
   publicOnly(w);
 }
@@ -287,7 +287,8 @@ function publicOnly(w){
 
 /* ---------- 公开排行（骨架屏） ---------- */
 async function renderBoard(win){
-  const tb=$("#bd-rows"), sk=tb.dataset.sk||(tb.dataset.sk=tb.innerHTML); tb.innerHTML=sk; $("#bd-asof").textContent="加载中…";
+  const tb=$("#bd-rows"); if(!tb) return;
+  const sk=tb.dataset.sk||(tb.dataset.sk=tb.innerHTML); tb.innerHTML=sk; const asof=$("#bd-asof"); if(asof) asof.textContent="加载中…";
   const d=await api(`/v1/public/leaderboard?window=${win}&metric=smart_score&limit=50`,{auth:false});
   const lb=d.leaderboard;
   if(!lb||!lb.leaders){ tb.innerHTML=`<tr><td colspan="8">${nd(d.reason||"analytics_unavailable")}</td></tr>`; $("#bd-asof").textContent=""; return; }
@@ -330,21 +331,78 @@ function initLogin(){
   };
 }
 
+/* ---------- 市场页：排行复用公开榜，其余视图本期只有空壳 ---------- */
+function marketTab(){
+  const raw=(Q.get("tab")||"board").toLowerCase();
+  if(raw==="rank"||raw==="leaderboard") return "board";
+  if(raw==="exposure"||raw==="positions") return "exposure";
+  if(raw==="category"||raw==="categories") return "category";
+  if(raw==="quality") return "quality";
+  return ["board","exposure","category","quality"].includes(raw)?raw:"board";
+}
+function applyMarketTab(tab){
+  document.documentElement.dataset.mktab=tab;
+  document.querySelectorAll("#mk-tabs [data-tab]").forEach(a=>{
+    const on=a.dataset.tab===tab;
+    a.classList.toggle("on", on);
+    a.setAttribute("aria-selected", on?"true":"false");
+  });
+}
+function bindBoardWin(){
+  const allowed=["7d","30d","90d","all"];
+  const win=allowed.includes(Q.get("window"))?Q.get("window"):"90d";
+  document.querySelectorAll("#bd-win span").forEach(s=>{
+    s.classList.toggle("on", s.dataset.w===win);
+    s.onclick=()=>{
+      document.querySelectorAll("#bd-win span").forEach(x=>x.classList.toggle("on", x===s));
+      const u=new URL(location.href);
+      u.searchParams.set("window", s.dataset.w);
+      history.replaceState(null, "", u.pathname+u.search+u.hash);
+      renderBoard(s.dataset.w).catch(e=>console.warn(e));
+    };
+  });
+  return win;
+}
+async function renderMarkets(){
+  const tab=marketTab();
+  applyMarketTab(tab);
+  const logged=!!token.get();
+  const login=t=>` <a href="/login?next=${encodeURIComponent("/markets?tab="+t)}">登录后查看 →</a>`;
+  const exp=$("#mk-exposure-note"), cat=$("#mk-category-note"), qua=$("#mk-quality-note");
+  if(exp) exp.innerHTML=logged?"按市场聚合的敞口接口还没有（无 /v1/markets）。这里保持「汇总中」，不补 0。":"未登录只开放排行公开子集。我们的敞口需要登录，也不会把空值写成 0。"+login("exposure");
+  if(cat) cat.innerHTML="品类敞口、今日盈亏和跟单笔数标为 P1，等 BFF 带上 category。本期不汇总。"+(logged?"":login("category"));
+  if(qua) qua.innerHTML="延迟、滑点和放弃原因标为 P1。本期不汇总，不补 0。"+(logged?"":login("quality"));
+  document.querySelectorAll("#mk-range span").forEach(s=>{
+    s.onclick=()=>{
+      document.querySelectorAll("#mk-range span").forEach(x=>x.classList.toggle("on", x===s));
+      const n=$("#mk-range-note");
+      if(n) n.textContent="窗口 "+s.dataset.r+" · 聚合还没接上，空值保持「汇总中」。";
+    };
+  });
+  if(tab!=="board") return;
+  await renderBoard(bindBoardWin());
+}
+
 /* ---------- 入口 ---------- */
 const R={overview:async()=>renderOverview(await api("/v1/overview?range=24h")),account:renderAccount,leaders:renderLeaders,health:renderHealth,config:renderConfig,strategies:renderStrategies};
 async function boot(){
   if(PAGE==="login")return initLogin();
   const lo=$("#logout"); if(lo) lo.onclick=async e=>{e.preventDefault(); try{await api("/v1/auth/logout",{method:"POST"})}catch(_){} token.clear(); location.href="/login";};
-  if(MOCK){ if(PAGE==="board")return renderBoard("90d").then(()=>badge("live","公开接口")).catch(()=>fallback("接口连不上")); return fallback("?mock=1"); }
+  if(MOCK){
+    if(PAGE==="markets") return renderMarkets().then(()=>badge("live","公开接口")).catch(e=>console.warn(e));
+    if(PAGE==="board") return;
+    return fallback("?mock=1");
+  }
   try{
-    if(PAGE==="board"){ document.querySelectorAll("#bd-win span").forEach(s=>s.onclick=()=>{document.querySelectorAll("#bd-win span").forEach(x=>x.classList.toggle("on",x===s));renderBoard(s.dataset.w).catch(e=>fallback(e.message))}); await renderBoard("90d"); stripDemo(); return badge("live","公开接口"); }
+    if(PAGE==="markets"){ await renderMarkets(); if(token.get()) stripDemo(); return badge("live", token.get()?"BFF":"公开接口"); }
+    if(PAGE==="board") return;
     if(PAGE==="leader"){ const r=await renderLeader(); if(r==="static")return fallback("示例 leader 页（无 addr 参数）"); stripDemo(); return badge("live"); }
     if(!R[PAGE])return;
     if(!token.get())return toLogin();
     await R[PAGE](); stripDemo(); badge("live","BFF");
   }catch(e){ if(e.status===401)return;
     /* 公开页失败不要贴「示例，不是你的账户」——那是个人账本 mock 的标 */
-    if(PAGE==="board"||PAGE==="leader"||PAGE==="health"){ console.warn(e); return; }
+    if(PAGE==="markets"||PAGE==="board"||PAGE==="leader"||PAGE==="health"){ console.warn(e); return; }
     fallback(e.offline?"接口连不上，已回退到示例数据":"接口出错："+e.message); }
 }
 document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();

@@ -1,5 +1,6 @@
 # App Worker。只托管 app/ 目录，站点根就是 app.wakeloom.com。
 # /login.html 会 307 到 /login，/overview.html 会 307 到 /overview（html_handling 默认）。
+# /board、/board/ 由 app/_redirects 301 到 /markets?tab=board。board.html 是同一跳转的客户端兜底，并保留原 query。
 # 部署：npx wrangler deploy -c wrangler.app.toml
 # 本文件不执行部署。先部署这个、绑定域名，再改后端 CORS / BFF_DOMAIN，最后才发官网 301。
 name = "wakeloom-app"

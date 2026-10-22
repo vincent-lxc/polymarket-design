@@ -1,0 +1,4 @@
+# Cloudflare 静态资源 301。html_handling 会先把 /board.html 307 到 /board。
+# 目标已带 query 时，平台不一定附带原请求的其它 query；带参访问由 board.html 客户端跳转保留。
+/board /markets?tab=board 301
+/board/ /markets?tab=board 301

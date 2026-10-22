@@ -113,8 +113,8 @@ td.r,th.r{text-align:right}
  .lgrid{grid-template-columns:1fr 1fr}.lgrid .cell:last-child{grid-column:1/-1}
  .tpls{grid-template-columns:1fr}.form{grid-template-columns:1fr 1fr}
  .top h1{font-size:18px}
- .tabs{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;bottom:0;left:0;right:0;background:rgba(14,14,16,.96);border-top:1px solid var(--line);padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:40}
- .tabs a{text-align:center;font-size:12px;color:var(--mu);padding:6px 0;border-radius:8px}
+ .tabs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));position:fixed;bottom:0;left:0;right:0;background:rgba(14,14,16,.96);border-top:1px solid var(--line);padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:40}
+ .tabs a{text-align:center;font-size:11px;color:var(--mu);padding:6px 1px;border-radius:8px}
  .tabs a.on{color:var(--or);font-weight:600}
  .drawer{width:100%;max-width:100%;top:auto;bottom:0;height:auto;max-height:86vh;border-left:0;border-top:1px solid var(--line);border-radius:16px 16px 0 0;transform:translateY(105%)}
 }
@@ -320,3 +320,18 @@ a.mkt .ext{display:inline-block;width:12px;height:12px;margin-left:4px;vertical-
 .spark-wrap{position:relative}
 .spark-wrap .sp-y{position:absolute;right:4px;top:4px;bottom:4px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;font-size:11px}
 html.mock-demo .demo-banner{display:block}
+/* 市场页：KPI 壳最大，表次之。强调色只用 --or。空值写「汇总中」，不补 0。 */
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.kpi{background:var(--card);border-radius:var(--r-lg);padding:16px 18px;min-width:0}
+.kpi b{display:block;font-size:22px;font-weight:600;margin:6px 0 2px;letter-spacing:-.02em}
+.kpi .mu{display:block;font-size:12px}
+.mk-tabs{flex-wrap:wrap}
+.mk-tabs a{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;font-size:12px;color:var(--mu);border-radius:6px}
+.mk-tabs a.on{background:var(--elev);color:var(--tx);box-shadow:inset 0 -2px 0 var(--or)}
+.mk-panel{display:none}
+html[data-mktab="board"] #mk-board,
+html:not([data-mktab]) #mk-board,
+html[data-mktab="exposure"] #mk-exposure,
+html[data-mktab="category"] #mk-category,
+html[data-mktab="quality"] #mk-quality{display:block}
+@media(max-width:900px){.kpis{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.kpi b{font-size:18px}.mk-tabs a{padding:4px 8px}}
