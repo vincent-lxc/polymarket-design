@@ -531,6 +531,37 @@
     });
   }
 
+  function t(zh, en) { return window.PMLang ? PMLang.t(zh, en) : zh; }
+  /* 公开排行（/board 与 /markets?tab=board）始终放一颗主按钮，不要只剩侧栏「未登录」灰字。 */
+  function isPublicBoard() {
+    var page = document.body && document.body.dataset.page;
+    var path = location.pathname.replace(/\/index\.html$/, "").replace(/\.html$/, "").replace(/\/$/, "");
+    if (page === "board") return true;
+    return path === "/board" || path === "/markets";
+  }
+  function mountPublicLogin() {
+    if (!isPublicBoard()) return;
+    var top = document.querySelector(".main .top") || document.querySelector(".top");
+    if (!top) return;
+    var a = document.getElementById("pub-login");
+    if (!a) {
+      a = document.createElement("a");
+      a.id = "pub-login";
+      a.className = "btn pri";
+      top.appendChild(a);
+    }
+    a.classList.add("btn", "pri");
+    var logged = !!token();
+    if (logged) {
+      a.textContent = t("打开模拟盘", "Open paper trading");
+      a.href = "/overview";
+    } else {
+      a.textContent = t("登录 / 打开模拟盘", "Log in / Open paper trading");
+      a.href = "/login?next=" + encodeURIComponent(location.pathname + location.search);
+    }
+  }
+
   window.PMWallet = { accountSay: accountSay, setIdentity: setIdentity, say: say, openDeposit: openFund, refresh: refresh, showAddress: showAddress };
+  mountPublicLogin();
   refresh();
 })();

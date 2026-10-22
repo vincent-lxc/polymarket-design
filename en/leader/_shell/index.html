@@ -25,7 +25,8 @@
   var a=(m&&m[1]||new URLSearchParams(location.search).get("addr")||"").toLowerCase();
   var root=document.querySelector("[data-live=leader]");
   if(root&&a){root.setAttribute("data-addr",a);var el=document.querySelector("[data-f=addr]");if(el){el.textContent=a;el.title=a;}
-  var app=document.querySelector("[data-f=app]");if(app)app.href="https://app.wakeloom.com/leader?addr="+a;
+  var app=document.querySelector("[data-f=app]");if(app)app.href="https://app.wakeloom.com/leader?addr="+a+"&lang=en";
+  var lg=document.querySelector("header .lg");if(lg)lg.href="/zh/leader/"+a+"/";
   var can=document.querySelector('link[rel=canonical]');if(can)can.href="https://www.wakeloom.com/en/leader/"+a+"/";
   }
 })();

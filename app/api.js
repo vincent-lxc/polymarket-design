@@ -33,6 +33,15 @@ function parseUtc(iso){ if(iso==null||iso==="")return null;
   if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const d=new Date(s+"T00:00:00Z");return isNaN(d)?null:d;}
   if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)){const d=new Date(s+"Z");return isNaN(d)?null:d;}
   const d=new Date(s);return isNaN(d)?null:d; }
+/* 公开榜 as_of：与官网 site-live.js 的 bj() 同一套本地格式 YYYY-MM-DD HH:mm。 */
+function asofStamp(iso){ const d=parseUtc(iso); if(!d)return null;
+  const p=Object.fromEntries(new Intl.DateTimeFormat(undefined,{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(d).map(x=>[x.type,x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`; }
+function sortBySmartScore(list){ return (list||[]).map((l,i)=>({l,i})).sort((a,b)=>{
+  const as=typeof a.l.smart_score==="number"&&isFinite(a.l.smart_score)?a.l.smart_score:null;
+  const bs=typeof b.l.smart_score==="number"&&isFinite(b.l.smart_score)?b.l.smart_score:null;
+  if(as==null&&bs==null)return a.i-b.i; if(as==null)return 1; if(bs==null)return -1; if(bs!==as)return bs-as; return a.i-b.i;
+}).map(x=>x.l); }
 function bj(iso,withDate=true){ const d=parseUtc(iso); if(!d)return null;
   const opts=withDate?{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}:{hour:"2-digit",minute:"2-digit",hour12:false};
   const p=Object.fromEntries(new Intl.DateTimeFormat(undefined,opts).formatToParts(d).map(x=>[x.type,x.value]));
@@ -74,7 +83,8 @@ async function api(path,{method="GET",body,auth=true,confirm}={}){
 
 /* ---------- 示例数据标记 ---------- */
 function badge(kind,title){ document.querySelectorAll(".demo-badge,.live-badge,.demo-banner").forEach(e=>e.remove());
-  const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?"示例，不是你的账户":"实时数据"; b.title=title||""; document.body.appendChild(b); document.body.classList.toggle("live",kind!=="demo");
+  const tr=(zh,en)=>window.PMLang?PMLang.t(zh,en):zh;
+  const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?tr("示例，不是你的账户","Sample, not your account"):tr("数据更新中","Data updating"); b.title=title||""; document.body.appendChild(b); document.body.classList.toggle("live",kind!=="demo");
   if(kind==="demo"){ const ban=document.createElement("div"); ban.className="demo-banner"; ban.setAttribute("role","status"); ban.textContent="示例，不是你的账户"; const main=document.querySelector(".main")||document.body; main.prepend(ban); document.documentElement.classList.add("mock-demo"); } }
 function keepMock(){ document.querySelectorAll("a[href]").forEach(a=>{const href=a.getAttribute("href"); if(!href||href.startsWith("#")||/^[a-z]+:/i.test(href))return; let u; try{u=new URL(href,location.href);}catch(e){return;} if(u.origin!==location.origin)return; u.searchParams.set("mock","1"); a.href=u.pathname+u.search+u.hash; }); }
 function fallback(reason){ badge("demo",reason); keepMock(); }
@@ -306,13 +316,24 @@ async function renderBoard(win){
   const sk=tb.dataset.sk||(tb.dataset.sk=tb.innerHTML); tb.innerHTML=sk; const asof=$("#bd-asof"); if(asof) asof.textContent="加载中…";
   const d=await api(`/v1/public/leaderboard?window=${win}&metric=smart_score&limit=50`,{auth:false});
   const lb=d.leaderboard;
-  if(!lb||!lb.leaders){ tb.innerHTML=`<tr><td colspan="8">${nd(d.reason||"analytics_unavailable")}</td></tr>`; $("#bd-asof").textContent=""; return; }
-  $("#bd-asof").textContent=`截至 ${bj(lb.as_of)} · 共 ${lb.leaders.length} 个`;
-  tb.innerHTML=lb.leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};return `<tr class="rl" onclick="location.href='/leader?addr=${l.address}'"><td><a href="/leader?addr=${l.address}" title="${esc(l.address)}"><b>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?"@"+esc(l.user_name):esc(short(l.address))}</b></a>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?`<div class="fk">${esc(short(l.address))}</div>`:""}</td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm">${M(m.max_drawdown,x=>pct(x,false,1),R.max_drawdown)}</td><td class="r num hm">${M(m.resolved_markets,x=>x.toLocaleString(),R.resolved_markets)}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?'<span class="tag live">通过</span>':`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">未通过</span>`}</td></tr>`}).join("");
-  $("#bd-src").textContent="数据来自分析服务（"+(d.source==="analytics_sqlite"?"本地快照":"实时")+"）；胜率算不出来时显示「—」。";
+  if(!lb||!lb.leaders){ tb.innerHTML=`<tr><td colspan="8">${nd(d.reason||"analytics_unavailable")}</td></tr>`; if(asofEl) asofEl.textContent=""; return; }
+  const leaders=sortBySmartScore(lb.leaders);
+  const stamp=asofStamp(lb.as_of);
+  if(asofEl){
+    asofEl.textContent=stamp
+      ? tr(`数据截至 ${stamp} · 按综合评分 · 共 ${leaders.length} 位`,`Data as of ${stamp} · Ranked by score · ${leaders.length} traders`)
+      : tr("数据截至时间缺失 · 按综合评分","As-of time missing · Ranked by score");
+    asofEl.setAttribute("data-asof", lb.as_of||"");
+    asofEl.setAttribute("data-sort", "smart_score");
+  }
+  const pass=tr("通过","Pass"), fail=tr("未通过","Fail");
+  tb.innerHTML=leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};return `<tr class="rl" onclick="location.href='/leader?addr=${l.address}'"><td><a href="/leader?addr=${l.address}" title="${esc(l.address)}"><b>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?"@"+esc(l.user_name):esc(short(l.address))}</b></a>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?`<div class="fk">${esc(short(l.address))}</div>`:""}</td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm">${M(m.max_drawdown,x=>pct(x,false,1),R.max_drawdown)}</td><td class="r num hm">${M(m.resolved_markets,x=>x.toLocaleString(),R.resolved_markets)}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?`<span class="tag live">${pass}</span>`:`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">${fail}</span>`}</td></tr>`}).join("");
+  const src=d.source==="analytics_sqlite"?tr("本地快照","local snapshot"):tr("公开接口","public API");
+  const srcEl=$("#bd-src");
+  if(srcEl) srcEl.textContent=tr(`数据来自${src}。按综合评分排序；胜率和收益率只作展示。算不出来时显示「—」。`,`Source: ${src}. Ranked by composite score. Win rate and ROI are display columns. Missing values show —.`);
   document.querySelectorAll(".tw .xp").forEach(b=>b.remove());
   const tw=tb.closest(".tw"), trs=[...tb.querySelectorAll("tr")], L=innerWidth<900?10:20;
-  if(trs.length>L){ trs.slice(L).forEach(x=>x.classList.add("more")); const b=document.createElement("button"); b.className="btn sm xp"; b.textContent="展开全部（共"+trs.length+"条）"; b.onclick=()=>{const o=tw.classList.toggle("open");b.textContent=o?"收起":"展开全部（共"+trs.length+"条）"}; tw.after(b); }
+  if(trs.length>L){ trs.slice(L).forEach(x=>x.classList.add("more")); const b=document.createElement("button"); b.className="btn sm xp"; const n=trs.length; const openL=tr("收起","Show less"), shut=tr("展开全部（共"+n+"条）","Show all ("+n+")"); b.textContent=shut; b.onclick=()=>{const o=tw.classList.toggle("open");b.textContent=o?openL:shut}; tw.after(b); }
 }
 
 /* ---------- 登录：EIP-1193 钱包签名 ---------- */

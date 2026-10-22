@@ -91,6 +91,44 @@
   function cellHm(v, cls) {
     return v != null ? '<td class="r num hm ' + (cls || "") + '">' + esc(v) + "</td>" : '<td class="r hm"><span class="nd">' + ND + "</span></td>";
   }
+  /* 与 App 公开榜同一口径：GET /v1/public/leaderboard?metric=smart_score，本地再按综合评分降序排一次。 */
+  var LB = "/v1/public/leaderboard?window=90d&metric=smart_score&limit=50";
+  function scoreText(l) {
+    var s = l && l.smart_score;
+    return typeof s === "number" && isFinite(s) ? s.toFixed(1) : null;
+  }
+  function sortBySmartScore(list) {
+    return (list || [])
+      .map(function (l, i) {
+        return { l: l, i: i };
+      })
+      .sort(function (a, b) {
+        var as = typeof a.l.smart_score === "number" && isFinite(a.l.smart_score) ? a.l.smart_score : null;
+        var bs = typeof b.l.smart_score === "number" && isFinite(b.l.smart_score) ? b.l.smart_score : null;
+        if (as == null && bs == null) return a.i - b.i;
+        if (as == null) return 1;
+        if (bs == null) return -1;
+        if (bs !== as) return bs - as;
+        return a.i - b.i;
+      })
+      .map(function (x) {
+        return x.l;
+      });
+  }
+  function fillHead(table, labels) {
+    var tr = table && table.querySelector("thead tr");
+    if (!tr) return;
+    tr.innerHTML = labels
+      .map(function (c) {
+        return '<th class="' + (c[1] || "") + '">' + esc(c[0]) + "</th>";
+      })
+      .join("");
+  }
+  function boardMeta(n, asof) {
+    if (lang === "zh") return "数据截至 " + (asof || ND) + " · 按综合评分 · 共 " + n + " 位";
+    return "Data as of " + (asof || ND) + " · Ranked by score · " + n + " traders";
+  }
+  var UPDATING = lang === "zh" ? "数据更新中" : "Data updating";
 
   async function get(path) {
     var res = await fetch(API + path, { headers: { Accept: "application/json" } });
@@ -120,6 +158,7 @@
       '</b></a><div class="mu xs num">' +
       esc(short(a)) +
       "</div></td>" +
+      cell(scoreText(l)) +
       cell(pct(m.win_rate, false, 0)) +
       cell(pct(m.roi, true), tone(m.roi)) +
       cellHm(pct(m.max_drawdown)) +
@@ -144,6 +183,7 @@
       '</b></a><div class="mu xs num">' +
       esc(short(a)) +
       "</div></td>" +
+      cell(scoreText(l)) +
       cell(pct(m.win_rate, false, 0)) +
       cell(pct(m.roi, true), tone(m.roi)) +
       "</tr>"
@@ -210,25 +250,28 @@
     setBadge(badge, "load", lang === "zh" ? "刷新中…" : "Refreshing…");
     tbody.classList.add("live-skel");
     try {
-      var j = await get("/v1/public/leaderboard");
+      fillHead(
+        tbody.closest("table"),
+        lang === "zh"
+          ? [["#", "num"], ["地址", ""], ["综合评分", "r"], ["胜率", "r"], ["收益率", "r"], ["最大回撤", "r hm"], ["已结算", "r hm"], ["已实现", "r hm"]]
+          : [["#", "num"], ["Wallet", ""], ["Score", "r"], ["Win rate", "r"], ["ROI", "r"], ["Max drawdown", "r hm"], ["Resolved", "r hm"], ["Realized", "r hm"]]
+      );
+      var j = await get(LB);
       var b = j.leaderboard || {};
-      var leaders = b.leaders || [];
+      var leaders = sortBySmartScore(b.leaders || []);
       tbody.innerHTML = leaders.map(function (l, i) {
         return rowFull(i + 1, l);
       }).join("");
       tbody.classList.remove("live-skel");
       if (meta) {
         var asof = bj(b.as_of);
-        meta.textContent =
-          (lang === "zh" ? "数据截至 " : "Data as of ") +
-          (asof || ND) +
-          (lang === "zh" ? " · 共 " : " · ") +
-          leaders.length +
-          (lang === "zh" ? " 位" : " traders");
+        meta.textContent = boardMeta(leaders.length, asof);
+        meta.setAttribute("data-asof", b.as_of || "");
+        meta.setAttribute("data-sort", "smart_score");
       }
 
       /* 排行榜页无 recent 块；勿引用未定义的 root/d，否则成功刷新后仍会落入 catch 显示红字 */
-      setBadge(badge, "", lang === "zh" ? "实时数据" : "Live");
+      setBadge(badge, "", UPDATING);
     } catch (e) {
       tbody.classList.remove("live-skel");
       setBadge(badge, "err", lang === "zh" ? "接口暂不可用，显示构建快照" : "API unavailable — showing build snapshot");
@@ -244,22 +287,30 @@
     setBadge(badge, "load", lang === "zh" ? "刷新中…" : "Refreshing…");
     tbody.classList.add("live-skel");
     try {
-      var j = await get("/v1/public/leaderboard");
+      fillHead(
+        tbody.closest("table"),
+        lang === "zh"
+          ? [["#", "num"], ["地址", ""], ["综合评分", "r"], ["胜率", "r"], ["收益率", "r"]]
+          : [["#", "num"], ["Wallet", ""], ["Score", "r"], ["Win rate", "r"], ["ROI", "r"]]
+      );
+      var j = await get(LB);
       var b = j.leaderboard || {};
-      var leaders = (b.leaders || []).slice(0, 3);
+      var leaders = sortBySmartScore(b.leaders || []).slice(0, 3);
       tbody.innerHTML = leaders.map(function (l, i) {
         return rowShort(i + 1, l);
       }).join("");
       tbody.classList.remove("live-skel");
       if (meta) {
         var asof = bj(b.as_of);
-        meta.textContent = asof ? (lang === "zh" ? "截至 " : "As of ") + asof : "";
+        meta.textContent = asof ? (lang === "zh" ? "数据截至 " : "Data as of ") + asof + (lang === "zh" ? " · 按综合评分" : " · Ranked by score") : "";
+        meta.setAttribute("data-asof", b.as_of || "");
+        meta.setAttribute("data-sort", "smart_score");
       }
       if (more) {
         var n = (b.leaders || []).length;
         more.textContent = (lang === "zh" ? "看全部 " : "View all ") + n + (lang === "zh" ? " 位 →" : " traders →");
       }
-      setBadge(badge, "", lang === "zh" ? "实时数据" : "Live");
+      setBadge(badge, "", UPDATING);
     } catch (e) {
       tbody.classList.remove("live-skel");
       setBadge(badge, "err", lang === "zh" ? "接口暂不可用" : "API unavailable");
@@ -376,7 +427,7 @@
           factsEl.innerHTML = "";
         }
       }
-      setBadge(badge, "", lang === "zh" ? "实时数据" : "Live");
+      setBadge(badge, "", UPDATING);
     } catch (e) {
       setBadge(badge, "err", lang === "zh" ? "接口暂不可用，显示构建快照" : "API unavailable — showing build snapshot");
       var miss = root.querySelector("[data-f=missing]");
