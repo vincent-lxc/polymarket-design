@@ -57,13 +57,52 @@ function applyCurveNote(reasons){
   const raw=reasons&&typeof reasons==="object"?reasons.equity_curve_omitted:undefined;
   const n=window.PMEquity?PMEquity.omittedEquityCount(raw):0;
   const cap=$("#ov-curve-cap"), miss=$("#ov-curve-miss"), svg=document.querySelector("#ov-chart svg");
-  const partial=n>0;
+  const partial=n!==0;
+  const names=window.PMEquity&&PMEquity.omittedEquityNames?PMEquity.omittedEquityNames(raw):null;
   if(cap) cap.textContent=partial?"已统计实例净值":"合计净值曲线 · 每 60 秒一点";
-  if(miss){ miss.hidden=!partial; miss.textContent=partial?"曲线不完整：缺 "+n+" 个实例":""; }
+  if(miss){ miss.hidden=!partial; miss.textContent=partial?(n>0?"曲线不完整：缺 "+n+" 个实例":"曲线不完整"):""; miss.title=names&&names.length?"未计入："+names.join("、"):""; }
   if(svg){
     svg.setAttribute("aria-label", partial?"已统计实例净值":"迷你净值曲线，可拖动查看");
     try{ const ds=JSON.parse(svg.dataset.series||"{}"); ds.label=partial?"已统计实例净值":"合计净值"; svg.dataset.series=JSON.stringify(ds); }catch(e){}
   }
+}
+
+function partial(reasons){ const raw=reasons&&typeof reasons==="object"?reasons.equity_curve_omitted:undefined; return !!(window.PMEquity&&PMEquity.omittedEquityCount(raw)); }
+/* 用实时 equity_curve 重画总览迷你曲线。以前只改了分享卡的 data-v，SVG 和探针还读页面里的 10-21 示例序列。
+   点太多（线上约 1 万点）时按时间均匀抽到 ≤240 点，探针读的就是这些点的真实值和时间。 */
+function drawCurve(curve, isPartial){
+  const svg=document.querySelector("#ov-chart svg"); if(!svg)return;
+  const line=svg.querySelector("polyline.eq-line"), area=svg.querySelector("polygon.eq-area");
+  const pts=(curve||[]).map(p=>({t:new Date(p.t).getTime(),v:Number(p.equity)})).filter(p=>isFinite(p.t)&&isFinite(p.v)).sort((a,b)=>a.t-b.t);
+  const chart=document.getElementById("ov-chart");
+  if(pts.length<2){ if(line)line.setAttribute("points",""); if(area)area.setAttribute("points",""); svg.dataset.series=JSON.stringify({kind:"usd",label:"合计净值",t0:Date.now(),dt:0,v:[]});
+    const cap=$("#ov-curve-cap"); if(cap) cap.innerHTML=nd("no_equity_points"); return; }
+  const N=240, t0=pts[0].t, t1=pts.at(-1).t, dt=(t1-t0)/(N-1)||0, v=[]; let j=0;
+  for(let i=0;i<N;i++){ const tt=t0+i*dt; while(j<pts.length-1&&pts[j+1].t<=tt)j++; v.push(+pts[j].v.toFixed(2)); }
+  v[N-1]=+pts.at(-1).v.toFixed(2);
+  const mn=Math.min(...v), mx=Math.max(...v), k=mx-mn||1, W=300, H=84;
+  const P=v.map((x,i)=>`${(i*W/(N-1)).toFixed(1)},${(H-4-(x-mn)/k*(H-12)).toFixed(1)}`).join(" ");
+  const up=v.at(-1)>=v[0], col=up?"#2fd47a":"#ff5a5f";
+  if(line){ line.setAttribute("points",P); line.setAttribute("stroke",col); }
+  if(area) area.setAttribute("points",`0,${H} ${P} ${W},${H}`);
+  const st=svg.querySelectorAll("linearGradient stop"); if(st[0]) st[0].setAttribute("stop-color",col);
+  svg.dataset.series=JSON.stringify({kind:"usd",label:isPartial?"已统计实例净值":"合计净值",t0,dt,v});
+  if(chart) chart.dispatchEvent(new CustomEvent("pm:curve"));
+}
+
+/* 主力 leader 卡：以前只换了名字，地址行、进行中镜像还是 @lunadegen 的示例。这里整张卡都用实时字段，没有的写「无数据」。 */
+function fillLeadCard(ml,R){
+  const box=$("#ov-lead"); if(!box)return;
+  const av=box.querySelector(".lhead .av"); if(av){ av.textContent=ml?String(ml.user_name||(ml.address||"").slice(2)||"?").slice(0,2).toUpperCase():"—"; }
+  const sub=box.querySelector(".lhead .mu");
+  if(sub) sub.innerHTML=ml?[ml.address?`<span title="${esc(ml.address)}">${esc(short(ml.address))}</span>`:null,
+    `评分 ${M(ml.score,x=>Math.round(x).toLocaleString("en-US"))}`,`权重 ${M(ml.weight,x=>pct(x,false,0))}`,`选入 ${bj(ml.selected_at)||"—"}`].filter(Boolean).join(" · "):"";
+  const pill=box.querySelector(".lhead .pill"); if(pill) pill.remove();
+  const mir=box.querySelector(".mirror");
+  if(mir){ const m=ml&&ml.open_mirror;
+    mir.innerHTML=m?`<div style="flex:1"><b>${marketHtml(m.market,m)}</b></div>`:`<div style="flex:1">${nd((R&&R.open_mirror)||"no_open_mirror")}</div>`; }
+  const cells=box.querySelectorAll(".lgrid .cell .tag.live"); cells.forEach(t=>{ if(!(ml&&ml.open_mirror)) t.remove(); });
+  if(ml&&ml.address){ const h=box.querySelector(".h"); if(h&&!h.querySelector("a")){ h.innerHTML=h.innerHTML.replace(/^([^<]+)/,`<a href="/leader?addr=${encodeURIComponent(ml.address)}">$1</a>`); } }
 }
 
 function rows(sec,headHtml,bodyHtml){ const t=sec&&sec.querySelector("table"); if(!t)return; t.innerHTML=headHtml+bodyHtml; sec.querySelectorAll(".xp").forEach(b=>b.remove()); }
@@ -91,12 +130,14 @@ function renderOverview(d){
     $("#ov-kv").innerHTML=kv("现金合计",t.cash_usd)+kv("持仓市值合计",t.positions_value_usd)+kv("浮动盈亏合计",t.unrealized_usd,1)+kv("已实现盈亏合计",t.realized_usd,1);
     const cv=$("#shcv"); if(cv){ cv.dataset.eq=usd(eq)||"无数据"; cv.dataset.pnl=usd(pnl,true)||"—"; cv.dataset.pct=pct(p)||"—"; cv.dataset.up=pnl>=0?1:0; cv.dataset.note=$("#ov-note").textContent;
       if(d.equity_curve&&d.equity_curve.length){ cv.dataset.v=JSON.stringify(d.equity_curve.map(x=>x.equity)); cv.dataset.range=`${bj(d.equity_curve[0].t)} – ${bj(d.equity_curve.at(-1).t)}（北京时间）`; } }
+    drawCurve(d.equity_curve, partial(d.reasons));
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
       acc.map(a=>`<tr><td><a href="/account?s=${encodeURIComponent(a.strategy)}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
   }
   if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
   const ml=d.main_leader, lead=$("#ov-lead .h");
   if(lead) lead.innerHTML=ml?`${who(ml.user_name,ml.address)} <span class="tag live">${esc(ml.status_zh)}</span>`:nd(R.main_leader||"no_main_leader");
+  fillLeadCard(ml,R);
   const hb=$(".hbt"); if(hb) hb.textContent=`更新 ${bj(d.as_of)}（北京时间）`;
 }
 
@@ -233,7 +274,6 @@ async function boot(){
     if(!R[PAGE])return;
     if(!token.get())return toLogin();
     await R[PAGE](); badge("live","BFF");
-    const me=await api("/v1/me").catch(()=>null); if(me&&$("#who")) $("#who").textContent="用户 · "+short(me.address||me.email||"");
   }catch(e){ if(e.status===401)return; fallback(e.offline?"接口连不上，已回退到示例数据":"接口出错："+e.message); }
 }
 document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();
