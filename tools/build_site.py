@@ -123,7 +123,7 @@ DESC = {
   "home": ("Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘跟单工具", "从链上历史筛出长期表现稳定的 Polymarket 交易者，看胜率、收益率和回撤，先用模拟盘跟单再决定。"),
   "leaderboard": ("Polymarket 交易者排行榜：长期稳定，而非单次重仓 | Wakeloom 织迹", "按链上近 90 天表现排序，排除单次重仓和刷量地址，定期刷新。"),
   "how": ("我们怎么挑值得跟的 Polymarket 交易者 | Wakeloom 织迹", "Wakeloom 的选人规则与统计口径：近 90 天窗口、已结算市场、回撤、集中度，以及排除单次重仓、刷量和做市地址的方法。"),
-  "copy": ("用于 Polymarket 的模拟盘跟单 | Wakeloom 织迹", "按比例跟随目标钱包，设单笔和单市场上限、价格偏离阈值、跟随平仓和全局停止。第一期只有模拟盘，不动真钱。"),
+  "copy": ("用于 Polymarket 的模拟盘跟单 | Wakeloom 织迹", "按比例跟随目标钱包，设单笔和单市场上限、价格偏离阈值、跟随平仓；全局停止即将推出。第一期只有模拟盘，不动真钱。"),
   "faq": ("Polymarket 跟单常见问题 | Wakeloom 织迹", "关于 Polymarket 跟单、排行榜、延迟和滑点、私钥与数据来源的常见问题，每题第一句先给结论。"),
   "risk": ("风险提示 | Wakeloom 织迹", "预测市场交易与跟单的主要风险说明。"),
   "privacy": ("隐私说明 | Wakeloom 织迹", "Wakeloom 收集哪些数据、怎么使用。"),
@@ -134,7 +134,7 @@ DESC = {
   "home": ("Wakeloom – Wallet Analytics & Paper Copy Trading for Polymarket", "Find Polymarket traders with steady long-term results, see their win rate, ROI and drawdown, and paper-trade copying them before risking money."),
   "leaderboard": ("Leaderboard of Polymarket Traders: Consistent Traders, Not One-Off Whales | Wakeloom", "Ranked by 90-day on-chain results, excluding single big bets and wash volume. Updated regularly."),
   "how": ("How We Pick Polymarket Traders to Follow | Wakeloom", "Wakeloom's selection rules and stats: a 90-day window, resolved markets, drawdown, concentration, and how we exclude one-off bets, wash volume and market makers."),
-  "copy": ("Paper-Trade Copy Trading for Polymarket | Wakeloom", "Mirror a wallet proportionally with per-trade and per-market caps, a price-deviation limit, follow-the-close and a global stop. Phase one is paper trading only."),
+  "copy": ("Paper-Trade Copy Trading for Polymarket | Wakeloom", "Mirror a wallet proportionally with per-trade and per-market caps, a price-deviation limit, and follow-the-close; a global stop is coming soon. Phase one is paper trading only."),
   "faq": ("Polymarket Copy Trading FAQ | Wakeloom", "Answers about copy trading on Polymarket, leaderboards, latency and slippage, private keys and data sources. Each answer leads with the conclusion."),
   "risk": ("Risk Notice | Wakeloom", "The main risks of prediction-market trading and copy trading."),
   "privacy": ("Privacy | Wakeloom", "What data Wakeloom collects and how it is used."),
@@ -150,7 +150,7 @@ FAQ = {
   ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。我们发现对方成交到自己下单之间有延迟，价格可能已经变了，薄盘口还会吃到更差的价。所以每一笔都记录和对方的成交价差，偏离超过阈值就放弃，先在模拟盘里算清楚扣掉成本后的结果。"),
   ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。钱包登录只签署登录接口返回的那段文案（例如 Sign in to Wakeloom.），该签名不能用来转账，也不能授权交易。"),
   ("胜率和收益率哪个更重要？", "单看哪个都不够，要结合买入价格和回撤一起看。在 90¢ 买入的高胜率可能一次失手就抹掉多次收益，低胜率但买得便宜的人也可能长期为正，所以我们同时展示胜率、收益率、最大回撤和平均买入价。"),
-  ("对方平仓了我怎么办？", "跟着平。跟单规则里对方减仓或平仓时，我们按同样比例减仓或平仓；如果你设了全局停止，所有跟随会立刻暂停。"),
+  ("对方平仓了我怎么办？", "跟着平。跟单规则里对方减仓或平仓时，我们按同样比例减仓或平仓。一键暂停所有跟随的全局停止即将推出。"),
   ("数据从哪来？多久更新？", "来自 Polygon 链上成交记录和 Polymarket 的公开接口。排行榜和详情页打开时会向公开接口拉取最新数字；构建进仓库的是 SEO 用的快照。拿不到的数据显示「无数据」，不会用 0 填充；页面会写明数据截至时间（北京时间）。"),
   ("跟单有风险吗？会亏钱吗？", "有风险，也会亏钱。过去的表现不代表以后，对方可能改变风格或判断失误，延迟和手续费也会吃掉一部分结果。所以第一期只开放模拟盘，详见风险提示。"),
   ("Wakeloom 和 Polymarket 是什么关系？", "没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。"),
@@ -162,14 +162,44 @@ FAQ = {
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. By the time we see a fill and place our own order the price may have moved, and thin books give worse prices. We log the price gap on every trade, skip trades that deviate past a threshold, and measure net results after costs in paper trading first."),
   ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or custodied your private key. Wallet login only signs the nonce text returned by the API (e.g. Sign in to Wakeloom.); that signature cannot transfer funds or approve trades."),
   ("Which matters more, win rate or ROI?", "Neither alone; read them with entry price and drawdown. A high win rate bought at 90¢ can be wiped out by one loss, while a lower win rate bought cheaply can still come out ahead, so we show win rate, ROI, max drawdown and average entry price together."),
-  ("What happens when the trader I follow closes a position?", "We close too. When the followed wallet reduces or exits, we reduce or exit by the same proportion, and a global stop pauses all copying at once."),
+  ("What happens when the trader I follow closes a position?", "We close too. When the followed wallet reduces or exits, we reduce or exit by the same proportion. A global stop that pauses all copying at once is coming soon."),
   ("Where does the data come from, and how often is it updated?", "From Polygon on-chain fills and Polymarket's public APIs; the website pages are rebuilt daily. Missing data is shown as \"No data\", never filled with 0, and every page states its data time in Beijing time."),
   ("Is copy trading risky? Can I lose money?", "Yes, it is risky and you can lose money. Past results don't predict future ones, traders change style or make mistakes, and latency and fees eat into results. That's why phase one is paper trading only; see the risk notice."),
   ("How is Wakeloom related to Polymarket?", "It isn't affiliated. Wakeloom is an independent analytics tool for Polymarket that only reads public on-chain and API data."),
  ]}
 
+# 「上线通知我」登记接口。暂定，以后端实际给出的为准；构建时可用 WAKELOOM_WAITLIST_API 覆盖。
+WAITLIST_API = os.environ.get("WAKELOOM_WAITLIST_API", API + "/v1/waitlist")
+# 开关：2026-10-22 探测 POST /v1/waitlist 返回 401「需要登录」，还没按约定（免登录）上线，默认关。
+# 关时表单照常输出但带 hidden，site-waitlist.js 只在 WAKELOOM_WAITLIST=on（写到 <html data-waitlist>）时显示。
+WAITLIST_ON = os.environ.get("WAKELOOM_WAITLIST", "off").lower() in ("1", "on", "true")
+def wl_form(where, lang):
+    zh = lang == "zh"
+    src = "banner" if where == "bar" else "footer"
+    return (f'<form class="wl-form wl-{where}" data-endpoint="{E(WAITLIST_API)}" data-lang="{lang}" data-source="{src}" novalidate>'
+            f'<label class="wl-lab" for="wl-{where}">{"上线通知我" if zh else "Notify me at launch"}<span class="wl-sub"> / {"Notify me at launch" if zh else "上线通知我"}</span></label>'
+            f'<div class="wl-row"><input id="wl-{where}" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="254" placeholder="you@example.com">'
+            f'<button class="btn pri" type="submit">{"通知我" if zh else "Notify me"}</button></div>'
+            f'<p class="wl-msg" role="status" aria-live="polite"></p>'
+            f'<p class="wl-pv">邮箱仅用于上线通知，可随时退订 · Email used only for launch notice; unsubscribe anytime</p></form>')
+def banner(lang="zh"):
+    return ('<div class="pv" role="note"><span class="pv-dot" aria-hidden="true"></span>'
+            '<span lang="zh-CN">公测前预览：目前仅支持模拟盘跟单分析，尚未正式上线</span>'
+            '<span class="pv-sep" aria-hidden="true">/</span>'
+            '<span lang="en">Preview: simulated copy-trading only, not yet launched</span>'
+            f'<button type="button" class="pv-cta wl-gate" hidden aria-expanded="false" aria-controls="pv-wl">{"上线通知我" if lang == "zh" else "Notify me" if lang == "en" else "上线通知我 / Notify me"} <i aria-hidden="true">↓</i></button>'
+            f'<div class="pv-wl" id="pv-wl" hidden>{wl_form("bar", lang)}</div></div>'
+            '<script src="/site-waitlist.js?v=1" defer></script>')
+
+# JSON-LD 不输出价格、报价和评分：公测前没有售卖，也没有真实评价。
+LD_BANNED = {"offers", "price", "priceCurrency", "priceSpecification", "aggregateRating", "review", "reviewRating", "ratingValue", "ratingCount", "reviewCount"}
+def ld_clean(x):
+    if isinstance(x, dict): return {k: ld_clean(v) for k, v in x.items() if k not in LD_BANNED}
+    if isinstance(x, list): return [ld_clean(v) for v in x]
+    return x
+
 # ---------------- 页面骨架 ----------------
-CSS_V = "1"
+CSS_V = "2"
 def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None):
     t = T[lang]; tt, dd = DESC[lang].get(key, (title, desc))
     if title: tt = title
@@ -179,16 +209,17 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
     hre = (f'<link rel="alternate" hreflang="zh-CN" href="{SITE}/zh/{path}">'
            f'<link rel="alternate" hreflang="en" href="{SITE}/en/{path}">'
            f'<link rel="alternate" hreflang="x-default" href="{SITE}/">')
-    graph = {"@context": "https://schema.org", "@graph": [ORG, website(lang)] + ld}
+    graph = ld_clean({"@context": "https://schema.org", "@graph": [ORG, website(lang)] + ld})
     nav = "".join(f'<a href="/{lang}/{p}"{" class=on" if path.startswith(p) else ""}>{n}</a>' for p, n in t["nav"])
     foot = "".join(f'<a href="/{lang}/{p}">{n}</a>' for p, n in t["foot"])
-    return f'''<!doctype html><html lang="{t["html"]}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    return f'''<!doctype html><html lang="{t["html"]}" data-waitlist="{"on" if WAITLIST_ON else "off"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{E(tt)}</title><meta name="description" content="{E(dd)}"><link rel="canonical" href="{url}">{hre}
 <meta property="og:type" content="website"><meta property="og:site_name" content="Wakeloom"><meta property="og:title" content="{E(tt)}"><meta property="og:description" content="{E(dd)}"><meta property="og:url" content="{url}"><meta property="og:image" content="{SITE}/icons/favicon-512.png"><meta property="og:locale" content="{t["og"]}"><meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0d0d10"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icons/wakeloom.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/site.css?v={CSS_V}">
 <script type="application/ld+json">{json.dumps(graph, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")}</script>
 </head><body>
+{banner(lang)}
 <header class="top"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="28" height="28" alt=""><b>{t["name"]}</b></a>
 <nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="https://app.wakeloom.com/">{t["cta"]}</a></div></header>
 <main>{body}</main>
@@ -215,6 +246,7 @@ def spark(curve, lang):
     return f'''<figure class="card spark"><figcaption>{cap}<span class="mu">{E(rngt)}</span></figcaption><svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" role="img" aria-label="{cap}"><path d="{d}" fill="none" stroke="#FF6A1F" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="sp-y num mu"><span>{E(usd(hi) or "")}</span><span>{E(usd(lo) or "")}</span></div></figure>'''
 
 # ---------------- 各页 ----------------
+def L2(zh, a, b): return a if zh else b
 def home(lang, D):
     zh = lang == "zh"; n = len(D["leaders"])
     top = D["leaders"][:3]
@@ -234,10 +266,29 @@ def home(lang, D):
      ("03", "模拟盘先算清成本" if zh else "Paper trading counts the costs", "按比例跟随，设上限和偏离阈值，每笔记录和对方的价差与延迟。" if zh else "Proportional mirroring with caps and a deviation limit; every trade logs its price gap and delay.", "copy-trading/"),
     ]
     fh = "".join(f'<a class="feat card" href="/{lang}/{p}"><span class="fi num">{i}</span><h3>{E(a)}</h3><p>{E(b)}</p><i class="ar">↗</i></a>' for i, a, b, p in feats)
-    steps = (["选一个地址：在排行榜里看长期数据", "设规则：比例、单笔上限、单市场上限、偏离阈值", "跑模拟盘：记录每笔的价差、延迟和扣费结果", "再决定：结果说得通，才考虑小额实盘"] if zh else
-             ["Pick a wallet from the leaderboard's long-term data", "Set rules: ratio, per-trade cap, per-market cap, deviation limit", "Run paper trading: log price gap, delay and net result per trade", "Then decide: consider small live size only if the numbers hold up"])
+    steps = (["选一个地址：在排行榜里看长期数据", "设规则：比例、单笔上限、单市场上限、偏离阈值", "跑模拟盘：记录每笔的价差、延迟和扣费结果", "再决定：结果说得通再考虑实盘（实盘跟单即将推出）"] if zh else
+             ["Pick a wallet from the leaderboard's long-term data", "Set rules: ratio, per-trade cap, per-market cap, deviation limit", "Run paper trading: log price gap, delay and net result per trade", "Then decide: consider live trading only if the numbers hold up (live copy trading is coming soon)"])
     sh = "".join(f'<li><span class="num">{i}</span>{E(s)}</li>' for i, s in enumerate(steps, 1))
-    body = hero + f'<section class="feats">{fh}</section><section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/">{T[lang]["cta"]} →</a></section>'
+    shots = [
+     ("app-leader", L2(zh, "交易员排行与分析", "Trader leaderboard and analysis"),
+      L2(zh, "排行榜里的每个地址都能点开详情页。页面上有近 90 天胜率、已结算市场数和最大回撤，还有累计盈亏曲线和按品类拆开的输赢。先看清这个人靠什么赚钱，再决定跟不跟。",
+         "Every wallet on the leaderboard opens a detail page with its 90-day win rate, resolved markets, max drawdown, a cumulative P&L curve and results by category. See how a trader makes money before you decide to follow."),
+      L2(zh, "Wakeloom 应用截图：交易员详情页，显示胜率、已结算市场数、最大回撤、累计盈亏曲线和按品类的输赢（演示数据）",
+         "Wakeloom app screenshot: trader detail page with win rate, resolved markets, max drawdown, cumulative P&L curve and results by category (demo data)")),
+     ("app-strategies", L2(zh, "模拟盘跟单设置", "Paper copy-trading setup"),
+      L2(zh, "每个策略实例有自己的选人规则和跟单比例。可以从系统模板起步，再改单笔上限和日亏上限。这些设置只用于模拟盘，实盘跟单即将推出。",
+         "Each strategy instance has its own selection rule and copy ratio. Start from a system template, then adjust the per-trade cap and daily loss limit. These settings apply to paper trading only; live copy trading is coming soon."),
+      L2(zh, "Wakeloom 应用截图：策略管理页，列出模拟盘策略实例的选人规则、跟单比例和状态，以及可选用的系统模板（演示数据）",
+         "Wakeloom app screenshot: strategy page listing paper-trading instances with selection rule, copy ratio and status, plus system templates (demo data)")),
+     ("app-overview", L2(zh, "模拟收益记录", "Simulated results log"),
+      L2(zh, "总览页汇总所有模拟盘实例的净值和扣费后盈亏。每笔镜像单都记下对方成交价、我方模拟价和滑点，没跟的单也写明原因。图中是演示数据。",
+         "The overview totals equity and net P&L after fees across all paper instances. Each mirrored trade records their fill, our simulated price and the slippage, and skipped trades say why. The image shows demo data."),
+      L2(zh, "Wakeloom 应用截图：总览页，显示模拟盘合计净值、扣费净盈亏、净值曲线和当前跟随的交易员（演示数据）",
+         "Wakeloom app screenshot: overview page with total paper-trading equity, net P&L after fees, equity curve and the trader being followed (demo data)")),
+    ]
+    sc = "".join(f'<figure class="shot card"><div class="shot-img"><img src="/assets/screens/{f}.webp" width="1200" height="1290" loading="lazy" decoding="async" alt="{E(alt)}"><span class="shot-tag">{"测试版 · 模拟盘" if zh else "Beta · Paper trading"}</span></div><figcaption><h3>{E(h)}</h3><p>{E(t)}</p></figcaption></figure>' for f, h, t, alt in shots)
+    shots_html = f'<section class="shots"><h2>{"应用里能做什么" if zh else "Inside the app"}</h2><p class="mu sm">{"截图来自测试版，使用演示数据，不含真实地址。" if zh else "Screenshots from the beta with demo data; no real wallets shown."}</p><div class="shot-grid">{sc}</div></section>'
+    body = hero + f'<section class="feats">{fh}</section>' + shots_html + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
     write(f"{lang}/index.html", page(lang, "", "home", body, [softapp(lang), crumbs(lang, []), {"@type": "WebPage", "url": f"{SITE}/{lang}/", "name": DESC[lang]["home"][0], "inLanguage": T[lang]["html"], "isPartOf": {"@id": SITE + "/#website"}}]))
 
 def lhead(lang, short=False):
@@ -373,8 +424,8 @@ def content(lang):
         L("上限：单笔上限和单个市场上限，超过就截断。", "Caps: a per-trade cap and a per-market cap; anything above is cut."),
         L("偏离阈值：我们的价格和对方成交价差得太多就放弃这一笔。", "Deviation limit: if our price is too far from their fill, we skip the trade."),
         L("跟随平仓：对方减仓或平仓，我们按比例跟着做。", "Follow the close: when they reduce or exit, we do the same proportionally."),
-        L("全局停止：一键暂停所有跟随。", "Global stop: pause all copying at once.")]),
-      (L("流程", "How it runs"), [L("发现对方成交后，按当时的盘口模拟成交，记录我们和对方的价差、延迟和手续费。跑 1–2 周后看扣掉成本后的结果，再决定要不要考虑小额实盘。", "When we see their fill, we simulate ours against the live order book and log the price gap, delay and fees. After one to two weeks we look at the net result after costs before considering any small live size.")]),
+        L("全局停止（即将推出）：一键暂停所有跟随。", "Global stop (coming soon): pause all copying at once.")]),
+      (L("流程", "How it runs"), [L("发现对方成交后，按当时的盘口模拟成交，记录我们和对方的价差、延迟和手续费。跑 1–2 周后看扣掉成本后的结果，再决定要不要考虑实盘。实盘跟单即将推出。", "When we see their fill, we simulate ours against the live order book and log the price gap, delay and fees. After one to two weeks we look at the net result after costs before considering live trading. Live copy trading is coming soon.")]),
       (L("限制", "Limitations"), [L("第一期只有模拟盘，不下真实订单。模拟成交按盘口估算，实盘的成交价可能更差。", "Phase one is paper trading only; no real orders are placed. Simulated fills are estimated from the book and live fills may be worse.")]),
     ], L("模拟盘跟单", "Paper copy trading"))
     simple = {
@@ -400,14 +451,15 @@ def content(lang):
     write(f"{lang}/faq/index.html", page(lang, "faq/", "faq", body, [fp, crumbs(lang, [(L("常见问题", "FAQ"), "faq/")])]))
 
 def root(D):
-    graph = {"@context": "https://schema.org", "@graph": [ORG, website("zh")]}
-    s = f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘 | Wallet analytics for Polymarket</title>
+    graph = ld_clean({"@context": "https://schema.org", "@graph": [ORG, website("zh")]})
+    s = f'''<!doctype html><html lang="zh-CN" data-waitlist="{"on" if WAITLIST_ON else "off"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘 | Wallet analytics for Polymarket</title>
 <meta name="description" content="从链上历史筛出长期表现稳定的 Polymarket 交易者，先用模拟盘跟单再决定。Find Polymarket traders with steady long-term results and paper-trade them first.">
 <link rel="canonical" href="{SITE}/"><link rel="alternate" hreflang="zh-CN" href="{SITE}/zh/"><link rel="alternate" hreflang="en" href="{SITE}/en/"><link rel="alternate" hreflang="x-default" href="{SITE}/">
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icons/wakeloom.svg" type="image/svg+xml"><link rel="stylesheet" href="/site.css?v={CSS_V}"><meta name="theme-color" content="#0d0d10">
 <script type="application/ld+json">{json.dumps(graph, ensure_ascii=False, separators=(",", ":"))}</script>
-<script>try{{var s=localStorage.getItem("wl_lang");var l=s||((navigator.language||"").toLowerCase().indexOf("zh")===0?"zh":"en");location.replace("/"+l+"/")}}catch(e){{}}</script></head>
-<body class="pick"><main class="pk"><img src="/icons/wakeloom.svg" width="72" height="72" alt="Wakeloom 织迹"><h1>Wakeloom 织迹</h1><p class="mu">用于 Polymarket 的钱包分析 · 模拟盘<br>Wallet analytics &amp; paper trading for Polymarket</p><div class="ctas"><a class="btn pri" href="/zh/" hreflang="zh-CN">中文</a><a class="btn" href="/en/" hreflang="en">English</a></div></main></body></html>'''
+<script>/* 只在根路径（x-default 选语言页）跳转一次：手动选过的优先，其次 navigator.languages 第一项，zh 开头去中文，其余英文。/zh/ /en/ 页面本身不跳转。 */
+try{{var s=localStorage.getItem("wl_lang");if(s!=="zh"&&s!=="en")s="";var n=(navigator.languages&&navigator.languages[0])||navigator.language||"";var l=s||(n.toLowerCase().indexOf("zh")===0?"zh":"en");location.replace("/"+l+"/")}}catch(e){{}}</script></head>
+<body class="pick">{banner("auto")}<main class="pk"><img src="/icons/wakeloom.svg" width="72" height="72" alt="Wakeloom 织迹"><h1>Wakeloom 织迹</h1><p class="mu">用于 Polymarket 的钱包分析 · 模拟盘<br>Wallet analytics &amp; paper trading for Polymarket</p><div class="ctas"><a class="btn pri" href="/zh/" hreflang="zh-CN" onclick="try{{localStorage.setItem('wl_lang','zh')}}catch(e){{}}">中文</a><a class="btn" href="/en/" hreflang="en" onclick="try{{localStorage.setItem('wl_lang','en')}}catch(e){{}}">English</a></div></main></body></html>'''
     write("index.html", s)
 
 def sitemap(D):
