@@ -532,15 +532,24 @@
   }
 
   function t(zh, en) { return window.PMLang ? PMLang.t(zh, en) : zh; }
-  /* 公开排行（/board 与 /markets?tab=board）始终放一颗主按钮，不要只剩侧栏「未登录」灰字。 */
+  /* 公开榜在市场壳的 ?tab=board（/board 只是跳进来的兼容入口）。其它市场 Tab 不放这颗按钮。 */
+  function boardTab() {
+    var t = (new URLSearchParams(location.search).get("tab") || "board").toLowerCase();
+    if (t === "rank" || t === "leaderboard") return "board";
+    return t;
+  }
   function isPublicBoard() {
-    var page = document.body && document.body.dataset.page;
-    var path = location.pathname.replace(/\/index\.html$/, "").replace(/\.html$/, "").replace(/\/$/, "");
-    if (page === "board") return true;
-    return path === "/board" || path === "/markets";
+    var path = location.pathname.replace(/\/index\.html$/, "").replace(/\.html$/, "").replace(/\/$/, "") || "/";
+    if (path === "/board") return true;
+    if (path === "/markets") return boardTab() === "board";
+    return false;
   }
   function mountPublicLogin() {
-    if (!isPublicBoard()) return;
+    var existing = document.getElementById("pub-login");
+    if (!isPublicBoard()) {
+      if (existing) existing.remove();
+      return;
+    }
     var top = document.querySelector(".main .top") || document.querySelector(".top");
     if (!top) return;
     var a = document.getElementById("pub-login");

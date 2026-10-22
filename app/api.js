@@ -312,9 +312,12 @@ function publicOnly(w){
 
 /* ---------- 公开排行（骨架屏） ---------- */
 async function renderBoard(win){
+  const tr=(zh,en)=>window.PMLang?PMLang.t(zh,en):zh;
   const tb=$("#bd-rows"); if(!tb) return;
-  const sk=tb.dataset.sk||(tb.dataset.sk=tb.innerHTML); tb.innerHTML=sk; const asof=$("#bd-asof"); if(asof) asof.textContent="加载中…";
-  const d=await api(`/v1/public/leaderboard?window=${win}&metric=smart_score&limit=50`,{auth:false});
+  const sk=tb.dataset.sk||(tb.dataset.sk=tb.innerHTML); tb.innerHTML=sk;
+  const asofEl=$("#bd-asof");
+  if(asofEl) asofEl.textContent=tr("加载中…","Loading…");
+  const d=await api(`/v1/public/leaderboard?window=${encodeURIComponent(win||"90d")}&metric=smart_score&limit=50`,{auth:false});
   const lb=d.leaderboard;
   if(!lb||!lb.leaders){ tb.innerHTML=`<tr><td colspan="8">${nd(d.reason||"analytics_unavailable")}</td></tr>`; if(asofEl) asofEl.textContent=""; return; }
   const leaders=sortBySmartScore(lb.leaders);
