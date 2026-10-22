@@ -44,7 +44,7 @@
       var url = window.WL_WAITLIST_API || f.dataset.endpoint;
       var btn = f.querySelector("button[type=submit]");
       btn.disabled = true;
-      fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ email: email, lang: effLang(f), source: f.dataset.source || "" }) })
+      fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ email: email, lang: effLang(f), source: f.dataset.source || "", website: (f.querySelector("input[name=website]") || {}).value || "" }) })
         .then(function (res) {
           if (res.ok) { show(f, "ok"); input.value = ""; return; }
           show(f, res.status === 429 ? "rate" : "err");
