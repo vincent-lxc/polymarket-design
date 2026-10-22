@@ -41,8 +41,22 @@ const short=a=>a&&a.length>12?a.slice(0,6)+"…"+a.slice(-4):(a||"");
 const who=(name,addr)=>name?("@"+esc(name)):esc(short(addr));
 
 /* ---------- token / 请求 ---------- */
-const token={get:()=>localStorage.getItem(TK),set:t=>localStorage.setItem(TK,t),clear:()=>localStorage.removeItem(TK)};
-function toLogin(){ const next=location.pathname.split("/").pop()+location.search; location.href="/login?next="+encodeURIComponent(next); }
+const token={
+  get:()=>{try{return localStorage.getItem(TK)||""}catch(e){return""}},
+  set:t=>{try{localStorage.setItem(TK,t)}catch(e){}},
+  clear:()=>{try{localStorage.removeItem(TK)}catch(e){}}
+};
+/* Worker（html_handling=auto-trailing-slash）把 /overview.html 307 到 /overview。两条路径都要落到登录，不能只信 pathname 原样。 */
+function pageBase(){
+  var path=location.pathname||"/";
+  var leaf=(path.replace(/\/+$/,"")||"/").split("/").pop()||"";
+  return leaf.replace(/\.html$/i,"")||"overview";
+}
+function toLogin(){
+  try{document.documentElement.style.display="none"}catch(e){}
+  var next=pageBase()+location.search+location.hash;
+  location.replace("/login?next="+encodeURIComponent(next));
+}
 class ApiError extends Error{constructor(status,body,offline){super((body&&body.message)||("HTTP "+status));this.status=status;this.body=body;this.offline=!!offline}}
 async function api(path,{method="GET",body,auth=true,confirm}={}){
   const h={"Accept":"application/json"};
@@ -52,7 +66,8 @@ async function api(path,{method="GET",body,auth=true,confirm}={}){
   let res; try{res=await fetch(API+path,{method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});}
   catch(e){throw new ApiError(0,null,true);}
   let j=null; try{j=await res.json();}catch(e){}
-  if(res.status===401&&auth){token.clear();toLogin();throw new ApiError(401,j);}
+  /* 401 只抛错，不清 token、不跳登录。测试期 impersonate 写入的 Bearer 必须留在深路径；登出仍走 token.clear()。 */
+  if(res.status===401&&auth)throw new ApiError(401,j);
   if(!res.ok)throw new ApiError(res.status,j);
   return j;
 }
@@ -401,6 +416,7 @@ async function boot(){
     if(!token.get())return toLogin();
     await R[PAGE](); stripDemo(); badge("live","BFF");
   }catch(e){ if(e.status===401)return;
+    if(!PUBLIC_PAGES.has(PAGE)&&PAGE!=="leader"&&!token.get())return toLogin();
     /* 公开页失败不要贴「示例，不是你的账户」——那是个人账本 mock 的标 */
     if(PAGE==="markets"||PAGE==="board"||PAGE==="leader"||PAGE==="health"){ console.warn(e); return; }
     fallback(e.offline?"接口连不上，已回退到示例数据":"接口出错："+e.message); }

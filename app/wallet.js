@@ -37,21 +37,11 @@
     '<div class="waddr"><div class="lbl">当前地址</div><div class="waddr-row"><b class="num" id="w-short">未登录</b><button type="button" class="btn sm dis" id="w-copy" disabled>复制</button></div></div>' +
     '<div class="wbal"><div><span class="lbl">USDC · Polygon</span><b class="num" id="w-usdc"><span class="nd">无数据</span></b>' +
     '<div class="wsub"><span>USDC.e</span><b class="num" id="w-usdce"><span class="nd">无数据</span></b></div></div>' +
-    '<div><span class="lbl">pUSD · Polygon <span class="tag or" id="w-tradable">可下单</span></span><b class="num" id="w-pusd"><span class="nd">无数据</span></b></div>' +
+    '<div><span class="lbl" id="w-pusd-lbl">pUSD · Polygon</span><b class="num" id="w-pusd"><span class="nd">无数据</span></b></div>' +
     '<div><span class="lbl">POL · Polygon</span><b class="num" id="w-pol"><span class="nd">无数据</span></b></div></div>' +
-    '<div class="wops"><button type="button" class="btn pri" id="w-dep">充值</button>' +
-    '<button type="button" class="btn soon" id="w-wd" disabled aria-disabled="true" title="即将上线：实盘前需确认">提现<em>即将上线</em></button></div>';
+    '<div class="wops" id="w-ops"><button type="button" class="btn soon" id="w-wd" disabled aria-disabled="true" title="即将上线：实盘前需确认">提现<em>即将上线</em></button></div>';
   rail.insertBefore(wrail, rail.firstChild);
-  /* 未登录 / 公开页：不展示「充值」「可下单」，避免像能真下单 */
-  (function gatePaperUi(){
-    var logged = !!token();
-    var dep = document.getElementById("w-dep");
-    var tag = document.getElementById("w-tradable");
-    if (!logged) {
-      if (dep) dep.hidden = true;
-      if (tag) tag.hidden = true;
-    }
-  })();
+  /* 未登录或还没有地址：DOM 里不要出现「充值」「可下单」。有 token 且有地址才挂上。 */
   var note = rail.querySelector(".rc.note");
   if (note) rail.appendChild(note);
 
@@ -72,51 +62,26 @@
   mask.id = "wmask";
   document.body.appendChild(mask);
 
-  var ovl = document.createElement("div");
-  ovl.className = "ovl";
-  ovl.id = "wfund";
-  ovl.innerHTML =
-    '<div class="mask" id="wfund-mask"></div><div class="modal" role="dialog" aria-modal="true" aria-labelledby="wfund-title">' +
-    '<div class="wfund-hd" style="display:flex;align-items:center;width:100%"><h2 id="wfund-title">充值到钱包</h2><button type="button" class="x" id="wfund-x" aria-label="关闭">✕</button></div>' +
-    '<div class="wqr" id="w-qr" aria-hidden="true"></div>' +
-    '<div class="num wfund-addr" id="wfund-addr"></div>' +
-    '<p class="note" id="wfund-msg"></p>' +
-    '<div class="wops"><button type="button" class="btn" id="wfund-copy" hidden>复制地址</button>' +
-    '<button type="button" class="btn pri" id="w-privy" hidden>用 Privy 充值</button></div>' +
-    '<div id="w-privy-root"></div></div>';
-  document.body.appendChild(ovl);
-
-  /* 账户与安全：Privy 登录（邮箱 / Google）才显示。按钮点了才加载 privy-account.js。 */
-  var acct = document.createElement("div");
-  acct.className = "ovl";
-  acct.id = "wacct";
-  acct.innerHTML =
-    '<div class="mask" id="wacct-mask"></div><div class="modal" role="dialog" aria-modal="true" aria-labelledby="wacct-title">' +
-    '<div style="display:flex;align-items:center"><h2 id="wacct-title">账户与安全</h2><button type="button" class="x" id="wacct-x" aria-label="关闭">✕</button></div>' +
-    '<p class="note">由 Privy 处理，Wakeloom 不保存你的私钥。</p>' +
-    '<div class="wacct-list">' +
-    '<button type="button" class="btn" data-act="linkEmail">关联邮箱</button>' +
-    '<button type="button" class="btn" data-act="linkGoogle">关联 Google</button>' +
-    '<button type="button" class="btn" data-act="mfa">两步验证（MFA）</button>' +
-    '<button type="button" class="btn" data-act="export">导出嵌入式钱包私钥</button></div>' +
-    '<p class="note" id="wacct-msg" aria-live="polite"></p><div id="w-acct-root"></div></div>';
-  document.body.appendChild(acct);
+  /* 充值弹层、账户菜单都晚点再挂。未登录时文档里不要有「充值」和私钥文案。 */
+  var ovl = null;
+  var acct = null;
+  var privyEmbedded = false;
 
   var elShort = document.getElementById("w-short");
   var elId = document.getElementById("w-id");
   var elIdLbl = document.getElementById("w-id-lbl");
   var elAcct = document.getElementById("w-acct");
-  var elAcctMsg = document.getElementById("wacct-msg");
+  var elAcctMsg = null;
   var elCopy = document.getElementById("w-copy");
   var elUsdc = document.getElementById("w-usdc");
   var elUsdce = document.getElementById("w-usdce");
   var elPusd = document.getElementById("w-pusd");
   var elPol = document.getElementById("w-pol");
-  var elMsg = document.getElementById("wfund-msg");
-  var elQr = document.getElementById("w-qr");
-  var elFull = document.getElementById("wfund-addr");
-  var elFundCopy = document.getElementById("wfund-copy");
-  var elPrivy = document.getElementById("w-privy");
+  var elMsg = null;
+  var elQr = null;
+  var elFull = null;
+  var elFundCopy = null;
+  var elPrivy = null;
 
   function say(text) { if (elMsg) elMsg.textContent = text || ""; }
 
@@ -134,17 +99,84 @@
     if (focus && !show && btn) btn.focus();
   }
 
-  function closeFund() { ovl.classList.remove("open"); }
+  function canFund() { return !!token() && ADDR.test(full); }
+  function syncPaperUi() {
+    var lbl = document.getElementById("w-pusd-lbl");
+    var ops = document.getElementById("w-ops");
+    var tag = document.getElementById("w-tradable");
+    var dep = document.getElementById("w-dep");
+    if (!canFund()) {
+      if (tag) tag.remove();
+      if (dep) dep.remove();
+      if (ovl) ovl.remove();
+      ovl = null;
+      return;
+    }
+    if (lbl && !tag) {
+      tag = document.createElement("span");
+      tag.className = "tag or";
+      tag.id = "w-tradable";
+      tag.textContent = "可下单";
+      lbl.appendChild(tag);
+    }
+    if (ops && !dep) {
+      dep = document.createElement("button");
+      dep.type = "button";
+      dep.className = "btn pri";
+      dep.id = "w-dep";
+      dep.textContent = "充值";
+      dep.onclick = openFund;
+      ops.insertBefore(dep, document.getElementById("w-wd"));
+    }
+  }
+  function ensureFund() {
+    if (ovl) return;
+    ovl = document.createElement("div");
+    ovl.className = "ovl";
+    ovl.id = "wfund";
+    ovl.innerHTML =
+      '<div class="mask" id="wfund-mask"></div><div class="modal" role="dialog" aria-modal="true" aria-labelledby="wfund-title">' +
+      '<div class="wfund-hd" style="display:flex;align-items:center;width:100%"><h2 id="wfund-title">充值到钱包</h2><button type="button" class="x" id="wfund-x" aria-label="关闭">✕</button></div>' +
+      '<div class="wqr" id="w-qr" aria-hidden="true"></div>' +
+      '<div class="num wfund-addr" id="wfund-addr"></div>' +
+      '<p class="note" id="wfund-msg"></p>' +
+      '<div class="wops"><button type="button" class="btn" id="wfund-copy" hidden>复制地址</button>' +
+      '<button type="button" class="btn pri" id="w-privy" hidden>用 Privy 充值</button></div>' +
+      '<div id="w-privy-root"></div></div>';
+    document.body.appendChild(ovl);
+    elMsg = document.getElementById("wfund-msg");
+    elQr = document.getElementById("w-qr");
+    elFull = document.getElementById("wfund-addr");
+    elFundCopy = document.getElementById("wfund-copy");
+    elPrivy = document.getElementById("w-privy");
+    document.getElementById("wfund-x").onclick = closeFund;
+    document.getElementById("wfund-mask").onclick = closeFund;
+    elFundCopy.onclick = function () {
+      if (!ADDR.test(full)) return;
+      copyText(full).then(function (ok) { flash(elFundCopy, ok); });
+    };
+    elPrivy.onclick = function () {
+      if (!canFund()) { say("登录后才能充值"); return; }
+      window.PM_FUND_ADDRESS = full;
+      if (window.PMFund && window.PMFund.open) { window.PMFund.open(full); return; }
+      if (document.querySelector("script[data-privy-fund]")) return;
+      say("正在打开 Privy 充值…");
+      var s = document.createElement("script");
+      s.src = "privy-fund.js";
+      s.dataset.privyFund = "1";
+      s.onerror = function () { say("Privy 充值没有加载。"); };
+      document.body.appendChild(s);
+    };
+  }
+  function closeFund() { if (ovl) ovl.classList.remove("open"); }
   function openFund() {
+    if (!canFund()) return;
+    ensureFund();
     ovl.classList.add("open");
     elQr.innerHTML = "";
     elFull.textContent = "";
     elFundCopy.hidden = true;
     elPrivy.hidden = true;
-    if (!ADDR.test(full)) {
-      say("登录后才能显示收款地址");
-      return;
-    }
     say("Polygon 收款地址。可转入 POL、USDC、USDC.e 或 pUSD。pUSD 是可下单的抵押币。");
     elFull.textContent = full;
     elFundCopy.hidden = false;
@@ -218,28 +250,7 @@
     }, 2500);
   }
 
-  var openBtnEl = document.getElementById("w-open");
-  if (openBtnEl) openBtnEl.onclick = function () { setOpen(true, true); };
-  document.getElementById("w-close").onclick = function () { setOpen(false, true); };
-  mask.onclick = function () { setOpen(false, true); };
-  document.getElementById("w-dep").onclick = openFund;
-  document.getElementById("wfund-x").onclick = closeFund;
-  document.getElementById("wfund-mask").onclick = closeFund;
-  function closeAcct() { acct.classList.remove("open"); }
-  function accountSay(t) { if (elAcctMsg) elAcctMsg.textContent = t || ""; }
-  function loadAccount() {
-    if (window.PMAccount) return;
-    if (document.querySelector("script[data-privy-account]")) return;
-    var s = document.createElement("script");
-    s.src = "privy-account.js";
-    s.dataset.privyAccount = "1";
-    s.onerror = function () { accountSay("Privy 账户组件没有加载。"); };
-    document.body.appendChild(s);
-  }
-  elAcct.onclick = function () { acct.classList.add("open"); accountSay(""); loadAccount(); };
-  document.getElementById("wacct-x").onclick = closeAcct;
-  document.getElementById("wacct-mask").onclick = closeAcct;
-  acct.querySelectorAll("[data-act]").forEach(function (b) {
+  function bindAct(b) {
     b.onclick = function () {
       var act = b.dataset.act;
       if (window.PMAccount) { window.PMAccount.run(act); return; }
@@ -250,11 +261,82 @@
         else if (++tries > 40) { clearInterval(t); accountSay("Privy 账户组件没有就绪，请稍后再试。"); }
       }, 250);
     };
-  });
+  }
+  function ensureAcct() {
+    if (acct || !token()) return;
+    acct = document.createElement("div");
+    acct.className = "ovl";
+    acct.id = "wacct";
+    acct.innerHTML =
+      '<div class="mask" id="wacct-mask"></div><div class="modal" role="dialog" aria-modal="true" aria-labelledby="wacct-title">' +
+      '<div style="display:flex;align-items:center"><h2 id="wacct-title">账户与安全</h2><button type="button" class="x" id="wacct-x" aria-label="关闭">✕</button></div>' +
+      '<p class="note" id="wacct-note" hidden></p>' +
+      '<div class="wacct-list" id="wacct-list">' +
+      '<button type="button" class="btn" data-act="linkEmail">关联邮箱</button>' +
+      '<button type="button" class="btn" data-act="linkGoogle">关联 Google</button>' +
+      '<button type="button" class="btn" data-act="mfa">两步验证（MFA）</button></div>' +
+      '<p class="note" id="wacct-msg" aria-live="polite"></p><div id="w-acct-root"></div></div>';
+    document.body.appendChild(acct);
+    elAcctMsg = document.getElementById("wacct-msg");
+    document.getElementById("wacct-x").onclick = closeAcct;
+    document.getElementById("wacct-mask").onclick = closeAcct;
+    acct.querySelectorAll("[data-act]").forEach(bindAct);
+  }
+  function syncExport() {
+    if (!acct) return;
+    var list = document.getElementById("wacct-list");
+    var btn = acct.querySelector('[data-act="export"]');
+    var note = document.getElementById("wacct-note");
+    var show = !!(token() && privyEmbedded);
+    if (!show) {
+      if (btn) btn.remove();
+      if (note) { note.hidden = true; note.textContent = ""; }
+      return;
+    }
+    if (note) {
+      note.hidden = false;
+      note.textContent = "由 Privy 处理，Wakeloom 不保存你的私钥。";
+    }
+    if (!btn && list) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn";
+      btn.setAttribute("data-act", "export");
+      btn.textContent = "导出嵌入式钱包私钥";
+      list.appendChild(btn);
+      bindAct(btn);
+    }
+  }
+  function closeAcct() { if (acct) acct.classList.remove("open"); }
+  function accountSay(t) { if (elAcctMsg) elAcctMsg.textContent = t || ""; }
+  function loadAccount() {
+    if (!token()) return;
+    if (window.PMAccount) return;
+    if (document.querySelector("script[data-privy-account]")) return;
+    var s = document.createElement("script");
+    s.src = "privy-account.js";
+    s.dataset.privyAccount = "1";
+    s.onerror = function () { accountSay("Privy 账户组件没有加载。"); };
+    document.body.appendChild(s);
+  }
+
+  var openBtnEl = document.getElementById("w-open");
+  if (openBtnEl) openBtnEl.onclick = function () { setOpen(true, true); };
+  document.getElementById("w-close").onclick = function () { setOpen(false, true); };
+  mask.onclick = function () { setOpen(false, true); };
+  elAcct.onclick = function () {
+    if (!token()) return;
+    ensureAcct();
+    syncExport();
+    if (!acct) return;
+    acct.classList.add("open");
+    accountSay("");
+    loadAccount();
+  };
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
-    if (acct.classList.contains("open")) closeAcct();
-    else if (ovl.classList.contains("open")) closeFund();
+    if (acct && acct.classList.contains("open")) closeAcct();
+    else if (ovl && ovl.classList.contains("open")) closeFund();
     else setOpen(false, true);
   });
   function arm() {
@@ -269,25 +351,10 @@
     if (!ADDR.test(full)) return;
     copyText(full).then(function (ok) { flash(elCopy, ok); });
   };
-  elFundCopy.onclick = function () {
-    if (!ADDR.test(full)) return;
-    copyText(full).then(function (ok) { flash(elFundCopy, ok); });
-  };
-  elPrivy.onclick = function () {
-    if (!ADDR.test(full)) { say("登录后才能充值"); return; }
-    window.PM_FUND_ADDRESS = full;
-    if (window.PMFund && window.PMFund.open) { window.PMFund.open(full); return; }
-    if (document.querySelector('script[data-privy-fund]')) return;
-    say("正在打开 Privy 充值…");
-    var s = document.createElement("script");
-    s.src = "privy-fund.js";
-    s.dataset.privyFund = "1";
-    s.onerror = function () { say("Privy 充值没有加载。"); };
-    document.body.appendChild(s);
-  };
 
   function showAddress(addr) {
     full = ADDR.test(addr || "") ? addr : "";
+    syncPaperUi();
     if (!full) {
       elShort.textContent = token() ? "无数据" : "未登录";
       elCopy.disabled = true;
@@ -409,7 +476,13 @@
     var privy = hasPrivy();
     elAcct.hidden = !privy || !token();
     var out = document.getElementById("logout"); if (out) out.hidden = !token();
-    if (!token()) { elIdLbl.textContent = "登录身份"; elId.textContent = "未登录"; elId.title = ""; return; }
+    if (!token()) {
+      elIdLbl.textContent = "登录身份"; elId.textContent = "未登录"; elId.title = "";
+      privyEmbedded = false;
+      syncExport();
+      closeAcct();
+      return;
+    }
     var mail = (privyId && (privyId.email || privyId.google)) || (me && (me.email || me.google_email)) || "";
     if (mail) {
       elIdLbl.textContent = privyId && !privyId.email && privyId.google ? "Google 登录" : (privy ? "邮箱 / Google 登录" : "登录身份");
@@ -421,7 +494,12 @@
     elId.title = a || "";
   }
   var lastMe = null;
-  function setIdentity(id) { privyId = id; renderIdentity(lastMe); }
+  function setIdentity(id) {
+    privyId = id;
+    privyEmbedded = !!(id && id.embedded && token());
+    renderIdentity(lastMe);
+    syncExport();
+  }
 
   function pickAddress(me, wallet) {
     var cands = [];
