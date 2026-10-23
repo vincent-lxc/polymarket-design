@@ -27,7 +27,7 @@ const plain = html("Fed 12 月降息？", { title: "Fed 12 月降息？" });
 assert.equal(plain, "Fed 12 月降息？");
 assert.equal(plain.includes("<a"), false);
 assert.equal(html("湖人 vs 勇士", {}).includes("polymarket.com"), false);
-assert.equal(html(null, {}), "无数据");
+assert.equal(html(null, {}), "未命名市场");
 assert.equal(html("<img src=x onerror=alert(1)>", { market: "Fed" }), "&lt;img src=x onerror=alert(1)&gt;");
 
 const linked = html("Fed 12 月降息？", { event_slug: "fed-decision", slug: "other" });
@@ -47,14 +47,16 @@ const bad = html("Fed 12 月降息？", { slug: "fed decision", event_slug: "no/
 assert.equal(bad, "Fed 12 月降息？");
 
 const api = readFileSync(new URL("../../app/api.js", import.meta.url), "utf8");
-assert.match(api, /marketHtml\(m\.market, m\)/);
+assert.match(api, /mirrorMarketName\(m\)/);
 assert.match(api, /marketHtml\(p\.title, p\)/);
 assert.equal(/polymarket\.com\/event\/[A-Za-z0-9]/.test(api), false);
 
 for (const file of ["overview.html", "account.html", "leader.html", "leader-5c1e.html"]) {
   const htmlFile = readFileSync(new URL("../../app/" + file, import.meta.url), "utf8");
   assert.equal(htmlFile.includes("polymarket.com"), false, file);
-  assert.match(htmlFile, /<script src="market\.js"><\/script><script src="api\.js"><\/script>/);
+  const mi = htmlFile.indexOf('src="market.js"');
+  const ai = htmlFile.indexOf('src="api.js');
+  assert.ok(mi >= 0 && ai > mi, file);
 }
 
 console.log("market.test.mjs ok");

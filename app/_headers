@@ -1,0 +1,94 @@
+# 壳 HTML / 应用脚本不要进 Cloudflare 长缓存。硬刷若 HIT 旧壳，会先把 10 月示例净值当成真数。
+# CDN-Cache-Control 管边缘；Cache-Control 管浏览器。带 ?v= 的脚本仍会随 HTML 换地址。
+
+/*.html
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/*.js
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/*.css
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/overview
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/overview/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/account
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/account/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/config
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/config/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/health
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/health/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/strategies
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/strategies/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/markets
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/markets/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/leaders
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/leaders/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/leader
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/leader/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/login
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/login/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/compare
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store
+
+/compare/
+  Cache-Control: private, no-store
+  CDN-Cache-Control: no-store

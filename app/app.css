@@ -30,6 +30,17 @@ a{color:inherit;text-decoration:none}
 #wl-lang-toggle{flex:none}
 .seg{display:flex;background:var(--card2);border:0;border-radius:var(--r-sm);padding:2px}
 .seg span{padding:4px 10px;font-size:12px;color:var(--mu);border-radius:6px}.seg span.on{background:var(--elev);color:var(--tx)}
+#ov-range span{cursor:pointer}#ov-range span.off{opacity:.45}#ov-range-note{font-size:12px}
+/* 硬刷：壳上的假净值 / 心跳在接口回来前不当成真数。head 里还有一份同样的规则，避免等 CSS。 */
+html.pending-metrics .hbt,html.pending-metrics #ov-eq,html.pending-metrics #ov-note,html.pending-metrics #ov-sub,html.pending-metrics #ac-main .big,html.pending-metrics #ac-main .sub{color:transparent!important;user-select:none}
+html.pending-metrics #ov-kv b,html.pending-metrics #ac-main .kv b{color:transparent!important;background:#26262b;border-radius:6px;user-select:none}
+html.pending-metrics #ov-eq,html.pending-metrics .hbt,html.pending-metrics #ac-main .big{background:#26262b;border-radius:8px}
+html.pending-metrics #ov-chart svg,html.pending-metrics #shcv{opacity:0}
+html.pending-metrics #ov-chart{background:#1a1a1e;border-radius:8px;min-height:84px}
+html.pending-metrics #ov-mirrors .tw,html.pending-metrics #ov-accts .tw,html.pending-metrics #ov-lead,html.pending-metrics main section.card:not([id]),html.pending-metrics .rail>.rc:not(.note){visibility:hidden}
+html.pending-leader .top h1,html.pending-leader #ld-idl,html.pending-leader #ld-perf .kv b,html.pending-leader #ld-perf .lgrid,html.pending-leader #ld-perf svg{color:transparent!important;user-select:none}
+html.pending-leader .top h1,html.pending-leader #ld-idl{background:#26262b;border-radius:8px}
+html.pending-leader #ld-perf svg{opacity:0}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:var(--r-pill);border:0;background:var(--card2);color:var(--mu);white-space:nowrap}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--gr)}
 .paper{background:var(--elev);color:var(--mu)}.paper::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--mu)}

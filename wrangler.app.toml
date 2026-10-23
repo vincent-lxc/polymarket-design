@@ -10,6 +10,7 @@ workers_dev = false
 
 [assets]
 directory = "./app"
+# app/_headers：HTML/JS/CSS 和无扩展名页面 no-store，避免边缘 HIT 旧壳。
 html_handling = "auto-trailing-slash"
 not_found_handling = "none"
 
