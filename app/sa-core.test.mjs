@@ -107,6 +107,31 @@ const body = SA.launchBody({ strategy_id: "copy", name: "n", params: { copy_rati
 assert.equal(body.start, true);
 assert.equal(body.strategy_id, "copy");
 assert.equal(SA.copyBody({ name: "n-copy", params: { copy_ratio: 0.5 }, capital_usd: 1000 }).start, true);
+assert.equal(SA.copyBody({ name: "n-copy", params: { copy_ratio: 0.5 }, capital_usd: 1000 }).params_patch.copy_ratio, 0.5);
+assert.equal(Object.prototype.hasOwnProperty.call(SA.copyBody({ name: "n", params: {}, capital_usd: 1 }), "params"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(body, "params_patch"), false);
+
+let seq = 0;
+const rng = () => "k" + (++seq);
+const attempt = SA.createSubmitAttempt(rng);
+assert.equal(attempt.key(), "k1");
+assert.equal(attempt.noteChange(), "k2");
+assert.equal(attempt.begin(), "k2");
+assert.equal(attempt.begin(), null);
+assert.equal(attempt.noteChange(), "k2");
+attempt.fail();
+assert.equal(attempt.key(), "k3");
+const retry = SA.createSubmitAttempt(rng);
+const same = retry.key();
+assert.equal(retry.begin(), same);
+retry.fail();
+assert.equal(retry.key(), same);
+assert.equal(retry.begin(), same);
+const done = SA.createSubmitAttempt(rng);
+const before = done.begin();
+const after = done.succeed();
+assert.notEqual(after, before);
+assert.equal(done.begin(), after);
 
 const runningActs = SA.rowActions({ state: "running", process_kind: "acct", account_type: "paper" });
 assert.equal(runningActs.primary.join(","), "stop,capital");

@@ -73,9 +73,15 @@
     if (!lines || !lines.length) return "";
     return '<div class="' + (bad ? "sa-alert" : "sa-warn") + '" role="alert">' + lines.map(function (l) { return "<div>" + esc(l) + "</div>"; }).join("") + "</div>";
   }
-  function idem() {
-    try { if (crypto.randomUUID) return crypto.randomUUID(); } catch (err) {}
-    return "sa-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+  function bindSubmitAttempt(form) {
+    if (form._saAttempt) return form._saAttempt;
+    var attempt = SA.createSubmitAttempt();
+    form._saAttempt = attempt;
+    function publish() { form.dataset.idemKey = attempt.key(); }
+    publish();
+    form.addEventListener("input", function () { attempt.noteChange(); publish(); });
+    form.addEventListener("change", function () { attempt.noteChange(); publish(); });
+    return attempt;
   }
   function mockKey() { return "sa_mock_v1"; }
   function mockList() {
@@ -496,10 +502,13 @@
     var blocked = s.launchable === false;
     mount.innerHTML = '<div class="top"><h1>' + esc(s.label || id) + '</h1><a class="btn sm" href="' + esc(href("/strategies")) + '">全部策略</a></div><p class="sa-sumtxt">' + esc(s.summary || "") + "</p>" + (blocked ? '<div class="sa-warn">' + esc(SA.errorText("strategy_not_launchable")) + "</div>" : "") + '<section class="card" id="sa-schema"><div class="hd"><h2>参数</h2><span class="tag">接口下发</span></div><div class="tw"><table class="sa-schema"><tr><th>参数</th><th>含义</th><th>默认</th><th>范围</th></tr>' + rows + "</table></div></section>" + '<section class="card" id="sa-run"><div class="hd"><h2>用这组参数开跑</h2></div><div id="sa-err"></div><form class="sa-form" id="sa-launch">' + schema.map(function (p) { return fieldHtml(p, p.default); }).join("") + '<div class="f"><label for="sa-name">账户名</label><input class="in" id="sa-name" name="name" required placeholder="给这个账户起个名字"></div><div class="f"><label for="sa-cap">模拟盘资金</label><input class="in num" id="sa-cap" name="capital_usd" required inputmode="decimal" value="10000"></div><div class="f"><label for="sa-type">账户类型</label><select class="in" id="sa-type" name="account_type"><option value="paper" selected>模拟盘</option><option value="wallet">钱包</option></select><div class="sa-note">选钱包时如果还不能开，会停在这张表，并显示即将推出。</div></div><div class="wide sa-ops"><button class="btn pri" type="submit"' + (blocked ? " disabled" : "") + ">用这组参数开跑</button></div></form></section>" + '<section class="card" id="sa-used"><div class="hd"><h2>用这个策略的账户</h2></div><div class="tw sa-table"><table>' + HEAD + (page.items || []).map(function (a) { return rowHtml(a, schema); }).join("") + '</table></div><div class="sa-cards">' + (page.items || []).map(function (a) { return cardHtml(a, schema); }).join("") + "</div>" + pagerBox(SA.pagerNote(pager, page.total, (page.items || []).length), 20, "used") + "</section>";
     var form = document.getElementById("sa-launch");
-    if (form) form.onsubmit = function (ev) {
-      ev.preventDefault();
-      submitLaunch(s, form, null);
-    };
+    if (form) {
+      bindSubmitAttempt(form);
+      form.onsubmit = function (ev) {
+        ev.preventDefault();
+        submitLaunch(s, form, null);
+      };
+    }
     usedState = { id: id, schema: schema, pager: pager, items: page.items || [], total: page.total, mobile: (page.items || []).slice(), mobileNext: page.next_cursor };
   }
 
@@ -514,6 +523,10 @@
     if (!isFinite(capital) || capital <= 0) problems.push("模拟盘资金需要大于 0。请改一个金额。");
     var errBox = document.getElementById("sa-err");
     if (problems.length) { if (errBox) errBox.innerHTML = banner(problems, true); return; }
+    var attempt = form._saAttempt || bindSubmitAttempt(form);
+    var idemKey = attempt.begin();
+    if (!idemKey) return;
+    form.dataset.idemKey = idemKey;
     var btn = form.querySelector("button[type=submit]");
     if (btn) btn.disabled = true;
     try {
@@ -556,7 +569,7 @@
         saveMock(list);
         if (capital > 60000) flashPush([SA.warningText("paper_over_allocated", { allocated_usd: 80000 + capital, limit_usd: 60000 })]);
       } else if (fromId) {
-        var copied = await api("/v1/accounts/" + encodeURIComponent(fromId) + "/copy", { method: "POST", body: SA.copyBody({ name: name, params: params, capital_usd: capital }), headers: { "Idempotency-Key": idem() } });
+        var copied = await api("/v1/accounts/" + encodeURIComponent(fromId) + "/copy", { method: "POST", body: SA.copyBody({ name: name, params: params, capital_usd: capital }), headers: { "Idempotency-Key": idemKey } });
         created = copied.account || copied;
         if (created && created.state !== "running" && created.id) {
           var started = await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
@@ -565,7 +578,7 @@
         var warns = (copied.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
         if (warns.length) flashPush(warns);
       } else {
-        var res = await api("/v1/accounts", { method: "POST", body: SA.launchBody({ strategy_id: strategy.strategy_id, name: name, params: params, capital_usd: capital, account_type: accountType }), headers: { "Idempotency-Key": idem() } });
+        var res = await api("/v1/accounts", { method: "POST", body: SA.launchBody({ strategy_id: strategy.strategy_id, name: name, params: params, capital_usd: capital, account_type: accountType }), headers: { "Idempotency-Key": idemKey } });
         created = res.account || res;
         if (created && created.state !== "running" && created.id) {
           await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
@@ -573,8 +586,12 @@
         var warns2 = (res.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
         if (warns2.length) flashPush(warns2);
       }
+      attempt.succeed();
+      form.dataset.idemKey = attempt.key();
       location.href = href("/account", { id: created.id });
     } catch (e) {
+      attempt.fail();
+      form.dataset.idemKey = attempt.key();
       if (errBox) errBox.innerHTML = banner([explain(e)], true);
       if (btn) btn.disabled = false;
     }
@@ -595,6 +612,8 @@
         form.elements[p.key].value = p.type === "bool" ? (v ? "true" : "false") : v;
       });
       if (from.capital_usd != null && form.elements.capital_usd) form.elements.capital_usd.value = from.capital_usd;
+      var typeField = form.querySelector("#sa-type");
+      if (typeField && typeField.closest(".f")) typeField.closest(".f").remove();
       var h = document.querySelector("#sa-run h2");
       if (h) h.textContent = "复制为新账户";
     }

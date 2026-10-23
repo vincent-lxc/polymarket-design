@@ -253,6 +253,48 @@
     return total > limit;
   }
 
+  function newIdempotencyKey(rng) {
+    if (typeof rng === "function") return rng();
+    try {
+      if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    } catch (err) {}
+    return "sa-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+  }
+
+  /* 一次提交一个 key。重试沿用；参数改过，或这次已经成功，才换新的。提交过程中不换。 */
+  function createSubmitAttempt(rng) {
+    var key = newIdempotencyKey(rng);
+    var busy = false;
+    var dirty = false;
+    return {
+      key: function () { return key; },
+      noteChange: function () {
+        if (busy) { dirty = true; return key; }
+        key = newIdempotencyKey(rng);
+        return key;
+      },
+      begin: function () {
+        if (busy) return null;
+        busy = true;
+        return key;
+      },
+      fail: function () {
+        busy = false;
+        if (dirty) {
+          dirty = false;
+          key = newIdempotencyKey(rng);
+        }
+        return key;
+      },
+      succeed: function () {
+        busy = false;
+        dirty = false;
+        key = newIdempotencyKey(rng);
+        return key;
+      }
+    };
+  }
+
   function launchBody(input) {
     var body = {
       strategy_id: input.strategy_id,
@@ -953,6 +995,8 @@
     pagerOnHttpError: pagerOnHttpError,
     loadMoreState: loadMoreState,
     shouldShowPager: shouldShowPager,
+    newIdempotencyKey: newIdempotencyKey,
+    createSubmitAttempt: createSubmitAttempt,
     launchBody: launchBody,
     copyBody: copyBody,
     paramsEditable: paramsEditable,
