@@ -6,7 +6,54 @@ import { fileURLToPath } from "node:url";
 import worker from "../workers/www.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const port = Number(process.env.PORT || 8765);
+const LOCAL_HOST = "127.0.0.1";
+
+function previewPort() {
+  const n = Number(process.env.PORT || 8765);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) return 8765;
+  return n;
+}
+
+const port = previewPort();
+
+/**
+ * 只接受 origin-form 的路径（以单个 / 开头）。
+ * 拒绝绝对 URL、协议相对 URL（// 或反斜杠），以及任何会带上 host 的请求目标。
+ * 返回的 URL host 固定为 127.0.0.1。
+ * @param {string} raw
+ * @param {number} listenPort
+ * @returns {URL|null}
+ */
+export function localPreviewURL(raw, listenPort) {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 4096) return null;
+  if (raw.charCodeAt(0) !== 47 || raw.startsWith("//")) return null;
+  if (raw.includes("\\") || raw.includes("@") || raw.includes("://")) return null;
+  if (/[\u0000\r\n]/.test(raw)) return null;
+  const base = "http://" + LOCAL_HOST + ":" + listenPort;
+  let parsed;
+  try {
+    parsed = new URL(raw, base);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" || parsed.hostname !== LOCAL_HOST || parsed.port !== String(listenPort)) return null;
+  if (parsed.username !== "" || parsed.password !== "") return null;
+  if (parsed.origin !== new URL(base).origin) return null;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(parsed.pathname);
+  } catch {
+    return null;
+  }
+  if (!decoded.startsWith("/") || decoded.startsWith("//") || decoded.includes("\\") || decoded.includes("@")) return null;
+  const safe = new URL(base + "/");
+  safe.pathname = parsed.pathname;
+  safe.search = parsed.search;
+  safe.hash = "";
+  if (safe.protocol !== "http:" || safe.hostname !== LOCAL_HOST || safe.port !== String(listenPort)) return null;
+  if (safe.username !== "" || safe.password !== "") return null;
+  return safe;
+}
 const types = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -51,7 +98,19 @@ const env = {
 };
 
 const server = http.createServer(async (req, res) => {
-  const request = new Request("http://127.0.0.1:" + port + (req.url || "/"), { method: req.method || "GET", redirect: "manual" });
+  const target = localPreviewURL(req.url, port);
+  // host 必须仍是本机。绝对 URL、协议相对 URL、带 host 的请求在 localPreviewURL 里已被拒绝。
+  if (!target || target.protocol !== "http:" || target.hostname !== "127.0.0.1" || target.port !== String(port) || target.username !== "" || target.password !== "") {
+    res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+    res.end("bad request");
+    return;
+  }
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.writeHead(405, { "content-type": "text/plain; charset=utf-8", allow: "GET, HEAD" });
+    res.end("method not allowed");
+    return;
+  }
+  const request = new Request(target, { method: req.method, redirect: "manual" });
   const out = await worker.fetch(request, env);
   const headers = {};
   out.headers.forEach((value, key) => { headers[key] = value; });
@@ -60,6 +119,9 @@ const server = http.createServer(async (req, res) => {
   res.end(req.method === "HEAD" ? undefined : buf);
 });
 
-server.listen(port, "127.0.0.1", () => {
-  console.log("preview www http://127.0.0.1:" + port);
-});
+const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) {
+  server.listen(port, LOCAL_HOST, () => {
+    console.log("preview www http://" + LOCAL_HOST + ":" + port);
+  });
+}

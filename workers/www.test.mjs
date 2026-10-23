@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import worker, { INDEXNOW_KEY, appRedirect, isShellRedirect, leaderDecision } from "./www.mjs";
+import { localPreviewURL } from "../tools/preview-www.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -142,5 +143,37 @@ const enHtml = await en.text();
 assert.match(enHtml, /rel="canonical" href="https:\/\/www\.wakeloom\.com\/en\/"/);
 assert.match(enHtml, /application\/ld\+json/);
 assert.match(enHtml, /"@type":"Organization"/);
+
+const previewPort = 8765;
+for (const ok of ["/", "/llms.txt", "/zh/", "/en/faq/", "/assets/og-home.png", "/fc81fd20e5cda8d8f5d37c7bf054a1cd.txt"]) {
+  const u = localPreviewURL(ok, previewPort);
+  assert.ok(u, ok);
+  assert.equal(u.protocol, "http:");
+  assert.equal(u.hostname, "127.0.0.1");
+  assert.equal(u.port, String(previewPort));
+  assert.equal(u.username, "");
+  assert.equal(u.href.startsWith("http://127.0.0.1:" + previewPort + "/"), true);
+}
+const q = localPreviewURL("/zh/?x=1", previewPort);
+assert.equal(q.search, "?x=1");
+assert.equal(q.hostname, "127.0.0.1");
+for (const bad of [
+  "http://evil.com/",
+  "https://evil.com/x",
+  "http://127.0.0.1:8765/x",
+  "//evil.com/x",
+  "///evil.com",
+  "/\\evil.com",
+  "\\\\evil.com",
+  "javascript:alert(1)",
+  "@evil.com/x",
+  "http://127.0.0.1:8765@evil.com/",
+  "",
+  "foo",
+  "/%2f%2fevil.com",
+  "http://127.0.0.1:9/x",
+]) {
+  assert.equal(localPreviewURL(bad, previewPort), null, bad);
+}
 
 console.log("www redirect tests ok");
