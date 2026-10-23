@@ -35,6 +35,16 @@
 .sa-alert{background:#2a1214;color:#ffd0d2;border-radius:var(--r-md);padding:10px 12px;font-size:13px}
 .sa-note{font-size:12px;color:var(--mu)}
 .sa-settle{font-size:13px;color:var(--tx);background:var(--card2);border-radius:var(--r-md);padding:8px 10px}
+.sa-rpc{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 0;font-size:12px;line-height:1.4}
+.sa-rpc-dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
+.sa-rpc.ok{color:var(--gr)}
+.sa-rpc.ok .sa-rpc-dot{background:var(--gr)}
+.sa-rpc.bad{color:var(--rd);background:rgba(255,90,95,.1);border-radius:8px;padding:6px 8px}
+.sa-rpc.bad .sa-rpc-dot{background:var(--rd)}
+.sa-rpc.bad .sa-meta{color:var(--rd)}
+.sa-rpc.miss{color:var(--dim)}
+.sa-rpc a{color:var(--or)}
+.sa-table td .sa-rpc,.sa-table td .sa-settle,.sa-table td .sa-meta{white-space:normal}
 .sa-chart{background:var(--card);border-radius:var(--r-lg);padding:14px 14px 10px}
 .sa-chart.hero{padding:18px 18px 12px}
 .sa-svg{width:100%;height:auto;display:block;touch-action:none}

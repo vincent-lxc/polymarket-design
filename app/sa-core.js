@@ -24,7 +24,7 @@
     duplicate_account_ids: "同一个账户选了两次。去掉重复的再对比。",
     invalid_axis: "时间轴无效。改回「按运行时长」或「统一时间窗口」。",
     strategy_not_launchable: "这个策略暂不支持从 App 新建。请换一个可以开跑的策略。",
-    wallet_accounts_not_enabled: "钱包账户这一期还没打开。请改用模拟盘开跑。",
+    wallet_accounts_not_enabled: "钱包账户即将推出。",
     params_locked: "账户正在运行，不能改参数。先停止，改完再启动，还是这个账户。",
     account_running: "账户还在运行。先停止，再归档或删除。",
     account_archived: "账户已归档。先取消归档，再启动或改参数。",
@@ -132,12 +132,41 @@
     return "";
   }
 
-  /* P12：只提示已停止的钱包账户。模拟盘由公共任务结算，不提示。 */
+  /* P12：已停止且笔数为 null（含模拟盘）说明还没数清，下次启动补记。
+     0 不是「已经结清」，不写「无待结算」。已知笔数大于 0 的钱包账户仍提示笔数。 */
   function settlementNote(a) {
-    if (!a || a.account_type !== "wallet" || a.state !== "stopped") return "";
+    if (!a || a.state !== "stopped") return "";
+    if (a.pending_settlement_count === null) return "停止期间到期的持仓，下次启动时补记";
+    if (a.account_type !== "wallet") return "";
     var n = Number(a.pending_settlement_count);
     if (!(n > 0)) return "";
     return "已停止，有 " + n + " 笔持仓到期待结算，净值可能滞后";
+  }
+
+  function rpcNumber(v) {
+    if (v == null || v === "") return null;
+    var n = Number(v);
+    return isFinite(n) ? n : null;
+  }
+
+  /* P14：只认 rpc_capacity。不读 rpc_source，也不生成「公共 RPC」文案。容量不足只是提示。 */
+  function rpcCapacityView(cap) {
+    if (!cap || typeof cap !== "object" || (cap.status !== "ok" && cap.status !== "insufficient")) {
+      return { kind: "missing" };
+    }
+    return {
+      kind: cap.status,
+      available: rpcNumber(cap.available_rpm),
+      required: rpcNumber(cap.required_rpm),
+      observed429: rpcNumber(cap.observed_429_1h),
+      healthy: rpcNumber(cap.providers_healthy),
+      total: rpcNumber(cap.providers_total)
+    };
+  }
+
+  function rpcRatio(view) {
+    if (!view || view.available == null || view.required == null) return "无数据";
+    return view.available + "/" + view.required;
   }
 
   function normalizeLimit(n) {
@@ -626,7 +655,7 @@
       stopped_at: partial.stopped_at || null,
       copied_from: partial.copied_from || null,
       metrics: partial.metrics,
-      pending_settlement_count: partial.pending_settlement_count || 0,
+      pending_settlement_count: Object.prototype.hasOwnProperty.call(partial, "pending_settlement_count") ? partial.pending_settlement_count : 0,
       pending_settlement_usd: partial.pending_settlement_usd || 0,
       wallet_close_status: partial.wallet_close_status || {
         open_positions_count: 0,
@@ -636,6 +665,7 @@
       process: partial.state === "running" ? { unit: "pmct-acct@" + partial.id, active: true, rss_mb: 140, restarts: 0 } : null,
       reasons: partial.reasons || {}
     };
+    if (partial.rpc_capacity) base.rpc_capacity = partial.rpc_capacity;
     return base;
   }
 
@@ -653,6 +683,7 @@
         capital_usd: 20000, current_segment: 2,
         params: { copy_ratio: 0.3, fees_on: false, daily_loss_usd: 800, max_positions: 200 },
         params_diff: { copy_ratio: 0.3 },
+        rpc_capacity: { required_rpm: 180, available_rpm: 420, observed_429_1h: 0, providers_healthy: 3, providers_total: 3, status: "ok" },
         metrics: m(22690, 2690, 0.135, 312, 3002, 1280, -0.042, 9, 12),
         segments: [
           { segment: 1, started_at: "2026-10-14T01:12:00Z", ended_at: "2026-10-18T02:00:00Z", params_diff_vs_prev: null },
@@ -662,6 +693,8 @@
       mockAccount({
         id: "paper20000fees", name: "paper20000fees", strategy_id: "copy", strategy_label: "跟单 copy", state: "stopped",
         capital_usd: 20000, current_segment: 1, stopped_at: "2026-10-22T10:00:00Z",
+        pending_settlement_count: null,
+        rpc_capacity: { required_rpm: 180, available_rpm: 40, observed_429_1h: 17, providers_healthy: 1, providers_total: 3, status: "insufficient" },
         params: { copy_ratio: 0.25, fees_on: true, daily_loss_usd: 600, max_positions: 200 },
         params_diff: { copy_ratio: 0.25, fees_on: true, daily_loss_usd: 600 },
         metrics: m(21960, 1960, 0.098, 741, 2701, 1174, -0.05, 9, 4)
@@ -900,6 +933,8 @@
     canDelete: canDelete,
     deleteBlockReason: deleteBlockReason,
     settlementNote: settlementNote,
+    rpcCapacityView: rpcCapacityView,
+    rpcRatio: rpcRatio,
     normalizeLimit: normalizeLimit,
     pagerInit: pagerInit,
     pagerCursor: pagerCursor,

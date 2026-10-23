@@ -51,6 +51,29 @@ assert.equal(SA.settlementNote(walletBlocked), "");
 assert.match(SA.settlementNote({ account_type: "wallet", state: "stopped", pending_settlement_count: 2 }), /2 笔/);
 assert.equal(SA.settlementNote({ account_type: "paper", state: "stopped", pending_settlement_count: 3 }), "");
 assert.equal(SA.settlementNote({ account_type: "wallet", state: "running", pending_settlement_count: 2 }), "");
+assert.equal(SA.settlementNote({ account_type: "paper", state: "stopped", pending_settlement_count: null }), "停止期间到期的持仓，下次启动时补记");
+assert.equal(SA.settlementNote({ account_type: "wallet", state: "stopped", pending_settlement_count: null }), "停止期间到期的持仓，下次启动时补记");
+assert.equal(SA.settlementNote({ account_type: "paper", state: "running", pending_settlement_count: null }), "");
+assert.equal(SA.settlementNote({ account_type: "paper", state: "stopped", pending_settlement_count: 0 }), "");
+assert.equal(SA.settlementNote({ account_type: "wallet", state: "stopped", pending_settlement_count: 0 }), "");
+["paper", "wallet"].forEach((type) => {
+  [null, 0, 2].forEach((count) => {
+    assert.ok(!/无待结算/.test(SA.settlementNote({ account_type: type, state: "stopped", pending_settlement_count: count })));
+  });
+});
+assert.match(SA.errorText("wallet_accounts_not_enabled"), /钱包账户即将推出/);
+const okRpc = SA.rpcCapacityView({ status: "ok", available_rpm: 420, required_rpm: 180, rpc_source: "public" });
+assert.equal(okRpc.kind, "ok");
+assert.equal(SA.rpcRatio(okRpc), "420/180");
+assert.equal(Object.prototype.hasOwnProperty.call(okRpc, "rpc_source"), false);
+const lowRpc = SA.rpcCapacityView({ status: "insufficient", available_rpm: 40, required_rpm: 180, observed_429_1h: 17, providers_healthy: 1, providers_total: 3 });
+assert.equal(lowRpc.kind, "insufficient");
+assert.equal(lowRpc.observed429, 17);
+assert.equal(lowRpc.healthy, 1);
+assert.equal(SA.rpcCapacityView(null).kind, "missing");
+assert.equal(SA.rpcCapacityView({ status: "ok" }).kind, "ok");
+assert.equal(SA.rpcRatio(SA.rpcCapacityView({ status: "ok" })), "无数据");
+assert.equal(SA.launchBody({ strategy_id: "copy", name: "a", params: {}, capital_usd: 1 }).start, true);
 
 let p = SA.pagerInit(20);
 assert.equal(SA.pagerCursor(p), null);
