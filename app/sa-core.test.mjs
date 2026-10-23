@@ -363,7 +363,10 @@ assert.equal(typeof emptied.copy_ratio, "number");
 assert.equal(emptied.fees_on, false);
 assert.equal(emptied.risk.max_per_trade_usd, 5);
 assert.equal(typeof emptied.risk.max_per_trade_usd, "number");
-assert.equal(emptied.exit.stop_loss_pct, 0.12);
+assert.equal(emptied.exit.stop_loss_pct, null);
+assert.equal(Object.prototype.hasOwnProperty.call(emptied.exit, "stop_loss_pct"), true);
+assert.equal(JSON.stringify(emptied).includes('"stop_loss_pct":null'), true);
+assert.equal(JSON.stringify(emptied).includes('"null"'), false);
 assert.equal(JSON.stringify(emptied).includes("[object Object]"), false);
 assert.equal(JSON.stringify(emptied).includes(":{}"), false);
 
@@ -402,8 +405,11 @@ const loose = SA.launchBody({
 assert.equal(loose.capital_usd, 2500);
 const blankMoney = SA.launchBody({ strategy_id: "copy", name: "blank", params: { stop_loss_pct: {}, copy_ratio: "[object Object]" }, capital_usd: "" });
 assert.equal(blankMoney.capital_usd, undefined);
-assert.equal(Object.prototype.hasOwnProperty.call(blankMoney.params, "stop_loss_pct"), false);
+assert.equal(blankMoney.params.stop_loss_pct, null);
+assert.equal(Object.prototype.hasOwnProperty.call(blankMoney.params, "stop_loss_pct"), true);
 assert.equal(Object.prototype.hasOwnProperty.call(blankMoney.params, "copy_ratio"), false);
+assert.equal(JSON.stringify(blankMoney).includes('"stop_loss_pct":null'), true);
+assert.equal(JSON.stringify(blankMoney).includes('"null"'), false);
 assert.equal(JSON.stringify(blankMoney).includes("[object Object]"), false);
 assert.equal(JSON.stringify(blankMoney).includes("capital_usd"), false);
 assert.equal(loose.params.copy_ratio, 0.2);
@@ -432,6 +438,73 @@ assert.match(diffLine, /止损 5\.0%/);
 const bare = SA.diffText({ stop_loss_pct: { value: 0.12 } }, []);
 assert.equal(bare, "stop_loss_pct 0.12");
 assert.equal(bare.includes("[object Object]"), false);
+
+function assertStopLoss(body, expected) {
+  const value = body.params.exit ? body.params.exit.stop_loss_pct : body.params.stop_loss_pct;
+  assert.equal(value, expected);
+  assert.equal(value === null || typeof value === "number", true);
+  const parsed = JSON.parse(JSON.stringify(body));
+  const again = parsed.params.exit ? parsed.params.exit.stop_loss_pct : parsed.params.stop_loss_pct;
+  assert.equal(again, expected);
+  assert.equal(again === null || typeof again === "number", true);
+  assert.equal(JSON.stringify(body).includes('"null"'), false);
+  assert.equal(JSON.stringify(body).includes('"stop_loss_pct":"'), false);
+}
+
+const stringTyped = [
+  { key: "copy_ratio", type: "number", default: 0.3 },
+  {
+    key: "exit",
+    type: "object",
+    properties: { stop_loss_pct: { type: "string", label_zh: "止损" } }
+  }
+];
+const unionTyped = [
+  {
+    key: "exit",
+    type: "object",
+    properties: { stop_loss_pct: { type: ["number", "null"], unit: "pct", label_zh: "止损", default: 0.12, min: 0, max: 1 } }
+  }
+];
+const topTyped = [{ key: "stop_loss_pct", type: "string", label_zh: "止损" }];
+
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: stringTyped, params: { exit: { stop_loss_pct: "0.25" } }, capital_usd: 1000 }), 0.25);
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: stringTyped, params: { exit: { stop_loss_pct: "25%" } }, capital_usd: 1000 }), 0.25);
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: unionTyped, params: { exit: { stop_loss_pct: { value: 0.25 } } }, capital_usd: 1000 }), 0.25);
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: unionTyped, params: { "exit.stop_loss_pct": { value: "0.25" } }, capital_usd: 1000 }), 0.25);
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: stringTyped, params: { exit: { stop_loss_pct: "" } }, capital_usd: 1000 }), null);
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: stringTyped, params: { exit: { stop_loss_pct: "关闭" } }, capital_usd: 1000 }), null);
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: stringTyped, params: { exit: { stop_loss_pct: "null" } }, capital_usd: 1000 }), null);
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: stringTyped, params: { exit: { stop_loss_pct: null } }, capital_usd: 1000 }), null);
+assertStopLoss(SA.launchBody({ strategy_id: "copy", name: "sl", schema: unionTyped, params: { exit: { stop_loss_pct: {} } }, capital_usd: 1000 }), null);
+assert.equal(Object.prototype.hasOwnProperty.call(SA.readParams(stringTyped, { exit: { stop_loss_pct: "" } }).exit, "stop_loss_pct"), true);
+
+const topOn = SA.launchBody({ strategy_id: "copy", name: "top", schema: topTyped, params: { stop_loss_pct: "0.25" }, capital_usd: 1000 });
+assert.equal(topOn.params.stop_loss_pct, 0.25);
+assert.equal(typeof topOn.params.stop_loss_pct, "number");
+const topOff = SA.launchBody({ strategy_id: "copy", name: "top", schema: topTyped, params: { stop_loss_pct: "关闭" }, capital_usd: 1000 });
+assert.equal(topOff.params.stop_loss_pct, null);
+assert.equal(JSON.stringify(topOff).includes('"stop_loss_pct":null'), true);
+const topPct = SA.readParams(topTyped, { stop_loss_pct: "25%" });
+assert.equal(topPct.stop_loss_pct, 0.25);
+assert.equal(typeof topPct.stop_loss_pct, "number");
+const topWrap = SA.readParams([{ key: "stop_loss_pct", type: ["number", "null"] }], { stop_loss_pct: { value: 0.25 } });
+assert.equal(topWrap.stop_loss_pct, 0.25);
+assert.equal(typeof topWrap.stop_loss_pct, "number");
+
+const copied = SA.copyBody({ name: "copy", schema: stringTyped, params: { exit: { stop_loss_pct: "0.25" } }, capital_usd: "1000" });
+assert.equal(copied.params_patch.exit.stop_loss_pct, 0.25);
+assert.equal(typeof copied.params_patch.exit.stop_loss_pct, "number");
+const copiedOff = SA.copyBody({ name: "copy", schema: stringTyped, params: { exit: { stop_loss_pct: "" } } });
+assert.equal(copiedOff.params_patch.exit.stop_loss_pct, null);
+
+const slSchema = SA.mockStrategies().items[0].params_schema;
+assert.equal(SA.validateParams(slSchema, { copy_ratio: 0.3, fees_on: false, daily_loss_usd: 10, max_positions: 1, exit: { stop_loss_pct: "" } }).some((p) => /止损/.test(p)), false);
+assert.equal(SA.validateParams(slSchema, { copy_ratio: 0.3, exit: { stop_loss_pct: null } }).some((p) => /止损/.test(p)), false);
+assert.ok(SA.validateParams(slSchema, { copy_ratio: 0.3, exit: { stop_loss_pct: 2 } }).some((p) => /止损/.test(p) && /改小/.test(p)));
+assert.equal(SA.fieldInput({ key: "stop_loss_pct", type: "number", default: 0.12 }, null), "");
+assert.equal(SA.fieldInput({ key: "stop_loss_pct", type: "number", default: 0.12 }, undefined), "0.12");
+assert.equal(SA.fieldInput({ key: "stop_loss_pct", type: "string" }, "0.25"), "0.25");
 
 const card = SA.mockAccounts().find((a) => a.id === "paper20000");
 const cardLine = SA.diffText(card.params_diff, SA.mockStrategies().items[0].params_schema);
