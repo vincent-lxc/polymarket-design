@@ -494,6 +494,7 @@
       return {
         account_id: s.account_id,
         name: s.name,
+        archived: !!s.archived,
         accent: accent,
         color: accent ? ACCENT : GRAY[i % GRAY.length],
         dash: accent ? null : DASH[i % DASH.length],
@@ -666,6 +667,8 @@
       reasons: partial.reasons || {}
     };
     if (partial.rpc_capacity) base.rpc_capacity = partial.rpc_capacity;
+    if (Object.prototype.hasOwnProperty.call(partial, "series")) base.series = partial.series;
+    if (Object.prototype.hasOwnProperty.call(partial, "points")) base.points = partial.points;
     return base;
   }
 
@@ -680,6 +683,7 @@
     var list = [
       mockAccount({
         id: "paper20000", name: "paper20000", strategy_id: "copy", strategy_label: "跟单 copy", state: "running",
+        series: null,
         capital_usd: 20000, current_segment: 2,
         params: { copy_ratio: 0.3, fees_on: false, daily_loss_usd: 800, max_positions: 200 },
         params_diff: { copy_ratio: 0.3 },
@@ -843,7 +847,9 @@
           p.t = idx / Math.max(1, s.points.length - 1) * 2 * 86400;
         });
       }
-      return axis === "calendar" ? withCalendar(s, i === 0 ? undefined : []) : s;
+      var built = axis === "calendar" ? withCalendar(s, i === 0 ? undefined : []) : s;
+      built.archived = !!a.archived;
+      return built;
     });
     var schemas = {};
     mockStrategies().items.forEach(function (s) { schemas[s.strategy_id] = s.params_schema; });
@@ -851,6 +857,7 @@
       return {
         account_id: a.id,
         name: a.name,
+        archived: !!a.archived,
         strategy_id: a.strategy_id,
         strategy_label: a.strategy_label,
         capital_usd: a.capital_usd,

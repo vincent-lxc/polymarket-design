@@ -62,7 +62,12 @@
 .sa-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .sa-form .wide{grid-column:1/-1}
 .sa-lock{opacity:.72}
-.sa-sel{position:sticky;bottom:12px;display:flex;gap:10px;align-items:center;background:#1b1b20;border-radius:14px;padding:10px 12px;box-shadow:0 12px 40px rgba(0,0,0,.35);z-index:30}
+.sa-sel{position:sticky;bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#1b1b20;border-radius:14px;padding:10px 12px;box-shadow:0 12px 40px rgba(0,0,0,.35);z-index:30}
+.sa-picks{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1;min-width:0}
+.sa-pick{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border-radius:999px;padding:3px 4px 3px 10px;font-size:12px}
+.sa-pick .tag{font-size:11px}
+.sa-pick button{border:0;background:transparent;color:var(--mu);cursor:pointer;font:inherit;line-height:1;padding:2px 6px}
+.sa-empty-curve{min-height:160px;align-items:center;justify-content:center;text-align:center}
 .sa-table td,.sa-table th{white-space:nowrap}
 .sa-check{width:16px;height:16px;accent-color:var(--or)}
 .sa-ovl{position:fixed;inset:0;z-index:80}

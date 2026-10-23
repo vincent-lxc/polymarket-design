@@ -140,6 +140,18 @@ const entry = model.sections[1].rows[0];
 assert.equal(entry.cells[0], "—");
 assert.equal(entry.cells[1], "0.62");
 
+const paper = SA.mockAccounts().find((a) => a.id === "paper20000");
+assert.equal(Object.prototype.hasOwnProperty.call(paper, "series"), true);
+assert.equal(paper.series, null);
+assert.equal(paper.points, undefined);
+const mixed = SA.mockCompare(["paper20000", "old-1x"], { axis: "elapsed" });
+assert.equal(mixed.table.find((r) => r.account_id === "old-1x").archived, true);
+assert.equal(mixed.table.find((r) => r.account_id === "paper20000").archived, false);
+assert.equal(mixed.series.find((s) => s.account_id === "old-1x").archived, true);
+const tagged = SA.chartModel(mixed.series, { focusId: "old-1x", axis: "elapsed" });
+assert.equal(tagged.lines.find((l) => l.account_id === "old-1x").archived, true);
+assert.equal(tagged.lines.find((l) => l.account_id === "paper20000").archived, false);
+
 const cmp = SA.mockCompare(["paper20000", "paper20000fees", "zft-062"], { axis: "calendar", metric: "return_pct", scope: "all" });
 const chart = SA.chartModel(cmp.series, { focusId: "paper20000", axis: "calendar", metric: "return_pct", width: 600, height: 200 });
 assert.equal(chart.lines.filter((l) => l.accent).length, 1);
