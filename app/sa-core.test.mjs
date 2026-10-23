@@ -3,7 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const code = fs.readFileSync(new URL("./sa-core.js", import.meta.url), "utf8");
-const sandbox = { window: {}, globalThis: null, console };
+const sandbox = { window: {}, globalThis: null, console, URLSearchParams };
 sandbox.globalThis = sandbox;
 sandbox.window = sandbox;
 vm.runInNewContext(code, sandbox);
@@ -14,7 +14,7 @@ const codes = [
   "invalid_limit", "invalid_cursor", "cursor_mismatch", "confirm_name_mismatch", "compare_count_invalid",
   "duplicate_account_ids", "invalid_axis", "strategy_not_launchable", "wallet_accounts_not_enabled",
   "params_locked", "account_running", "account_archived", "account_name_taken", "insufficient_wallet_balance",
-  "wallet_has_positions", "wallet_funds_not_withdrawn", "legacy_account_readonly", "account_limit_reached",
+  "wallet_has_positions", "wallet_funds_not_withdrawn", "legacy_read_only", "legacy_account_readonly", "account_limit_reached",
   "rpc_not_configured", "engine_unavailable", "wallet_balance_unavailable"
 ];
 for (const code of codes) {
@@ -157,6 +157,7 @@ const legacy = SA.rowActions({ state: "running", process_kind: "legacy" });
 assert.equal(legacy.primary.length, 0);
 assert.equal(legacy.secondary.length, 0);
 assert.equal(legacy.note, "旧版策略，暂不支持编辑");
+assert.equal(SA.errorText("legacy_read_only"), "旧版策略，暂不支持编辑");
 assert.equal(SA.errorText("legacy_account_readonly"), "旧版策略，暂不支持编辑");
 assert.ok(!/复制/.test(legacy.note));
 
@@ -224,7 +225,44 @@ const legPage = SA.mockPage(SA.mockAccounts(), { archived: false, process_kind: 
 assert.equal(legPage.total, 1);
 assert.equal(legPage.items[0].id, "zft-062");
 assert.equal(legPage.items[0].strategy, "zft-062");
+assert.equal(legPage.items[0].strategy_id, null);
+assert.equal(legPage.items[0].process_kind, "legacy");
 assert.equal(legPage.accounts[0].strategy, "zft-062");
+assert.ok(legPage.summary && Array.isArray(legPage.items) && Array.isArray(legPage.accounts));
+assert.equal(Object.prototype.hasOwnProperty.call(legPage, "next_cursor"), true);
+assert.equal(typeof legPage.total, "number");
+assert.equal(SA.strategyCaption(legPage.items[0]), "旧版策略");
+assert.equal(SA.selectionId({ id: "acct_1", strategy: "old-a", strategy_id: null, process_kind: "legacy" }), "acct_1");
+assert.equal(SA.strategyCaption({ strategy_id: null, strategy_label: null, process_kind: "legacy", strategy: "old-a" }), "旧版策略");
+const off = SA.accountListQuery({ archived: false, strategy_id: null, limit: 20 });
+const on = SA.accountListQuery({ archived: true, strategy_id: "copy", limit: 20 });
+const coerced = SA.accountListQuery({ archived: "1", strategy_id: "null", limit: 20 });
+const zero = SA.accountListQuery({ archived: 0, strategy_id: null, limit: 50 });
+assert.match(off, /(^|&)archived=false(&|$)/);
+assert.match(on, /(^|&)archived=true(&|$)/);
+assert.match(on, /(^|&)strategy_id=copy(&|$)/);
+assert.match(coerced, /(^|&)archived=true(&|$)/);
+assert.match(zero, /(^|&)archived=false(&|$)/);
+assert.equal(off.includes("strategy_id"), false);
+assert.equal(coerced.includes("strategy_id"), false);
+assert.equal(zero.includes("strategy_id"), false);
+assert.equal(/archived=(1|0)(&|$)/.test(off + "&" + on + "&" + coerced + "&" + zero), false);
+const legCmp = SA.mockCompare(["paper20000", "zft-062"], { axis: "elapsed" });
+const zrow = legCmp.table.find((r) => r.account_id === "zft-062");
+assert.equal(zrow.strategy_id, null);
+assert.equal(zrow.strategy, "zft-062");
+assert.equal(zrow.process_kind, "legacy");
+const legModel = SA.compareTableModel(legCmp.schemas, legCmp.table);
+const shown = [];
+legModel.common.forEach((r) => shown.push(r.label, ...r.cells));
+legModel.sections.forEach((s) => {
+  shown.push(s.label);
+  assert.notEqual(s.strategy_id, "null");
+  s.rows.forEach((r) => shown.push(r.label, ...r.cells));
+});
+assert.equal(legModel.common.find((r) => r.key === "strategy_label").cells[1], "旧版策略");
+assert.ok(legModel.sections.some((s) => s.label === "旧版策略 参数"));
+assert.ok(shown.every((t) => t !== "null" && !String(t).includes("null")));
 
 const leadersOld = { active: [{ address: "0xabc" }] };
 const leadersNew = { active: [{ address: "0xabc" }], next_cursor: "n", total: 40 };

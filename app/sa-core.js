@@ -32,6 +32,7 @@
     insufficient_wallet_balance: "分配总额超过钱包可用余额。减少本次资金，或先收回其它账户的资金。",
     wallet_has_positions: "钱包账户还有持仓。先清仓，再删除。",
     wallet_funds_not_withdrawn: "资金还没收回。先把资金提回，再删除。",
+    legacy_read_only: "旧版策略，暂不支持编辑",
     legacy_account_readonly: "旧版策略，暂不支持编辑",
     account_limit_reached: "账户数量到了上限。先归档或删除不用的账户，再开新的。",
     rpc_not_configured: "还没有可用的 RPC。到配置页加上你自己的 RPC 后再开跑。一个 key 建议只给 1 到 2 个账户。",
@@ -102,6 +103,49 @@
 
   function isLegacyAccount(a) {
     return !!(a && a.process_kind === "legacy");
+  }
+
+  /* null、空串，以及字符串 "null" 都不算有效文案，也不能进查询参数。 */
+  function presentText(v) {
+    if (v == null) return "";
+    var s = String(v).trim();
+    if (!s || s === "null" || s === "undefined") return "";
+    return s;
+  }
+
+  /* 列表的 archived 只接受字符串 true / false。1 和 0 会 400。 */
+  function archivedParam(v) {
+    if (v === true || v === "true" || v === 1 || v === "1") return "true";
+    return "false";
+  }
+
+  function accountListQuery(query) {
+    query = query || {};
+    var p = new URLSearchParams();
+    p.set("limit", String(normalizeLimit(query.limit)));
+    p.set("archived", archivedParam(query.archived));
+    var cursor = presentText(query.cursor);
+    if (cursor) p.set("cursor", cursor);
+    var sid = presentText(query.strategy_id);
+    if (sid) p.set("strategy_id", sid);
+    var state = presentText(query.state);
+    if (state) p.set("state", state);
+    var sort = presentText(query.sort);
+    if (sort) p.set("sort", sort);
+    var order = presentText(query.order);
+    if (order) p.set("order", order);
+    return p.toString();
+  }
+
+  function strategyCaption(a) {
+    if (!a) return "—";
+    if (isLegacyAccount(a)) return presentText(a.strategy_label) || "旧版策略";
+    return presentText(a.strategy_label) || presentText(a.strategy_id) || "—";
+  }
+
+  function selectionId(a) {
+    if (!a) return "";
+    return presentText(a.id) || presentText(a.strategy);
   }
 
   function isAccountListV2(d) {
@@ -351,7 +395,7 @@
     var archived = !!(a && a.archived);
     var running = a && a.state === "running";
     if (legacy) {
-      return { legacy: true, paramsLocked: true, primary: [], secondary: [], note: errorText("legacy_account_readonly") };
+      return { legacy: true, paramsLocked: true, primary: [], secondary: [], note: errorText("legacy_read_only") };
     }
     if (archived) {
       return { archived: true, paramsLocked: true, primary: ["unarchive"], secondary: ["copy"], startDisabled: true, startHint: errorText("account_archived") };
@@ -459,19 +503,51 @@
         section: "common",
         key: pair[0],
         label: pair[1],
-        cells: rows.map(function (r) { return formatMetric(pair[0], r[pair[0]]); })
+        cells: rows.map(function (r) {
+          if (pair[0] === "strategy_label") return strategyCaption(r);
+          return formatMetric(pair[0], r[pair[0]]);
+        })
       };
     });
     var sections = [];
     var seen = {};
     rows.forEach(function (r) {
-      var sid = r.strategy_id || "";
+      if (isLegacyAccount(r) || !presentText(r.strategy_id)) {
+        if (!isLegacyAccount(r) || seen.legacy) return;
+        seen.legacy = 1;
+        var keys = [];
+        rows.forEach(function (row) {
+          if (!isLegacyAccount(row) || !row.params) return;
+          Object.keys(row.params).forEach(function (k) {
+            if (keys.indexOf(k) < 0) keys.push(k);
+          });
+        });
+        if (!keys.length) return;
+        sections.push({
+          strategy_id: null,
+          label: "旧版策略 参数",
+          rows: keys.map(function (k) {
+            return {
+              key: k,
+              label: k,
+              cells: rows.map(function (row) {
+                if (!isLegacyAccount(row)) return "—";
+                if (!row.params || !Object.prototype.hasOwnProperty.call(row.params, k)) return "—";
+                return formatParam(row.params[k], null);
+              })
+            };
+          })
+        });
+        return;
+      }
+      var sid = presentText(r.strategy_id);
       if (seen[sid]) return;
       seen[sid] = 1;
       var schema = (schemas && schemas[sid]) || [];
+      if (!schema.length) return;
       sections.push({
         strategy_id: sid,
-        label: (r.strategy_label || sid || "策略") + " 参数",
+        label: (presentText(r.strategy_label) || sid || "策略") + " 参数",
         rows: schema.map(function (p) {
           return {
             key: p.key,
@@ -777,7 +853,7 @@
         metrics: m(9780, -220, -0.022, 188, -32, 402, -0.031, 4, 0)
       }),
       mockAccount({
-        id: "zft-062", name: "zft-062", strategy: "zft-062", strategy_id: "zerofeetrend", strategy_label: "零费趋势 zerofeetrend",
+        id: "zft-062", name: "zft-062", strategy: "zft-062", strategy_id: null, strategy_label: null,
         state: "running", process_kind: "legacy", capital_usd: 10000, current_segment: 1,
         params: { entry_threshold: 0.62 }, params_diff: {},
         metrics: m(10410, 410, 0.041, 0, 410, 96, -0.021, 5, 2)
@@ -927,8 +1003,10 @@
         account_id: a.id,
         name: a.name,
         archived: !!a.archived,
-        strategy_id: a.strategy_id,
-        strategy_label: a.strategy_label,
+        process_kind: a.process_kind,
+        strategy: a.strategy || null,
+        strategy_id: a.strategy_id == null ? null : a.strategy_id,
+        strategy_label: a.strategy_label == null ? null : a.strategy_label,
         capital_usd: a.capital_usd,
         fees_usd: a.metrics.fees_usd,
         gross_pnl_usd: a.metrics.gross_pnl_usd,
@@ -1005,6 +1083,11 @@
     accountListRows: accountListRows,
     normalizeAccountPage: normalizeAccountPage,
     isLegacyAccount: isLegacyAccount,
+    presentText: presentText,
+    archivedParam: archivedParam,
+    accountListQuery: accountListQuery,
+    strategyCaption: strategyCaption,
+    selectionId: selectionId,
     isAccountListV2: isAccountListV2,
     isAccountV2: isAccountV2,
     hasCursorPage: hasCursorPage,

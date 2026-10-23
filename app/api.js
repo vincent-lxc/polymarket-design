@@ -225,8 +225,8 @@ function renderOverview(d){
 async function renderAccount(){
   const list=await api("/v1/accounts");
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
-  const accs=list.accounts||[];
-  const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
+  const accs=(list.accounts||[]).filter(a=>a&&a.strategy&&a.strategy!=="null");
+  const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s||s==="null"){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
   const d=await api("/v1/accounts/"+encodeURIComponent(s)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+s;
   const steps=document.querySelector(".steps"); if(steps) steps.innerHTML=accs.map(x=>`<a class="${x.strategy===s?"on":""}" href="/account?s=${encodeURIComponent(x.strategy)}">${esc(x.strategy)}</a>`).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
@@ -560,7 +560,7 @@ async function renderLeaders(){
     }else{
       const list=await api("/v1/accounts");
       const rows=Array.isArray(list.accounts)?list.accounts:(Array.isArray(list.items)?list.items:[]);
-      accounts=rows.filter(a=>a&&a.strategy);
+      accounts=rows.filter(a=>a&&a.strategy&&a.strategy!=="null"&&a.strategy!=="undefined");
       ldStrategy=Q.get("s")||(accounts[0]&&accounts[0].strategy)||"";
     }
   }catch(e){

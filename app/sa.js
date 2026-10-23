@@ -175,15 +175,7 @@
 
   async function fetchAccounts(query) {
     if (mockMode()) return SA.mockPage(mockList(), query);
-    var p = new URLSearchParams();
-    p.set("limit", String(SA.normalizeLimit(query.limit)));
-    p.set("archived", query.archived ? "true" : "false");
-    if (query.cursor) p.set("cursor", query.cursor);
-    if (query.strategy_id) p.set("strategy_id", query.strategy_id);
-    if (query.state) p.set("state", query.state);
-    if (query.sort) p.set("sort", query.sort);
-    if (query.order) p.set("order", query.order);
-    return SA.normalizeAccountPage(await api("/v1/accounts?" + p.toString()));
+    return SA.normalizeAccountPage(await api("/v1/accounts?" + SA.accountListQuery(query)));
   }
   function dropLegacy(page) {
     var raw = (page && page.items) || [];
@@ -204,7 +196,7 @@
       if (mockMode()) qy.process_kind = "legacy";
       return qy;
     }
-    if (g && g.id !== "all") qy.strategy_id = g.id;
+    if (g && g.id !== "all" && SA.presentText(g.id)) qy.strategy_id = g.id;
     return qy;
   }
   async function fetchLegacyGroup(filters) {
@@ -246,6 +238,12 @@
     return api("/v1/strategies?" + p.toString());
   }
   async function fetchStrategy(id) {
+    if (!SA.presentText(id)) {
+      var missing = new Error("missing");
+      missing.status = 404;
+      missing.body = { error: "strategy_not_found" };
+      throw missing;
+    }
     if (mockMode()) {
       var s = SA.mockStrategies().items.filter(function (x) { return x.strategy_id === id; })[0];
       if (!s) { var e = new Error("missing"); e.status = 404; e.body = { error: "strategy_not_found" }; throw e; }
@@ -260,14 +258,23 @@
     return d;
   }
   function markLegacy(account, key) {
-    if (!account || account.process_kind || account.strategy_id) return account;
+    if (!account || account.process_kind || SA.presentText(account.strategy_id)) return account;
     account.process_kind = "legacy";
-    account.strategy = account.strategy || key;
-    if (!account.id) account.id = account.strategy || key;
-    if (!account.name) account.name = account.strategy || account.id;
+    account.strategy_id = null;
+    if (!SA.presentText(account.strategy)) account.strategy = key;
+    if (!SA.presentText(account.id)) account.id = SA.presentText(account.strategy) || key;
+    if (!SA.presentText(account.name)) account.name = account.strategy || account.id;
     return account;
   }
   async function fetchAccount(id, scope, viaStrategy) {
+    var key = SA.presentText(id);
+    if (!key) {
+      var missingId = new Error("missing");
+      missingId.status = 404;
+      missingId.body = { error: "account_not_found" };
+      throw missingId;
+    }
+    id = key;
     if (mockMode()) {
       var a = findMock(id);
       if (!a) { var e = new Error("missing"); e.status = 404; e.body = { error: "account_not_found" }; throw e; }
@@ -341,8 +348,12 @@
     return t ? '<div class="sa-meta">' + esc(t) + "</div>" : "";
   }
   function accountHref(a) {
-    if (SA.isLegacyAccount(a)) return href("/account", { s: a.strategy || a.id });
-    return href("/account", { id: a.id });
+    if (SA.isLegacyAccount(a)) {
+      var key = SA.presentText(a.strategy) || SA.presentText(a.id);
+      return key ? href("/account", { s: key }) : href("/account");
+    }
+    var id = SA.presentText(a && a.id);
+    return id ? href("/account", { id: id }) : href("/account");
   }
   function opsHtml(a) {
     var act = SA.rowActions(a);
@@ -364,8 +375,9 @@
       b("archive", "归档", false, "");
       b("delete", "删除", act.deleteDisabled, act.deleteHint || "");
     }
-    if (act.secondary && act.secondary.indexOf("copy") >= 0) {
-      bits.push('<a class="linkish" href="' + esc(href("/account", { "new": a.strategy_id, from: a.id })) + '">复制为新账户</a>');
+    var copyFrom = SA.presentText(a.strategy_id);
+    if (copyFrom && act.secondary && act.secondary.indexOf("copy") >= 0) {
+      bits.push('<a class="linkish" href="' + esc(href("/account", { "new": copyFrom, from: SA.selectionId(a) })) + '">复制为新账户</a>');
     }
     return '<div class="sa-ops">' + bits.join("") + "</div>";
   }
@@ -377,7 +389,7 @@
   function accountCells(a, schema) {
     var m = a.metrics || {};
     return [
-      esc(a.strategy_label || a.strategy_id || "—"),
+      esc(SA.strategyCaption(a)),
       '<b>' + esc(a.name) + "</b>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a),
       esc(SA.formatUsd(a.capital_usd, false)),
       '<span class="' + (m.net_pnl_usd > 0 ? "up" : m.net_pnl_usd < 0 ? "dn" : "") + '">' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span>",
@@ -392,12 +404,14 @@
   }
   function rowHtml(a, schema) {
     var cells = accountCells(a, schema);
-    var check = '<input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(a.id) + '"' + (selected.has(a.id) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '">';
+    var pick = SA.selectionId(a);
+    var check = '<input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '">';
     return "<tr><td>" + check + '</td><td><a href="' + esc(accountHref(a)) + '">' + cells[1] + "</a></td><td>" + cells[0] + "</td><td class='r num'>" + cells[2] + "</td><td class='r num'>" + cells[3] + "</td><td class='r num'>" + cells[4] + "</td><td class='r num'>" + cells[5] + "</td><td class='r num'>" + cells[6] + "</td><td class='r num'>" + cells[7] + "</td><td class='r num'>" + cells[8] + "</td><td class='r num'>" + cells[9] + "</td><td>" + cells[10] + "</td><td class='r'>" + opsHtml(a) + "</td></tr>";
   }
   function cardHtml(a, schema) {
     var m = a.metrics || {};
-    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(a.id) + '"' + (selected.has(a.id) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + '</div><div class="ret ' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</div><div class="sa-meta">' + esc(a.strategy_label || "") + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
+    var pick = SA.selectionId(a);
+    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + '</div><div class="ret ' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</div><div class="sa-meta">' + esc(SA.strategyCaption(a)) + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
   }
   var HEAD = "<tr><th></th><th>账户</th><th>策略</th><th class='r'>资金</th><th class='r'>净收益</th><th class='r'>收益率</th><th class='r'>成交</th><th class='r'>手续费</th><th class='r'>回撤</th><th class='r'>运行时长</th><th class='r'>分段</th><th>状态</th><th class='r'>操作</th></tr>";
 
@@ -421,7 +435,7 @@
     function scan(groups) {
       (groups || []).forEach(function (g) {
         (g.items || []).concat(g.mobile || []).forEach(function (a) {
-          if (a.id === id) hit = a;
+          if (a.id === id || SA.selectionId(a) === id || (a.strategy && a.strategy === id)) hit = a;
         });
       });
     }
@@ -856,7 +870,10 @@
       var schemas = data.schemas || {};
       if (!mockMode()) {
         var need = {};
-        (data.table || []).forEach(function (row) { if (row.strategy_id) need[row.strategy_id] = 1; });
+        (data.table || []).forEach(function (row) {
+          var sid = SA.presentText(row.strategy_id);
+          if (sid) need[sid] = 1;
+        });
         for (var sid in need) {
           if (schemas[sid]) continue;
           try { var st = await fetchStrategy(sid); schemas[sid] = st.params_schema || []; } catch (e) { schemas[sid] = []; }
@@ -868,9 +885,12 @@
             var acc = await fetchAccount(row.account_id);
             if (!row.params) {
               row.params = acc.params || {};
-              row.strategy_id = row.strategy_id || acc.strategy_id;
+              var sid = SA.presentText(row.strategy_id) || SA.presentText(acc.strategy_id);
+              row.strategy_id = sid || null;
               row.runtime_sec = row.runtime_sec != null ? row.runtime_sec : (acc.metrics && acc.metrics.runtime_sec);
             }
+            if (!row.process_kind && acc.process_kind) row.process_kind = acc.process_kind;
+            if (!SA.presentText(row.strategy) && SA.presentText(acc.strategy)) row.strategy = acc.strategy;
             if (row.archived == null) row.archived = !!acc.archived;
           } catch (e) {}
         }
@@ -895,7 +915,7 @@
       var idx = list.findIndex(function (x) { return x.id === id; });
       if (idx < 0) throw Object.assign(new Error("missing"), { status: 404, body: { error: "account_not_found" } });
       var item = list[idx];
-      if (item.process_kind === "legacy") throw Object.assign(new Error("leg"), { status: 409, body: { error: "legacy_account_readonly" } });
+      if (item.process_kind === "legacy") throw Object.assign(new Error("leg"), { status: 409, body: { error: "legacy_read_only" } });
       if (kind === "delete") { list.splice(idx, 1); saveMock(list); return; }
       if (kind === "archive") { item.archived = true; item.params_editable = false; }
       if (kind === "unarchive") { item.archived = false; item.params_editable = item.state === "stopped"; }
@@ -971,7 +991,7 @@
   }
   async function saveAndStart() {
     var a = detailState.account;
-    if (SA.isLegacyAccount(a)) { toast(SA.errorText("legacy_account_readonly")); return; }
+    if (SA.isLegacyAccount(a)) { toast(SA.errorText("legacy_read_only")); return; }
     var form = document.getElementById("sa-edit");
     var params = readForm(form, detailState.schema || []);
     var problems = SA.validateParams(detailState.schema || [], params);
@@ -1073,7 +1093,7 @@
     if (act === "sheet-close") { closeSheet(); return; }
     var account = id ? (findMock(id) || (detailState && detailState.account && detailState.account.id === id ? detailState.account : null) || (listState && listState.groups.reduce(function (hit, g) { return hit || g.items.filter(function (a) { return a.id === id; })[0] || g.mobile.filter(function (a) { return a.id === id; })[0]; }, null))) : null;
     if ((act === "stop" || act === "start" || act === "archive" || act === "unarchive" || act === "delete" || act === "edit" || act === "capital" || act === "save-start") && SA.isLegacyAccount(account || (detailState && detailState.account))) {
-      toast(SA.errorText("legacy_account_readonly"));
+      toast(SA.errorText("legacy_read_only"));
       return;
     }
     if (!account && id && !mockMode()) { try { account = await fetchAccount(id); } catch (e) { toast(explain(e)); return; } }
@@ -1191,7 +1211,8 @@
     try {
       var account = await fetchAccount(id, q().get("scope") === "current_segment" ? "current_segment" : "all", !!viaStrategy);
       var schema = [];
-      try { var st = await fetchStrategy(account.strategy_id); schema = st.params_schema || []; } catch (e) {}
+      var sid = SA.presentText(account.strategy_id);
+      if (sid) { try { var st = await fetchStrategy(sid); schema = st.params_schema || []; } catch (e) {} }
       detailState = {
         account: account,
         viaStrategy: !!viaStrategy || SA.isLegacyAccount(account),
