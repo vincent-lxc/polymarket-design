@@ -302,6 +302,8 @@
     var path = "/v1/accounts/" + encodeURIComponent(id);
     if (scope) path += "?scope=" + encodeURIComponent(scope);
     var account = unwrapAccount(await api(path));
+    /* 请求路径上的 id 就是账户 uuid。响应没带回 id 时沿用它，避免持仓/成交再退回策略名。 */
+    if (account && typeof account === "object" && !SA.presentText(account.id) && !SA.presentText(account.account_id)) account.id = id;
     if (viaStrategy) account = markLegacy(account, id);
     return account;
   }
@@ -365,11 +367,7 @@
     return t ? '<div class="sa-meta">' + esc(t) + "</div>" : "";
   }
   function accountHref(a) {
-    if (SA.isLegacyAccount(a)) {
-      var key = SA.presentText(a.strategy) || SA.presentText(a.id);
-      return key ? href("/account", { s: key }) : href("/account");
-    }
-    var id = SA.presentText(a && a.id);
+    var id = SA.presentText(a && a.id) || SA.presentText(a && a.account_id);
     return id ? href("/account", { id: id }) : href("/account");
   }
   function opsHtml(a) {
@@ -1113,7 +1111,7 @@
   async function refresh() {
     var params = q();
     if (document.body.dataset.page === "compare") return loadCompare((params.get("ids") || "").split(",").filter(Boolean), compareState && compareState.data ? { axis: compareState.data.axis, metric: compareState.data.metric, scope: compareState.data.scope } : { axis: "elapsed", metric: "return_pct", scope: "all" });
-    if (params.get("s") && !params.get("id") && !params.get("new") && document.body.dataset.page === "account") return openDetail(params.get("s"), true);
+    if (params.get("s") && !params.get("id") && !params.get("new") && document.body.dataset.page === "account") return openNamedAccount(params.get("s"));
     if (params.get("id") && document.body.dataset.page === "account") return openDetail(params.get("id"));
     if (document.body.dataset.page === "account") return loadGroups(filtersFromQuery());
   }
@@ -1165,8 +1163,11 @@
       }
       if (act === "scope" && detailState) {
         detailState.scope = t.getAttribute("data-v");
-        var via = !!(detailState.viaStrategy || SA.isLegacyAccount(detailState.account));
-        var key = via ? (detailState.account.strategy || detailState.account.id) : detailState.account.id;
+        var idKey = SA.presentText(detailState.account.id) || SA.presentText(detailState.account.account_id);
+        var strategyKey = SA.presentText(detailState.account.strategy);
+        var openedAsStrategy = !!detailState.viaStrategy && !!idKey && idKey === strategyKey;
+        var via = openedAsStrategy || (!idKey && !!detailState.viaStrategy);
+        var key = idKey || strategyKey;
         detailState.account = await fetchAccount(key, detailState.scope, via);
         detailState.sides.positions.pager = SA.pagerInit(detailState.sides.positions.pager.limit);
         detailState.sides.trades.pager = SA.pagerInit(detailState.sides.trades.pager.limit);
@@ -1295,6 +1296,32 @@
     }
   }
 
+  async function collectAccounts(archived) {
+    var rows = [];
+    var cursor = "";
+    for (var n = 0; n < 8; n++) {
+      var page = await fetchAccounts({ limit: 100, cursor: cursor, archived: !!archived });
+      var items = (page && (page.items || page.accounts)) || [];
+      rows = rows.concat(items);
+      if (!page || !page.next_cursor || page.next_cursor === cursor) break;
+      cursor = page.next_cursor;
+    }
+    return rows;
+  }
+  /* ?s=策略名只用来在账户列表里找 uuid。找不到就留在账户列表，不再把策略名当成账户 id。 */
+  async function openNamedAccount(name) {
+    var label = SA.presentText(name);
+    if (!label) return loadGroups(filtersFromQuery());
+    var id = "";
+    try {
+      var rows = mockMode() ? mockList() : await collectAccounts(false);
+      id = window.PM && PM.matchAccountId ? PM.matchAccountId(label, rows) : "";
+      if (!id && !mockMode()) id = window.PM && PM.matchAccountId ? PM.matchAccountId(label, await collectAccounts(true)) : "";
+    } catch (e) { id = ""; }
+    if (!id) return loadGroups(filtersFromQuery());
+    return openDetail(id, id === label);
+  }
+
   async function openDetail(id, viaStrategy) {
     var mount = takeOver();
     mount.innerHTML = "<p class='sa-note'>正在读取账户…</p>";
@@ -1326,7 +1353,7 @@
     var params = q();
     if (params.get("new")) return paintLaunch(params.get("new"), params.get("from"));
     if (params.get("id")) return openDetail(params.get("id"));
-    if (params.get("s")) return openDetail(params.get("s"), true);
+    if (params.get("s")) return openNamedAccount(params.get("s"));
     takeOver();
     document.title = "账户 · Wakeloom 织迹";
     await loadGroups(filtersFromQuery());

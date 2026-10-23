@@ -191,7 +191,86 @@ function fillAttr(d){
     return;
   }
 }
-function renderOverview(d){
+/* 账户详情只用接口给出的 id / account_id。策略名不能拿去拼 /v1/accounts/{name}/positions。 */
+function presentAccountId(v){
+  if(v==null)return "";
+  const s=String(v).trim();
+  if(!s||s==="null"||s==="undefined")return "";
+  return s;
+}
+function accountRecordId(a){
+  if(!a||typeof a!=="object")return "";
+  return presentAccountId(a.id)||presentAccountId(a.account_id);
+}
+function accountListItems(list){
+  if(Array.isArray(list))return list;
+  if(!list||typeof list!=="object")return [];
+  if(Array.isArray(list.items)&&list.items.length)return list.items;
+  if(Array.isArray(list.accounts))return list.accounts;
+  if(Array.isArray(list.items))return list.items;
+  return [];
+}
+function sameAccountLabel(a,b){
+  const x=presentAccountId(a), y=presentAccountId(b);
+  return !!x&&x===y;
+}
+/* 用策略名或账户名对上唯一一条。对上多条或没有 id 时返回空，不编造。 */
+function matchAccountId(label, accounts){
+  const key=presentAccountId(label);
+  if(!key)return "";
+  const hits=(accounts||[]).filter(a=>a&&typeof a==="object"&&(sameAccountLabel(a.strategy,key)||sameAccountLabel(a.name,key)));
+  if(hits.length!==1)return "";
+  return accountRecordId(hits[0]);
+}
+function accountDetailHref(id){
+  const key=presentAccountId(id);
+  if(!key)return appHref("/account");
+  return appHref("/account",{id:key});
+}
+function overviewInstanceHref(row, catalog){
+  const id=accountRecordId(row)||matchAccountId(row&&(row.strategy||row.name), catalog||[]);
+  return accountDetailHref(id);
+}
+function overviewAccountLink(row, catalog){
+  const href=overviewInstanceHref(row, catalog);
+  const label=row&&row.strategy!=null?row.strategy:"";
+  return `<a href="${esc(href)}">${esc(label)}</a>`;
+}
+async function loadAccountCatalog(){
+  const rows=[]; const seen=new Set();
+  function take(page){
+    accountListItems(page).forEach(a=>{
+      const id=accountRecordId(a);
+      if(id){ if(seen.has(id))return; seen.add(id); }
+      rows.push(a);
+    });
+  }
+  let page=null;
+  try{ page=await api("/v1/accounts"); }
+  catch(e){
+    try{ page=await api("/v1/accounts?limit=100&archived=false"); }
+    catch(e2){ return rows; }
+  }
+  take(page);
+  let cursor=page&&presentAccountId(page.next_cursor), prev="";
+  for(let n=0;n<8&&cursor&&cursor!==prev;n++){
+    prev=cursor;
+    try{ page=await api("/v1/accounts?limit=100&archived=false&cursor="+encodeURIComponent(cursor)); }
+    catch(e){ break; }
+    take(page);
+    cursor=page&&presentAccountId(page.next_cursor);
+  }
+  return rows;
+}
+async function overviewInstanceHrefs(acc){
+  const rows=acc||[];
+  let catalog=[];
+  if(rows.some(a=>!accountRecordId(a))){
+    try{ catalog=await loadAccountCatalog(); }catch(e){ catalog=[]; }
+  }
+  return rows.map(a=>overviewInstanceHref(a, catalog));
+}
+async function renderOverview(d){
   applyCurveNote(d&&d.reasons);
   const t=d.totals, R=Object.assign({},d.reasons);
   if(!t){ $("#ov-eq").innerHTML=nd(R.copy_db||"no_totals"); $("#ov-note").textContent=""; }
@@ -210,8 +289,9 @@ function renderOverview(d){
     const cv=$("#shcv"); if(cv){ cv.dataset.eq=usd(eq)||"无数据"; cv.dataset.pnl=usd(pnl,true)||"—"; cv.dataset.pct=pct(p)||"—"; cv.dataset.up=pnl>=0?1:0; cv.dataset.note=$("#ov-note").textContent;
       if(d.equity_curve&&d.equity_curve.length){ cv.dataset.v=JSON.stringify(d.equity_curve.map(x=>x.equity)); cv.dataset.range=`${bj(d.equity_curve[0].t)} – ${bj(d.equity_curve.at(-1).t)}`; } }
     drawCurve(d.equity_curve, partial(d.reasons));
+    const hrefs=await overviewInstanceHrefs(acc);
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
-      acc.map(a=>`<tr><td><a href="/account?s=${encodeURIComponent(a.strategy)}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
+      acc.map((a,i)=>`<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
   }
   if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
   fillAttr(d);
@@ -225,11 +305,26 @@ function renderOverview(d){
 async function renderAccount(){
   const list=await api("/v1/accounts");
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
-  const accs=(list.accounts||[]).filter(a=>a&&a.strategy&&a.strategy!=="null");
-  const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s||s==="null"){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
-  const d=await api("/v1/accounts/"+encodeURIComponent(s)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
-  document.querySelector(".top h1").textContent="账户 · "+s;
-  const steps=document.querySelector(".steps"); if(steps) steps.innerHTML=accs.map(x=>`<a class="${x.strategy===s?"on":""}" href="/account?s=${encodeURIComponent(x.strategy)}">${esc(x.strategy)}</a>`).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
+  const accs=accountListItems(list).filter(a=>a&&presentAccountId(a.strategy));
+  const wantId=presentAccountId(Q.get("id"));
+  const wantName=presentAccountId(Q.get("s"));
+  let current=null;
+  if(wantId) current=accs.find(x=>accountRecordId(x)===wantId)||null;
+  if(!current&&wantName){
+    const matched=matchAccountId(wantName, accs);
+    if(matched) current=accs.find(x=>accountRecordId(x)===matched)||null;
+  }
+  if(!current) current=accs.find(x=>accountRecordId(x))||null;
+  const id=current?accountRecordId(current):"";
+  const label=(current&&presentAccountId(current.strategy))||id;
+  const steps=document.querySelector(".steps");
+  if(steps) steps.innerHTML=accs.map(x=>{
+    const xid=accountRecordId(x);
+    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountDetailHref(xid))}">${esc(x.strategy)}</a>`;
+  }).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
+  if(!id){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
+  const d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
+  document.querySelector(".top h1").textContent="账户 · "+label;
   const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
   m.querySelector(".kv").innerHTML=[["现金",a.cash_usd,R.cash_usd],["持仓市值",a.positions_value_usd,R.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason||R.exposure_usd],["当日已实现",a.daily_realized_usd,R.daily_realized_usd],["浮动盈亏",a.unrealized_usd,R.unrealized_usd],["已实现盈亏",a.realized_usd,R.realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
@@ -660,6 +755,7 @@ async function renderStrategies(){
 }
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
 window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,
+  accountRecordId,matchAccountId,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountListItems,renderOverview,
   saveDraft:(id,params,name)=>api("/v1/me/strategies/"+encodeURIComponent(id),{method:"PATCH",body:{params,mode:"paper"},confirm:name}),
   createDraft:(name,template_id,params)=>api("/v1/me/strategies",{method:"POST",body:{name,template_id,params,mode:"paper"},confirm:name})};
 
