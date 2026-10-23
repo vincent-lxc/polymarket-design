@@ -88,8 +88,9 @@
     "当前地址": "Address",
     "复制": "Copy",
     "关闭钱包": "Close wallet",
-    "引擎接入中": "Engine onboarding",
-    "引擎接入中，暂无净值": "Engine onboarding — no equity yet"
+    "等待运行": "Waiting to run",
+    "净值从引擎接入后开始计算": "Equity is tracked once the engine is connected",
+    "暂无净值": "No equity yet"
   };
 
   function applyStatic() {

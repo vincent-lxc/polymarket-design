@@ -214,11 +214,15 @@
   }
 
   function onboardMessage(lang) {
-    return lang === "en" ? "Engine onboarding — no equity yet" : "引擎接入中，暂无净值";
+    return lang === "en" ? "No equity yet" : "暂无净值";
   }
 
   function onboardStatus(lang) {
-    return lang === "en" ? "Engine onboarding" : "引擎接入中";
+    return lang === "en" ? "Waiting to run" : "等待运行";
+  }
+
+  function onboardNote(lang) {
+    return lang === "en" ? "Equity is tracked once the engine is connected" : "净值从引擎接入后开始计算";
   }
 
   function canDelete(a) {
@@ -1172,6 +1176,7 @@
     engineOnboarding: engineOnboarding,
     onboardMessage: onboardMessage,
     onboardStatus: onboardStatus,
+    onboardNote: onboardNote,
     canDelete: canDelete,
     deleteBlockReason: deleteBlockReason,
     settlementNote: settlementNote,

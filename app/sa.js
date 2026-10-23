@@ -22,6 +22,9 @@
   function onboardHtml() {
     return '<span class="sa-onboard">' + esc(onboardPhrase()) + "</span>";
   }
+  function waitBadge() {
+    return '<span class="sa-wait"><span class="sa-status wait">' + esc(SA.onboardStatus(uiLang())) + '</span><span class="sa-onboard-note">' + esc(SA.onboardNote(uiLang())) + "</span></span>";
+  }
   function q() { return new URLSearchParams(location.search); }
   function mockMode() { return q().get("mock") === "1" && q().get("sa") === "1"; }
   function api(path, opt) {
@@ -331,7 +334,7 @@
   }
 
   function statusHtml(a) {
-    if (SA.engineOnboarding(a)) return '<span class="sa-status wait">' + esc(SA.onboardStatus(uiLang())) + "</span>";
+    if (SA.engineOnboarding(a)) return waitBadge();
     var label = SA.stateLabel(a.state);
     return '<span class="sa-status ' + (a.state === "running" ? "run" : "stop") + '">' + esc(label) + "</span>";
   }
@@ -773,7 +776,7 @@
   }
   function legendHtml(lines) {
     return '<div class="sa-legend">' + lines.map(function (l) {
-      var tag = l.onboarding ? ' <span class="sa-status wait">' + esc(SA.onboardStatus(uiLang())) + "</span>" : "";
+      var tag = l.onboarding ? " " + waitBadge() : "";
       return '<button type="button" data-act="focus" data-id="' + esc(l.account_id) + '"' + (l.accent ? ' class="on"' : "") + '><i style="border-top-color:' + l.color + (l.dash ? ";border-top-style:dashed" : "") + '"></i>' + labeledName(l.name || l.account_id, l.archived) + tag + "</button>";
     }).join("") + "</div>";
   }
@@ -791,7 +794,7 @@
     return body + legendHtml(lines) + note;
   }
   function compareHeadName(r) {
-    var tag = SA.engineOnboarding(r) ? ' <span class="sa-status wait">' + esc(SA.onboardStatus(uiLang())) + "</span>" : "";
+    var tag = SA.engineOnboarding(r) ? " " + waitBadge() : "";
     return labeledName(r.name, r.archived) + tag;
   }
   function detailSeries(a) {
