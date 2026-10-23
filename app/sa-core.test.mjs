@@ -512,4 +512,92 @@ assert.equal(cardLine.includes("[object Object]"), false);
 assert.match(cardLine, /止损 12\.0%/);
 assert.match(cardLine, /单笔上限 \$15/);
 
+const UUID = "7cd31570-39a5-47ea-aa0d-1b49d90acad4";
+const curve = [
+  { t: "2026-10-22T00:00:00Z", equity: 20000, cash: 20000, positions_value: 0 },
+  { t: "2026-10-22T12:00:00Z", equity: 20050, cash: 15000, positions_value: 5050 },
+  { t: "2026-10-23T00:00:00Z", equity: 20100, cash: 8000, positions_value: 12100 }
+];
+const envelope = {
+  account: {
+    id: UUID,
+    name: "paper-live",
+    state: "running",
+    capital_usd: 20000,
+    metrics: { equity_usd: 20100, net_pnl_usd: 100, return_pct: 0.005 },
+    reasons: { equity_usd: "no_equity_points", equity_curve: "no_equity_points" },
+    series: { points: [] }
+  },
+  equity_curve: curve
+};
+const merged = SA.mergeDetailCurve(Object.assign({}, envelope.account), envelope);
+assert.equal(merged.equity_curve.length, 3);
+assert.equal(envelope.account.equity_curve, undefined);
+assert.equal(SA.engineOnboarding(merged), false);
+assert.equal(SA.engineOnboarding({ state: "running", reasons: { equity_curve: "no_equity_points" }, equity_curve: [] }), true);
+assert.equal(SA.engineOnboarding({ state: "running", reasons: { equity_curve: "no_equity_points" }, equity_curve: [{ t: "2026-10-23T00:00:00Z", equity: null }] }), true);
+const series = SA.accountDetailSeries(merged);
+assert.equal(series.source, "equity_curve");
+assert.equal(series.metric, "equity_usd");
+assert.equal(series.account_id, UUID);
+assert.equal(series.points.length, 3);
+assert.equal(series.points[0].equity_usd, 20000);
+assert.equal(series.points[2].equity_usd, 20100);
+assert.equal(series.points[0].return_pct, undefined);
+const drawn = SA.chartModel([series], { focusId: UUID, axis: "calendar", metric: series.metric, width: 720, height: 240 });
+assert.equal(drawn.lines[0].points.length, 3);
+assert.ok(drawn.lines[0].points[2].x > drawn.lines[0].points[0].x);
+assert.ok(drawn.lines[0].points.every((p) => Number.isFinite(p.y)));
+
+assert.equal(SA.accountDetailSeries({ id: "x", equity_curve: [], series: { points: [] }, points: [] }), null);
+const fallback = SA.accountDetailSeries({
+  id: "x",
+  equity_curve: [],
+  series: { account_id: "x", points: [{ t: "2026-10-22T00:00:00Z", return_pct: 0.1, equity_usd: 110 }, { t: "2026-10-23T00:00:00Z", return_pct: 0.2, equity_usd: 120 }] }
+});
+assert.equal(fallback.metric, "return_pct");
+assert.equal(fallback.source, "series");
+assert.equal(fallback.points[0].return_pct, 0.1);
+const wins = SA.accountDetailSeries({
+  id: "x",
+  equity_curve: curve.slice(0, 2),
+  series: { points: [{ t: "2026-10-22T00:00:00Z", return_pct: 0.9 }] }
+});
+assert.equal(wins.source, "equity_curve");
+assert.equal(wins.points[0].equity_usd, 20000);
+const lifted = SA.accountDetailSeries({
+  id: "x",
+  name: "n",
+  series: { points: [{ t: "2026-10-22T00:00:00Z", equity: 3 }, { t: "2026-10-22T02:00:00Z", equity: 4, cash: 1, positions_value: 3 }] }
+});
+assert.equal(lifted.metric, "equity_usd");
+assert.equal(lifted.points[1].equity_usd, 4);
+const one = SA.accountDetailSeries({
+  id: "x",
+  equity_curve: [{ t: "2026-10-22T00:00:00Z", equity: null }, { t: 1761177600000, equity: 9, cash: 4, positions_value: 5 }]
+});
+assert.equal(one.points.length, 1);
+assert.equal(one.points[0].equity_usd, 9);
+const seconds = SA.accountDetailSeries({
+  id: "x",
+  equity_curve: [{ t: 1761091200, equity: 1 }, { t: 1761094800, equity: 2 }]
+});
+assert.equal(seconds.points.length, 2);
+assert.equal(seconds.points[0].t, "2025-10-22T00:00:00.000Z");
+assert.ok(seconds.points[1].t > seconds.points[0].t);
+const equityNamed = SA.accountDetailSeries({ id: "x", equity: [{ t: "2026-10-22T00:00:00Z", equity: 8 }, { t: "2026-10-22T01:00:00Z", equity: 9 }] });
+assert.equal(equityNamed.source, "equity_curve");
+assert.equal(equityNamed.points[0].equity_usd, 8);
+const many = [];
+for (let i = 0; i < 1408; i++) {
+  many.push({ t: new Date(Date.parse("2026-10-22T00:00:00Z") + i * 60000).toISOString(), equity: 100 + i, cash: 1, positions_value: 2 });
+}
+const sampled = SA.accountDetailSeries({ id: "x", equity_curve: many });
+assert.ok(sampled.points.length <= 480);
+assert.ok(sampled.points.length > 2);
+assert.equal(sampled.points[0].equity_usd, 100);
+assert.equal(sampled.points[sampled.points.length - 1].equity_usd, 100 + 1407);
+const flat = SA.mergeDetailCurve({ id: UUID, strategy_id: "copy", metrics: { return_pct: 0.01 }, equity_curve: curve }, { id: UUID, strategy_id: "copy", equity_curve: curve });
+assert.equal(SA.accountDetailSeries(flat).points.length, 3);
+
 console.log("sa-core tests ok");

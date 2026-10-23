@@ -269,9 +269,12 @@
   }
   function unwrapAccount(d) {
     if (!d || typeof d !== "object") return d;
-    if (d.strategy_id || d.id || d.process_kind) return d;
-    if (d.account && typeof d.account === "object") return Object.assign({}, d.account);
-    return d;
+    var account = d;
+    /* 按名详情是 { account, equity_curve, positions }。只拷 account 会把曲线丢掉。 */
+    if (!(d.strategy_id || d.id || d.process_kind) && d.account && typeof d.account === "object") {
+      account = Object.assign({}, d.account);
+    }
+    return SA.mergeDetailCurve ? SA.mergeDetailCurve(account, d) : account;
   }
   function markLegacy(account, key) {
     if (!account || account.process_kind || SA.presentText(account.strategy_id)) return account;
@@ -766,9 +769,15 @@
     var lines = model.lines.map(function (l) {
       if (!l.points.length) return "";
       var d = l.points.map(function (p, i) { return (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1); }).join(" ");
-      return '<path data-id="' + esc(l.account_id) + '" d="' + d + '" fill="none" stroke="' + l.color + '" stroke-width="' + (l.accent ? 2.6 : 1.5) + '"' + (l.dash ? ' stroke-dasharray="' + l.dash + '"' : "") + " />";
+      var path = '<path data-id="' + esc(l.account_id) + '" d="' + d + '" fill="none" stroke="' + l.color + '" stroke-width="' + (l.accent ? 2.6 : 1.5) + '"' + (l.dash ? ' stroke-dasharray="' + l.dash + '"' : "") + " />";
+      if (l.points.length === 1) {
+        var only = l.points[0];
+        path += '<circle data-id="' + esc(l.account_id) + '" cx="' + only.x.toFixed(1) + '" cy="' + only.y.toFixed(1) + '" r="3.5" fill="' + l.color + '" />';
+      }
+      return path;
     }).join("");
-    return '<svg class="sa-svg" viewBox="0 0 ' + model.width + " " + model.height + '" role="img" aria-label="收益率曲线">' + gaps + lines + marks + "</svg>";
+    var curveLabel = model.metric === "equity_usd" ? "净值曲线" : "收益率曲线";
+    return '<svg class="sa-svg" viewBox="0 0 ' + model.width + " " + model.height + '" role="img" aria-label="' + curveLabel + '">' + gaps + lines + marks + "</svg>";
   }
   function bindChart(host, model, onHover) {
     var svg = host.querySelector("svg");
@@ -824,10 +833,7 @@
     return labeledName(r.name, r.archived) + tag;
   }
   function detailSeries(a) {
-    var fromSeries = a && a.series && Array.isArray(a.series.points) ? a.series.points : null;
-    if (fromSeries && fromSeries.length) return a.series;
-    if (a && Array.isArray(a.points) && a.points.length) return { account_id: a.id, name: a.name, points: a.points, segments: a.segments || [], gaps: a.gaps || [] };
-    return null;
+    return SA.accountDetailSeries(a);
   }
 
   var detailState = null;
@@ -843,14 +849,19 @@
     var series = detailSeries(a);
     var on = SA.engineOnboarding(a);
     var chart = "";
+    var emptyCurve = '<div class="ndbox sa-empty-curve" role="status"><span class="nd">暂无曲线数据</span></div>';
     if (on) {
       chart = '<div class="ndbox sa-empty-curve" role="status" id="sa-onboard-curve"><span class="nd sa-onboard">' + esc(onboardPhrase()) + "</span></div>";
-    } else if (series) {
-      var model = SA.chartModel([series], { focusId: a.id, axis: "calendar", metric: "return_pct", width: 720, height: 240 });
-      chart = '<div class="sa-chart hero" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
-      detailState.model = model;
+    } else if (series && series.points && series.points.length) {
+      var metric = series.metric === "equity_usd" ? "equity_usd" : "return_pct";
+      var model = SA.chartModel([series], { focusId: a.id, axis: "calendar", metric: metric, width: 720, height: 240 });
+      var drawn = (model.lines || []).some(function (l) { return l.points && l.points.length; });
+      if (drawn) {
+        chart = '<div class="sa-chart hero" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
+        detailState.model = model;
+      } else chart = emptyCurve;
     } else {
-      chart = '<div class="ndbox sa-empty-curve" role="status"><span class="nd">暂无曲线数据</span></div>';
+      chart = emptyCurve;
     }
     var eqBlock = on
       ? '<section class="card" id="sa-eq"><div class="sa-big sa-onboard">' + esc(onboardPhrase()) + '</div><div class="sa-sub"><span class="sa-onboard">' + esc(onboardPhrase()) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>"
