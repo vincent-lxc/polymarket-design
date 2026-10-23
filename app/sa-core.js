@@ -482,6 +482,12 @@
     return sign + Math.abs(v).toFixed(1) + "%";
   }
 
+  /* 回撤是幅度，不是收益。正数不加「+」，负数也不画成带负号的盈亏。 */
+  function formatDrawdown(frac) {
+    if (frac == null || frac === "" || !isFinite(Number(frac))) return "—";
+    return Math.abs(Number(frac) * 100).toFixed(1) + "%";
+  }
+
   function formatUsd(x, sign) {
     if (x == null || x === "" || !isFinite(Number(x))) return "—";
     var n = Number(x);
@@ -535,7 +541,8 @@
   function formatMetric(key, value) {
     if (key === "capital_usd" || key === "fees_usd") return formatUsd(value, false);
     if (key === "net_pnl_usd" || key === "gross_pnl_usd") return formatUsd(value, true);
-    if (key === "return_pct" || key === "max_drawdown_pct") return formatPct(value);
+    if (key === "return_pct") return formatPct(value);
+    if (key === "max_drawdown_pct") return formatDrawdown(value);
     if (key === "runtime_sec") return formatRuntime(value);
     if (key === "trades" || key === "current_segment") {
       if (value == null || value === "" || !isFinite(Number(value))) return "—";
@@ -885,7 +892,7 @@
         params: { copy_ratio: 0.3, fees_on: false, daily_loss_usd: 800, max_positions: 200 },
         params_diff: { copy_ratio: 0.3 },
         rpc_capacity: { required_rpm: 180, available_rpm: 420, observed_429_1h: 0, providers_healthy: 3, providers_total: 3, status: "ok" },
-        metrics: m(22690, 2690, 0.135, 312, 3002, 1280, -0.042, 9, 12),
+        metrics: m(22690, 2690, 0.135, 312, 3002, 1280, 0.172, 9, 12),
         segments: [
           { segment: 1, started_at: "2026-10-14T01:12:00Z", ended_at: "2026-10-18T02:00:00Z", params_diff_vs_prev: null },
           { segment: 2, started_at: "2026-10-18T02:04:00Z", ended_at: null, params_diff_vs_prev: { copy_ratio: "0.25 → 0.3" }, boundary: "params" }
@@ -1201,6 +1208,7 @@
     rowActions: rowActions,
     formatRuntime: formatRuntime,
     formatPct: formatPct,
+    formatDrawdown: formatDrawdown,
     formatUsd: formatUsd,
     formatParam: formatParam,
     formatMetric: formatMetric,

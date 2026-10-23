@@ -414,7 +414,7 @@
       on ? onboardHtml() : '<span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + "</span>",
       esc(m.trades == null ? "—" : Number(m.trades).toLocaleString("en-US")),
       esc(SA.formatUsd(m.fees_usd, false)),
-      on ? onboardHtml() : esc(SA.formatPct(m.max_drawdown_pct)),
+      on ? onboardHtml() : esc(SA.formatDrawdown(m.max_drawdown_pct)),
       esc(SA.formatRuntime(m.runtime_sec)),
       esc(a.current_segment == null ? "—" : String(a.current_segment)),
       statusHtml(a) + (a.archived ? ' <span class="tag">已归档</span>' : "")
@@ -431,7 +431,8 @@
     var pick = SA.selectionId(a);
     var on = SA.engineOnboarding(a);
     var ret = on ? '<div class="ret sa-onboard">' + esc(onboardPhrase()) + "</div>" : '<div class="ret ' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + "</div>";
-    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + "</div>" + ret + '<div class="sa-meta">' + esc(SA.strategyCaption(a)) + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
+    var dd = on ? esc(onboardPhrase()) : esc(SA.formatDrawdown(m.max_drawdown_pct));
+    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + "</div>" + ret + '<div class="sa-meta">' + esc(SA.strategyCaption(a)) + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 回撤 " + dd + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
   }
   var HEAD = "<tr><th></th><th>账户</th><th>策略</th><th class='r'>资金</th><th class='r'>净收益</th><th class='r'>收益率</th><th class='r'>成交</th><th class='r'>手续费</th><th class='r'>回撤</th><th class='r'>运行时长</th><th class='r'>分段</th><th>状态</th><th class='r'>操作</th></tr>";
 

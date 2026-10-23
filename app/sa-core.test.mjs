@@ -177,6 +177,8 @@ assert.match(ratio.cells[0], /0\.3x/);
 const entry = model.sections[1].rows[0];
 assert.equal(entry.cells[0], "—");
 assert.equal(entry.cells[1], "0.62");
+assert.equal(model.common.find((r) => r.key === "max_drawdown_pct").cells[0], "2.0%");
+assert.equal(model.common.find((r) => r.key === "return_pct").cells[0], "+9.0%");
 
 const paper = SA.mockAccounts().find((a) => a.id === "paper20000");
 assert.equal(Object.prototype.hasOwnProperty.call(paper, "series"), true);
@@ -270,6 +272,14 @@ assert.equal(SA.hasCursorPage(leadersOld), false);
 assert.equal(SA.hasCursorPage(leadersNew), true);
 
 assert.match(SA.formatPct(0.135), /\+13\.5%/);
+assert.equal(SA.formatPct(0.172), "+17.2%");
+assert.equal(SA.formatDrawdown(0.172), "17.2%");
+assert.equal(SA.formatDrawdown(-0.042), "4.2%");
+assert.equal(SA.formatDrawdown(0), "0.0%");
+assert.equal(SA.formatDrawdown(null), "—");
+assert.equal(SA.formatDrawdown(0.172).includes("+"), false);
+assert.equal(SA.formatMetric("max_drawdown_pct", 0.172), "17.2%");
+assert.equal(SA.formatMetric("return_pct", 0.172), "+17.2%");
 assert.equal(SA.formatRuntime(9 * 86400), "9 天");
 
 const fresh = SA.mockAccounts().find((a) => a.id === "copy-new");
@@ -301,6 +311,8 @@ assert.equal(SA.compareTableModel(onboardCmp.schemas, onboardCmp.table, "en").co
   assert.equal(cell, "暂无净值");
   assert.equal(/[0-9]/.test(cell), false);
 });
+assert.equal(onboardModel.common.find((r) => r.key === "max_drawdown_pct").cells[0], "17.2%");
+assert.equal(String(onboardModel.common.find((r) => r.key === "max_drawdown_pct").cells[0]).includes("+"), false);
 assert.match(onboardModel.common.find((r) => r.key === "return_pct").cells[0], /\+13\.5%/);
 const lines = SA.chartModel(onboardCmp.series, { focusId: "paper20000", axis: "elapsed" }).lines;
 assert.equal(lines.find((l) => l.account_id === "copy-new").onboarding, true);
