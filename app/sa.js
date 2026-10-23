@@ -567,7 +567,8 @@
     } else if (p.enum && p.enum.length) {
       control = '<select class="in" name="' + esc(path) + '" id="' + id + '">' + p.enum.map(function (opt) { return '<option value="' + esc(opt) + '"' + (String(opt) === String(v) ? " selected" : "") + ">" + esc(opt) + "</option>"; }).join("") + "</select>";
     } else {
-      control = '<input class="in num" name="' + esc(path) + '" id="' + id + '" inputmode="decimal" value="' + esc(v) + '"' + (p.min != null ? ' min="' + esc(p.min) + '"' : "") + (p.max != null ? ' max="' + esc(p.max) + '"' : "") + (p.step != null ? ' step="' + esc(p.step) + '"' : "") + ">";
+      var placeholder = (p.key === "stop_loss_pct" || path === "stop_loss_pct" || String(path).slice(-15) === ".stop_loss_pct") ? ' placeholder="留空关闭"' : "";
+      control = '<input class="in num" name="' + esc(path) + '" id="' + id + '" inputmode="decimal" value="' + esc(v) + '"' + placeholder + (p.min != null ? ' min="' + esc(p.min) + '"' : "") + (p.max != null ? ' max="' + esc(p.max) + '"' : "") + (p.step != null ? ' step="' + esc(p.step) + '"' : "") + ">";
     }
     return '<div class="f"><label for="' + id + '">' + esc(label) + "</label>" + control + help + "</div>";
   }
@@ -736,7 +737,12 @@
         if (!found.has) found = SA.paramAt(from.params, leaf.schema.key);
         if (!found.has) return;
         var shown = SA.fieldInput(leaf.schema, found.value);
-        if (!shown) return;
+        var slPath = leaf.path || leaf.schema.key || "";
+        var stopLoss = slPath === "stop_loss_pct" || String(slPath).slice(-15) === ".stop_loss_pct";
+        if (!shown) {
+          if (stopLoss) el.value = "";
+          return;
+        }
         el.value = (leaf.schema.type === "bool" || leaf.schema.type === "boolean") ? (shown === "true" || shown === "1" ? "true" : "false") : shown;
       });
       if (from.capital_usd != null && form.elements.capital_usd) form.elements.capital_usd.value = from.capital_usd;

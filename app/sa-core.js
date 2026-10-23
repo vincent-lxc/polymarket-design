@@ -567,6 +567,60 @@
     return false;
   }
 
+  /* 止损键可能在顶层，也可能在 exit.stop_loss_pct。schema.type 经常不是 "number"。 */
+  function isStopLossKey(key) {
+    if (key == null) return false;
+    var k = String(key);
+    return k === "stop_loss_pct" || (k.length > 14 && k.slice(-15) === ".stop_loss_pct");
+  }
+
+  function isStopLossField(leaf) {
+    if (!leaf) return false;
+    if (isStopLossKey(leaf.path)) return true;
+    return !!(leaf.schema && isStopLossKey(leaf.schema.key));
+  }
+
+  /* 关闭：空、null、"null"、关闭、false、0、空对象。这些必须写成 JSON null，不能省略，也不能是字符串 "null"。 */
+  function stopLossOff(value) {
+    if (value == null) return true;
+    if (typeof value === "boolean") return value === false;
+    if (typeof value === "number") return !isFinite(value) || value <= 0;
+    if (typeof value === "string") {
+      var t = value.trim().toLowerCase();
+      return t === "" || t === "null" || t === "none" || t === "off" || t === "false" || t === "close" || t === "closed" || t === "disabled" || t === "关闭" || t === "关" || t === "否" || t === "无" || t === "停" || t === "—" || t === "-" || t === "[object object]";
+    }
+    if (typeof value === "object") {
+      if (Array.isArray(value)) return true;
+      if (isParamWrapper(value)) return stopLossOff(value.value);
+      return Object.keys(value).length === 0;
+    }
+    return false;
+  }
+
+  /* "0.25" / {value:0.25} → 0.25；"25%" → 0.25。不要把没有百分号的 0.25 再除以 100。 */
+  function coerceStopLoss(value) {
+    if (stopLossOff(value)) return null;
+    var raw = unwrapParam(value);
+    var text = typeof raw === "string" ? raw.trim() : "";
+    var hasPct = /%$/.test(text);
+    var n = parseNumber(value, hasPct ? { type: "number", unit: "pct" } : { type: "number" });
+    if (n == null || !isFinite(n) || n <= 0) return null;
+    return n;
+  }
+
+  function forceStopLoss(node) {
+    if (!node || typeof node !== "object" || Array.isArray(node)) return node;
+    Object.keys(node).forEach(function (k) {
+      if (isStopLossKey(k)) {
+        node[k] = coerceStopLoss(node[k]);
+        return;
+      }
+      var child = node[k];
+      if (child && typeof child === "object") forceStopLoss(child);
+    });
+    return node;
+  }
+
   function parseNumber(value, schema) {
     var v = unwrapParam(value);
     if (typeof v === "boolean" || v == null) return null;
@@ -620,13 +674,14 @@
     }
     var out = {};
     Object.keys(value).forEach(function (k) {
-      var next = sanitizeLooseValue(value[k]);
+      var next = sanitizeLooseValue(value[k], k);
       if (next !== undefined) out[k] = next;
     });
     return out;
   }
 
-  function sanitizeLooseValue(v) {
+  function sanitizeLooseValue(v, key) {
+    if (isStopLossKey(key)) return coerceStopLoss(v);
     if (blankParam(v)) return undefined;
     if (typeof v === "number") return isFinite(v) ? v : undefined;
     if (typeof v === "boolean") return v;
@@ -639,19 +694,20 @@
       return v;
     }
     if (Array.isArray(v)) return v;
-    if (isParamWrapper(v)) return sanitizeLooseValue(v.value);
+    if (isParamWrapper(v)) return sanitizeLooseValue(v.value, key);
     var child = sanitizeLoose(v);
     if (!Object.keys(child).length) return undefined;
     return child;
   }
 
   function paramsForWrite(schema, params) {
-    if (schema && schema.length) return readParams(schema, params || {});
-    return sanitizeLoose(params || {});
+    var out = schema && schema.length ? readParams(schema, params || {}) : sanitizeLoose(params || {});
+    return forceStopLoss(out);
   }
 
   function fieldInput(schema, value) {
     schema = schema || {};
+    if (isStopLossKey(schema.key) && value !== undefined && stopLossOff(value)) return "";
     var v = value == null ? schema.default : value;
     v = unwrapParam(v);
     if (blankParam(v) || (v && typeof v === "object")) {
@@ -1011,6 +1067,10 @@
     leafFields(schema).forEach(function (leaf) {
       var found = paramAt(raw, leaf.path);
       if (!found.has && leaf.schema.key && leaf.schema.key !== leaf.path) found = paramAt(raw, leaf.schema.key);
+      if (isStopLossField(leaf)) {
+        assignPath(out, leaf.path, coerceStopLoss(found.has ? found.value : null));
+        return;
+      }
       var v = coerceLeaf(leaf.schema, found.has ? found.value : undefined, found.has);
       if (v === undefined) return;
       if (isNumericType(leaf.schema.type) && (typeof v !== "number" || !isFinite(v))) return;
@@ -1018,7 +1078,7 @@
       if (v && typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length) return;
       assignPath(out, leaf.path, v);
     });
-    return out;
+    return forceStopLoss(out);
   }
 
   function coerce(schema, value) {
@@ -1032,10 +1092,18 @@
     var problems = [];
     leafFields(schema).forEach(function (leaf) {
       var p = leaf.schema;
-      if (!isNumericType(p.type)) return;
       var found = paramAt(params, leaf.path);
       var v = found.has ? found.value : undefined;
       var label = p.label_zh || p.label || p.title || p.key;
+      if (isStopLossField(leaf)) {
+        if (v == null || stopLossOff(v)) return;
+        var nsl = coerceStopLoss(v);
+        if (nsl == null) return;
+        if (p.min != null && nsl < p.min && p.min > 0) problems.push(label + " 不能小于 " + p.min + "。请改大。");
+        if (p.max != null && nsl > p.max) problems.push(label + " 不能大于 " + p.max + "。请改小。");
+        return;
+      }
+      if (!isNumericType(p.type)) return;
       if (v == null || v === "" || typeof v === "object" || !isFinite(Number(v))) {
         problems.push(label + " 需要填数字。");
         return;
@@ -1080,7 +1148,7 @@
             {
               key: "exit", label_zh: "出场", help_zh: "浮亏达到这个比例就平仓。", type: "object",
               properties: {
-                stop_loss_pct: { key: "stop_loss_pct", label_zh: "止损", help_zh: "相对成本的亏损比例，0 到 1。", type: "number", default: 0.12, min: 0, max: 1, step: 0.01, unit: "pct" }
+                stop_loss_pct: { key: "stop_loss_pct", label_zh: "止损", help_zh: "相对成本的亏损比例，0 到 1。留空表示关闭。", type: "number", default: 0.12, min: 0, max: 1, step: 0.01, unit: "pct" }
               }
             },
             { key: "fees_on", label_zh: "计算手续费", help_zh: "打开后，收益率按扣费后的净值计算。", type: "bool", default: false },
