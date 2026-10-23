@@ -543,26 +543,40 @@
     paintList();
   }
 
-  function fieldHtml(p, value) {
-    var id = "p-" + p.key;
-    var v = value == null ? (p.default == null ? "" : p.default) : value;
+  function fieldHtml(p, value, prefix) {
+    var kids = SA.nestedFields(p);
+    var path = prefix ? prefix + "." + p.key : p.key;
+    if (kids && p.type !== "number" && p.type !== "integer" && p.type !== "bool" && p.type !== "boolean") {
+      var obj = value;
+      if (obj && typeof obj === "object" && !Array.isArray(obj) && Object.prototype.hasOwnProperty.call(obj, "value") && (obj.reason !== undefined || obj.zh !== undefined || Object.keys(obj).length <= 3)) {
+        var inner = obj.value;
+        if (inner && typeof inner === "object") obj = inner;
+      }
+      if (!obj || typeof obj !== "object" || Array.isArray(obj)) obj = {};
+      var head = '<div class="f wide"><label>' + esc(p.label_zh || p.label || p.title || p.key) + "</label>" + (p.help_zh ? '<div class="sa-note">' + esc(p.help_zh) + "</div>" : "") + "</div>";
+      return head + kids.map(function (c) { return fieldHtml(c, obj[c.key], path); }).join("");
+    }
+    var id = "p-" + String(path).replace(/[^a-zA-Z0-9_-]/g, "-");
+    var v = SA.fieldInput(p, value);
+    var label = p.label_zh || p.label || p.title || p.key;
     var help = p.help_zh ? '<div class="sa-note">' + esc(p.help_zh) + (p.min != null ? " 范围 " + esc(p.min) + "–" + esc(p.max == null ? "" : p.max) + "。" : "") + "</div>" : "";
     var control;
-    if (p.type === "bool") {
-      var on = v === true || v === "true" || v === 1;
-      control = '<select class="in" name="' + esc(p.key) + '" id="' + id + '"><option value="false"' + (on ? "" : " selected") + '>否</option><option value="true"' + (on ? " selected" : "") + ">是</option></select>";
+    if (p.type === "bool" || p.type === "boolean") {
+      var on = v === "true" || v === "1";
+      control = '<select class="in" name="' + esc(path) + '" id="' + id + '"><option value="false"' + (on ? "" : " selected") + '>否</option><option value="true"' + (on ? " selected" : "") + ">是</option></select>";
     } else if (p.enum && p.enum.length) {
-      control = '<select class="in" name="' + esc(p.key) + '">' + p.enum.map(function (opt) { return '<option' + (String(opt) === String(v) ? " selected" : "") + ">" + esc(opt) + "</option>"; }).join("") + "</select>";
+      control = '<select class="in" name="' + esc(path) + '" id="' + id + '">' + p.enum.map(function (opt) { return '<option value="' + esc(opt) + '"' + (String(opt) === String(v) ? " selected" : "") + ">" + esc(opt) + "</option>"; }).join("") + "</select>";
     } else {
-      control = '<input class="in num" name="' + esc(p.key) + '" id="' + id + '" value="' + esc(v) + '"' + (p.min != null ? ' min="' + esc(p.min) + '"' : "") + (p.max != null ? ' max="' + esc(p.max) + '"' : "") + (p.step != null ? ' step="' + esc(p.step) + '"' : "") + ">";
+      control = '<input class="in num" name="' + esc(path) + '" id="' + id + '" inputmode="decimal" value="' + esc(v) + '"' + (p.min != null ? ' min="' + esc(p.min) + '"' : "") + (p.max != null ? ' max="' + esc(p.max) + '"' : "") + (p.step != null ? ' step="' + esc(p.step) + '"' : "") + ">";
     }
-    return '<div class="f"><label for="' + id + '">' + esc(p.label_zh || p.key) + "</label>" + control + help + "</div>";
+    return '<div class="f"><label for="' + id + '">' + esc(label) + "</label>" + control + help + "</div>";
   }
   function readForm(form, schema) {
     var raw = {};
-    schema.forEach(function (p) {
-      var el = form.elements[p.key];
-      raw[p.key] = el ? el.value : p.default;
+    SA.leafFields(schema).forEach(function (leaf) {
+      var el = form.elements[leaf.path];
+      if (!el || el.value == null) return;
+      raw[leaf.path] = el.value;
     });
     return SA.readParams(schema, raw);
   }
@@ -600,9 +614,10 @@
     var page = dropLegacy(await fetchAccounts({ limit: 20, strategy_id: id, archived: false, sort: "return_pct", order: "desc" }));
     var pager = SA.pagerRemember(SA.pagerInit(20), page.next_cursor);
     var schema = s.params_schema || [];
-    var rows = schema.map(function (p) {
+    var rows = SA.leafFields(schema).map(function (leaf) {
+      var p = leaf.schema;
       var range = p.min != null ? (esc(p.min) + " – " + esc(p.max == null ? "—" : p.max)) : "—";
-      return "<tr><td><b>" + esc(p.label_zh || p.key) + '</b><div class="fk">' + esc(p.key) + "</div></td><td>" + esc(p.help_zh || "—") + "</td><td class='num'>" + esc(SA.formatParam(p.default, p)) + "</td><td class='num'>" + range + "</td></tr>";
+      return "<tr><td><b>" + esc(p.label_zh || p.label || p.title || p.key) + '</b><div class="fk">' + esc(leaf.path) + "</div></td><td>" + esc(p.help_zh || "—") + "</td><td class='num'>" + esc(SA.formatParam(p.default, p)) + "</td><td class='num'>" + range + "</td></tr>";
     }).join("");
     var blocked = s.launchable === false;
     mount.innerHTML = '<div class="top"><h1>' + esc(s.label || id) + '</h1><a class="btn sm" href="' + esc(href("/strategies")) + '">全部策略</a></div><p class="sa-sumtxt">' + esc(s.summary || "") + "</p>" + (blocked ? '<div class="sa-warn">' + esc(SA.errorText("strategy_not_launchable")) + "</div>" : "") + '<section class="card" id="sa-schema"><div class="hd"><h2>参数</h2><span class="tag">接口下发</span></div><div class="tw"><table class="sa-schema"><tr><th>参数</th><th>含义</th><th>默认</th><th>范围</th></tr>' + rows + "</table></div></section>" + '<section class="card" id="sa-run"><div class="hd"><h2>用这组参数开跑</h2></div><div id="sa-err"></div><form class="sa-form" id="sa-launch">' + schema.map(function (p) { return fieldHtml(p, p.default); }).join("") + '<div class="f"><label for="sa-name">账户名</label><input class="in" id="sa-name" name="name" required placeholder="给这个账户起个名字"></div><div class="f"><label for="sa-cap">模拟盘资金</label><input class="in num" id="sa-cap" name="capital_usd" required inputmode="decimal" value="10000"></div><div class="f"><label for="sa-type">账户类型</label><select class="in" id="sa-type" name="account_type"><option value="paper" selected>模拟盘</option><option value="wallet">钱包</option></select><div class="sa-note">选钱包时如果还不能开，会停在这张表，并显示即将推出。</div></div><div class="wide sa-ops"><button class="btn pri" type="submit"' + (blocked ? " disabled" : "") + ">用这组参数开跑</button></div></form></section>" + '<section class="card" id="sa-used"><div class="hd"><h2>用这个策略的账户</h2></div><div class="tw sa-table"><table>' + HEAD + (page.items || []).map(function (a) { return rowHtml(a, schema); }).join("") + '</table></div><div class="sa-cards">' + (page.items || []).map(function (a) { return cardHtml(a, schema); }).join("") + "</div>" + pagerBox(SA.pagerNote(pager, page.total, (page.items || []).length), 20, "used") + "</section>";
@@ -676,7 +691,7 @@
         saveMock(list);
         if (capital > 60000) flashPush([SA.warningText("paper_over_allocated", { allocated_usd: 80000 + capital, limit_usd: 60000 })]);
       } else if (fromId) {
-        var copied = await api("/v1/accounts/" + encodeURIComponent(fromId) + "/copy", { method: "POST", body: SA.copyBody({ name: name, params: params, capital_usd: capital }), headers: { "Idempotency-Key": idemKey } });
+        var copied = await api("/v1/accounts/" + encodeURIComponent(fromId) + "/copy", { method: "POST", body: SA.copyBody({ name: name, params: params, schema: schema, capital_usd: capital }), headers: { "Idempotency-Key": idemKey } });
         created = copied.account || copied;
         if (created && created.state !== "running" && created.id) {
           var started = await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
@@ -685,7 +700,7 @@
         var warns = (copied.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
         if (warns.length) flashPush(warns);
       } else {
-        var res = await api("/v1/accounts", { method: "POST", body: SA.launchBody({ strategy_id: strategy.strategy_id, name: name, params: params, capital_usd: capital, account_type: accountType }), headers: { "Idempotency-Key": idemKey } });
+        var res = await api("/v1/accounts", { method: "POST", body: SA.launchBody({ strategy_id: strategy.strategy_id, name: name, params: params, schema: schema, capital_usd: capital, account_type: accountType }), headers: { "Idempotency-Key": idemKey } });
         created = res.account || res;
         if (created && created.state !== "running" && created.id) {
           await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
@@ -713,10 +728,16 @@
     if (from) {
       var name = form.elements.name;
       if (name && !name.value) name.value = from.name + "-copy";
-      (strategy.params_schema || []).forEach(function (p) {
-        if (!from.params || !form.elements[p.key]) return;
-        var v = from.params[p.key];
-        form.elements[p.key].value = p.type === "bool" ? (v ? "true" : "false") : v;
+      SA.leafFields(strategy.params_schema || []).forEach(function (leaf) {
+        if (!from.params) return;
+        var el = form.elements[leaf.path];
+        if (!el) return;
+        var found = SA.paramAt(from.params, leaf.path);
+        if (!found.has) found = SA.paramAt(from.params, leaf.schema.key);
+        if (!found.has) return;
+        var shown = SA.fieldInput(leaf.schema, found.value);
+        if (!shown) return;
+        el.value = (leaf.schema.type === "bool" || leaf.schema.type === "boolean") ? (shown === "true" || shown === "1" ? "true" : "false") : shown;
       });
       if (from.capital_usd != null && form.elements.capital_usd) form.elements.capital_usd.value = from.capital_usd;
       var typeField = form.querySelector("#sa-type");

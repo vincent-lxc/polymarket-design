@@ -412,26 +412,254 @@
     };
   }
 
+  /* 创建 / 复制的 body。数字必须是 number。空对象和 "[object Object]" 不能当数字发出去。 */
   function launchBody(input) {
+    input = input || {};
     var body = {
       strategy_id: input.strategy_id,
       name: input.name,
-      params: input.params || {},
-      capital_usd: input.capital_usd,
+      params: paramsForWrite(input.schema, input.params),
       account_type: input.account_type || "paper",
       start: true
     };
+    var capital = moneyNumber(input.capital_usd);
+    if (capital != null) body.capital_usd = capital;
     if (input.rpc_ids && input.rpc_ids.length) body.rpc_ids = input.rpc_ids;
     return body;
   }
 
   function copyBody(input) {
-    return {
+    input = input || {};
+    var body = {
       name: input.name,
-      params_patch: input.params || {},
-      capital_usd: input.capital_usd,
+      params_patch: paramsForWrite(input.schema, input.params),
       start: true
     };
+    var capital = moneyNumber(input.capital_usd);
+    if (capital != null) body.capital_usd = capital;
+    return body;
+  }
+
+  var NUMERIC_TYPES = {
+    number: 1, integer: 1, int: 1, float: 1, decimal: 1, double: 1,
+    pct: 1, percent: 1, percentage: 1, usd: 1, ratio: 1
+  };
+
+  function isNumericType(type) { return !!NUMERIC_TYPES[type]; }
+
+  function isGroupType(schema) {
+    var t = schema && schema.type;
+    return t === "object" || t === "group" || t == null || t === "";
+  }
+
+  function fieldKey(p) {
+    if (!p || typeof p !== "object") return "";
+    return p.key || p.name || "";
+  }
+
+  /* BFF 读接口常把参数包成 {value, reason} 或 {value, zh}。写接口要里面的标量。 */
+  function isParamWrapper(obj) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
+    if (!Object.prototype.hasOwnProperty.call(obj, "value")) return false;
+    var keys = Object.keys(obj);
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i] !== "value" && keys[i] !== "reason" && keys[i] !== "zh" && keys[i] !== "unit") return false;
+    }
+    return true;
+  }
+
+  function unwrapParam(value) {
+    var v = value;
+    var guard = 0;
+    while (isParamWrapper(v) && guard < 4) { v = v.value; guard++; }
+    return v;
+  }
+
+  function nestedFields(schema) {
+    if (!schema || typeof schema !== "object") return null;
+    var kids = schema.fields || schema.children;
+    if (Array.isArray(kids) && kids.length) {
+      var list = [];
+      kids.forEach(function (child) {
+        if (!child || typeof child !== "object") return;
+        if (!fieldKey(child) && child.name) child = Object.assign({ key: child.name }, child);
+        if (!fieldKey(child)) return;
+        if (!child.key) child = Object.assign({ key: child.name }, child);
+        list.push(child);
+      });
+      return list.length ? list : null;
+    }
+    var props = schema.properties || schema.params;
+    if (props && typeof props === "object" && !Array.isArray(props)) {
+      return Object.keys(props).map(function (k) {
+        var child = props[k] && typeof props[k] === "object" ? Object.assign({}, props[k]) : {};
+        if (!child.key) child.key = k;
+        return child;
+      });
+    }
+    return null;
+  }
+
+  function leafFields(schema, prefix) {
+    var out = [];
+    (schema || []).forEach(function (raw) {
+      if (!raw || typeof raw !== "object") return;
+      var p = raw.key ? raw : Object.assign({ key: raw.name || "" }, raw);
+      if (!p.key) return;
+      var path = prefix ? prefix + "." + p.key : p.key;
+      var kids = nestedFields(p);
+      if (kids && isGroupType(p) && !isNumericType(p.type)) {
+        out = out.concat(leafFields(kids, path));
+        return;
+      }
+      out.push({ path: path, schema: p });
+    });
+    return out;
+  }
+
+  function indexSchema(schema, byKey) {
+    (schema || []).forEach(function (raw) {
+      if (!raw) return;
+      var key = fieldKey(raw);
+      if (!key) return;
+      var node = raw.key ? raw : Object.assign({ key: key }, raw);
+      byKey[key] = node;
+      var kids = nestedFields(node);
+      if (kids) indexSchema(kids, byKey);
+    });
+  }
+
+  function paramAt(raw, path) {
+    if (!raw || typeof raw !== "object" || !path) return { has: false, value: undefined };
+    if (Object.prototype.hasOwnProperty.call(raw, path)) return { has: true, value: raw[path] };
+    var parts = String(path).split(".");
+    var cur = raw;
+    for (var i = 0; i < parts.length; i++) {
+      if (cur == null || typeof cur !== "object" || Array.isArray(cur) || !Object.prototype.hasOwnProperty.call(cur, parts[i])) {
+        return { has: false, value: undefined };
+      }
+      cur = cur[parts[i]];
+    }
+    return { has: true, value: cur };
+  }
+
+  function assignPath(out, path, value) {
+    var parts = String(path).split(".");
+    var cur = out;
+    for (var i = 0; i < parts.length - 1; i++) {
+      if (!cur[parts[i]] || typeof cur[parts[i]] !== "object" || Array.isArray(cur[parts[i]])) cur[parts[i]] = {};
+      cur = cur[parts[i]];
+    }
+    cur[parts[parts.length - 1]] = value;
+  }
+
+  function blankParam(v) {
+    if (v == null) return true;
+    if (typeof v === "number") return !isFinite(v);
+    if (typeof v === "string") {
+      var t = v.trim();
+      return t === "" || t === "[object Object]";
+    }
+    if (typeof v === "object" && !Array.isArray(v)) {
+      if (isParamWrapper(v)) return blankParam(v.value);
+      return Object.keys(v).length === 0;
+    }
+    return false;
+  }
+
+  function parseNumber(value, schema) {
+    var v = unwrapParam(value);
+    if (typeof v === "boolean" || v == null) return null;
+    if (typeof v === "object") return null;
+    var pct = false;
+    if (typeof v === "string") {
+      var t = v.trim();
+      if (!t || t === "[object Object]") return null;
+      pct = /%$/.test(t);
+      t = t.replace(/[$,\s]/g, "").replace(/%$/, "");
+      if (!/^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(t)) return null;
+      v = Number(t);
+    }
+    if (typeof v !== "number" || !isFinite(v)) return null;
+    var unit = schema && schema.unit;
+    var type = schema && schema.type;
+    if (pct && (unit === "pct" || unit === "percent" || unit === "ratio" || type === "pct" || type === "percent" || type === "percentage")) v = v / 100;
+    if (type === "integer" || type === "int") v = Math.round(v);
+    return v;
+  }
+
+  function coerceLeaf(schema, value, has) {
+    schema = schema || {};
+    if (isNumericType(schema.type)) {
+      var n = has && !blankParam(value) ? parseNumber(value, schema) : null;
+      if (n == null) n = parseNumber(schema.default, schema);
+      return n == null ? undefined : n;
+    }
+    if (schema.type === "bool" || schema.type === "boolean") {
+      var b = has && !blankParam(value) ? unwrapParam(value) : schema.default;
+      if (blankParam(b) && b !== false) return undefined;
+      return b === true || b === "true" || b === "是" || b === 1 || b === "1";
+    }
+    var s = has && !blankParam(value) ? unwrapParam(value) : unwrapParam(schema.default);
+    if (s == null || typeof s === "object") return undefined;
+    if (typeof s === "string" && s.trim() === "[object Object]") return undefined;
+    return s;
+  }
+
+  function moneyNumber(v) {
+    if (typeof v === "number" && isFinite(v)) return v;
+    return parseNumber(v, { type: "number", unit: "usd" });
+  }
+
+  /* 没有 schema 时也扫一遍：数字字符串转 number，包一层 value 的解开，空对象丢掉。 */
+  function sanitizeLoose(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    if (isParamWrapper(value)) {
+      var inner = sanitizeLooseValue(value.value);
+      return inner && typeof inner === "object" && !Array.isArray(inner) ? inner : {};
+    }
+    var out = {};
+    Object.keys(value).forEach(function (k) {
+      var next = sanitizeLooseValue(value[k]);
+      if (next !== undefined) out[k] = next;
+    });
+    return out;
+  }
+
+  function sanitizeLooseValue(v) {
+    if (blankParam(v)) return undefined;
+    if (typeof v === "number") return isFinite(v) ? v : undefined;
+    if (typeof v === "boolean") return v;
+    if (typeof v === "string") {
+      var n = parseNumber(v, { type: "number" });
+      if (n != null && /^[-+$]?(?:\d[\d,]*\.?\d*|\.\d+)%?$/.test(v.trim())) {
+        if (/%$/.test(v.trim())) return n;
+        return n;
+      }
+      return v;
+    }
+    if (Array.isArray(v)) return v;
+    if (isParamWrapper(v)) return sanitizeLooseValue(v.value);
+    var child = sanitizeLoose(v);
+    if (!Object.keys(child).length) return undefined;
+    return child;
+  }
+
+  function paramsForWrite(schema, params) {
+    if (schema && schema.length) return readParams(schema, params || {});
+    return sanitizeLoose(params || {});
+  }
+
+  function fieldInput(schema, value) {
+    schema = schema || {};
+    var v = value == null ? schema.default : value;
+    v = unwrapParam(v);
+    if (blankParam(v) || (v && typeof v === "object")) {
+      v = unwrapParam(schema.default);
+    }
+    if (v == null || typeof v === "object") return "";
+    if (typeof v === "string" && v.trim() === "[object Object]") return "";
+    return String(v);
   }
 
   function paramsEditable(a) {
@@ -498,31 +726,60 @@
   }
 
   function formatParam(v, schema) {
+    if (typeof v === "string" && v.trim() === "[object Object]") return "—";
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      if (isParamWrapper(v)) {
+        if (v.value == null || v.value === "") return "—";
+        return formatParam(v.value, schema);
+      }
+      return "—";
+    }
     if (v == null || v === "") return "—";
     var type = schema && schema.type;
-    if (type === "bool" || typeof v === "boolean") {
+    if (type === "bool" || type === "boolean" || typeof v === "boolean") {
       return v === true || v === "true" || v === 1 || v === "1" ? "是" : "否";
     }
-    if (typeof v === "number" || (typeof v === "string" && v !== "" && isFinite(Number(v)) && type === "number")) {
-      var n = Number(v);
+    var numeric = typeof v === "number" || (typeof v === "string" && isNumericType(type) && parseNumber(v, schema) != null);
+    if (numeric) {
+      var n = typeof v === "number" ? v : parseNumber(v, schema);
+      if (n == null || !isFinite(n)) return "—";
       var unit = schema && schema.unit;
       if (unit === "usd") return "$" + n.toLocaleString("en-US");
       if (unit === "x" || unit === "ratio") return String(n).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "") + "x";
-      if (unit === "pct") return (n * 100).toFixed(1) + "%";
+      if (unit === "pct" || unit === "percent" || type === "pct" || type === "percent" || type === "percentage") return (n * 100).toFixed(1) + "%";
       return String(n);
     }
+    if (typeof v === "object") return "—";
     return String(v);
   }
 
   function diffText(diff, schema) {
-    if (!diff || typeof diff !== "object") return "";
+    if (!diff || typeof diff !== "object" || Array.isArray(diff)) return "";
     var byKey = {};
-    (schema || []).forEach(function (p) { byKey[p.key] = p; });
-    return Object.keys(diff).map(function (k) {
+    indexSchema(schema, byKey);
+    var parts = [];
+    function push(k, v) {
       var sch = byKey[k];
-      var label = sch && sch.label_zh ? sch.label_zh : k;
-      return label + " " + formatParam(diff[k], sch);
-    }).join(" · ");
+      var label = sch && (sch.label_zh || sch.label || sch.title) ? (sch.label_zh || sch.label || sch.title) : k;
+      var text = formatParam(v, sch);
+      if (text.indexOf("[object Object]") >= 0) text = "—";
+      parts.push(label + " " + text);
+    }
+    function walk(obj) {
+      Object.keys(obj).forEach(function (k) {
+        var v = obj[k];
+        var kids = nestedFields(byKey[k]);
+        if (v && typeof v === "object" && !Array.isArray(v) && !isParamWrapper(v)) {
+          var keys = Object.keys(v);
+          if (!keys.length) { push(k, v); return; }
+          var grouped = (kids && kids.length) || keys.every(function (ck) { return !!byKey[ck]; });
+          if (grouped) { walk(v); return; }
+        }
+        push(k, v);
+      });
+    }
+    walk(diff);
+    return parts.join(" · ");
   }
 
   var COMMON_METRICS = [
@@ -609,14 +866,17 @@
       sections.push({
         strategy_id: sid,
         label: (presentText(r.strategy_label) || sid || "策略") + " 参数",
-        rows: schema.map(function (p) {
+        rows: leafFields(schema).map(function (leaf) {
+          var p = leaf.schema;
           return {
-            key: p.key,
-            label: p.label_zh || p.key,
+            key: leaf.path,
+            label: p.label_zh || p.label || p.title || p.key,
             cells: rows.map(function (row) {
               if ((row.strategy_id || "") !== sid) return "—";
-              if (!row.params || !Object.prototype.hasOwnProperty.call(row.params, p.key)) return "—";
-              return formatParam(row.params[p.key], p);
+              var found = paramAt(row.params, leaf.path);
+              if (!found.has) found = paramAt(row.params, p.key);
+              if (!found.has) return "—";
+              return formatParam(found.value, p);
             })
           };
         })
@@ -748,36 +1008,41 @@
 
   function readParams(schema, raw) {
     var out = {};
-    (schema || []).forEach(function (p) {
-      if (raw && Object.prototype.hasOwnProperty.call(raw, p.key)) out[p.key] = coerce(p, raw[p.key]);
-      else if (p.default != null) out[p.key] = p.default;
+    leafFields(schema).forEach(function (leaf) {
+      var found = paramAt(raw, leaf.path);
+      if (!found.has && leaf.schema.key && leaf.schema.key !== leaf.path) found = paramAt(raw, leaf.schema.key);
+      var v = coerceLeaf(leaf.schema, found.has ? found.value : undefined, found.has);
+      if (v === undefined) return;
+      if (isNumericType(leaf.schema.type) && (typeof v !== "number" || !isFinite(v))) return;
+      if (typeof v === "string" && v.trim() === "[object Object]") return;
+      if (v && typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length) return;
+      assignPath(out, leaf.path, v);
     });
     return out;
   }
 
   function coerce(schema, value) {
     if (!schema) return value;
-    if (schema.type === "number") {
-      var n = Number(value);
-      return isFinite(n) ? n : schema.default;
-    }
-    if (schema.type === "bool") return value === true || value === "true" || value === "是" || value === 1 || value === "1";
-    return value;
+    var kids = nestedFields(schema);
+    if (kids && isGroupType(schema)) return readParams(kids, value && typeof value === "object" ? value : {});
+    return coerceLeaf(schema, value, true);
   }
 
   function validateParams(schema, params) {
     var problems = [];
-    (schema || []).forEach(function (p) {
-      var v = params ? params[p.key] : undefined;
-      if (p.type === "number") {
-        if (v == null || !isFinite(Number(v))) {
-          problems.push((p.label_zh || p.key) + " 需要填数字。");
-          return;
-        }
-        var n = Number(v);
-        if (p.min != null && n < p.min) problems.push((p.label_zh || p.key) + " 不能小于 " + p.min + "。请改大。");
-        if (p.max != null && n > p.max) problems.push((p.label_zh || p.key) + " 不能大于 " + p.max + "。请改小。");
+    leafFields(schema).forEach(function (leaf) {
+      var p = leaf.schema;
+      if (!isNumericType(p.type)) return;
+      var found = paramAt(params, leaf.path);
+      var v = found.has ? found.value : undefined;
+      var label = p.label_zh || p.label || p.title || p.key;
+      if (v == null || v === "" || typeof v === "object" || !isFinite(Number(v))) {
+        problems.push(label + " 需要填数字。");
+        return;
       }
+      var n = Number(v);
+      if (p.min != null && n < p.min) problems.push(label + " 不能小于 " + p.min + "。请改大。");
+      if (p.max != null && n > p.max) problems.push(label + " 不能大于 " + p.max + "。请改小。");
     });
     return problems;
   }
@@ -806,6 +1071,18 @@
           account_count: 47,
           params_schema: [
             { key: "copy_ratio", label_zh: "跟单比例", help_zh: "相对领导者成交额的比例。", type: "number", default: 0.3, min: 0.05, max: 1, step: 0.05, unit: "x" },
+            {
+              key: "risk", label_zh: "上限", help_zh: "单笔跟单最多用多少钱。", type: "object",
+              fields: [
+                { key: "max_per_trade_usd", label_zh: "单笔上限", help_zh: "一笔跟单最多用这么多钱。", type: "number", default: 5, min: 1, max: 5000, step: 1, unit: "usd" }
+              ]
+            },
+            {
+              key: "exit", label_zh: "出场", help_zh: "浮亏达到这个比例就平仓。", type: "object",
+              properties: {
+                stop_loss_pct: { key: "stop_loss_pct", label_zh: "止损", help_zh: "相对成本的亏损比例，0 到 1。", type: "number", default: 0.12, min: 0, max: 1, step: 0.01, unit: "pct" }
+              }
+            },
             { key: "fees_on", label_zh: "计算手续费", help_zh: "打开后，收益率按扣费后的净值计算。", type: "bool", default: false },
             { key: "daily_loss_usd", label_zh: "日亏上限", help_zh: "当天已实现亏损达到这个数就停止开新仓。", type: "number", default: 800, min: 0, max: 50000, step: 50, unit: "usd" },
             { key: "max_positions", label_zh: "最大持仓数", help_zh: "同时持有的市场上限。", type: "number", default: 200, min: 1, max: 500, step: 1 }
@@ -889,8 +1166,8 @@
         id: "paper20000", name: "paper20000", strategy_id: "copy", strategy_label: "跟单 copy", state: "running",
         series: null,
         capital_usd: 20000, current_segment: 2,
-        params: { copy_ratio: 0.3, fees_on: false, daily_loss_usd: 800, max_positions: 200 },
-        params_diff: { copy_ratio: 0.3 },
+        params: { copy_ratio: 0.3, fees_on: false, daily_loss_usd: 800, max_positions: 200, risk: { max_per_trade_usd: { value: 15, reason: null } }, exit: { stop_loss_pct: { value: 0.12, reason: null } } },
+        params_diff: { copy_ratio: 0.3, stop_loss_pct: { value: 0.12, reason: null }, max_per_trade_usd: { value: 15, reason: null } },
         rpc_capacity: { required_rpm: 180, available_rpm: 420, observed_429_1h: 0, providers_healthy: 3, providers_total: 3, status: "ok" },
         metrics: m(22690, 2690, 0.135, 312, 3002, 1280, 0.172, 9, 12),
         segments: [
@@ -1218,6 +1495,10 @@
     chartModel: chartModel,
     pickHero: pickHero,
     readParams: readParams,
+    leafFields: leafFields,
+    nestedFields: nestedFields,
+    paramAt: paramAt,
+    fieldInput: fieldInput,
     validateParams: validateParams,
     selectionError: selectionError,
     mockStrategies: mockStrategies,
