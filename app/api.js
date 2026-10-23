@@ -388,18 +388,38 @@ async function renderAccount(){
   else if($("#ac-act")){ const sec=$("#ac-act"); const hd=sec.querySelector(".hd"); sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>'; }
 }
 /* ---------- Leaders 在跟（注册表） ---------- */
-/* 对接 polymarket-copy-engine#56，不另加路径：
-   GET  /v1/accounts/{strategy}/leaders?window=90d
-   POST /v1/accounts/{strategy}/leaders   body {address}
-   DELETE /v1/accounts/{strategy}/leaders/{address}
-   响应 active[] + following_count；engine_sync 为 registry_only 时提示下次筛选/热推后才跟。
-   策略实例与账户页相同：?s= 优先，否则 GET /v1/accounts 的第一项。都没有就不编造在跟行。
+/* GET/POST/DELETE /v1/accounts/{id}/leaders。id 优先用当前账户 uuid（与账户详情/总览同一 id）。
+   没有 uuid 才退回策略名，后端仍兼容按名。?s= 只筛选页上要看的策略实例，不拿去当账户路径。
+   策略实例：?s= 优先，否则 /v1/accounts 的第一项。都没有就不编造在跟行。
    ?mock=1 或 ?fixture=1：不打 BFF，用 sessionStorage 里的同形状 fixture。去掉这两个参数即走真接口。 */
 const LEADERS_WINDOW="90d";
-function leadersReadPath(strategy){ return "/v1/accounts/"+encodeURIComponent(strategy)+"/leaders?window="+encodeURIComponent(LEADERS_WINDOW); }
-function leadersWritePath(strategy, address){
-  const base="/v1/accounts/"+encodeURIComponent(strategy)+"/leaders";
+function leadersReadPath(accountKey){ return "/v1/accounts/"+encodeURIComponent(accountKey)+"/leaders?window="+encodeURIComponent(LEADERS_WINDOW); }
+function leadersWritePath(accountKey, address){
+  const base="/v1/accounts/"+encodeURIComponent(accountKey)+"/leaders";
   return address?base+"/"+encodeURIComponent(address):base;
+}
+function leadersStrategyRows(list){
+  const rows=Array.isArray(list&&list.accounts)?list.accounts:(Array.isArray(list&&list.items)?list.items:[]);
+  return rows.filter(a=>a&&a.strategy&&a.strategy!=="null"&&a.strategy!=="undefined");
+}
+/* 页上 ?s= 对上唯一一条才用它的 uuid。对上多条不猜。 */
+function leadersRowForStrategy(accounts, strategy){
+  const name=presentAccountId(strategy);
+  if(!name)return null;
+  const hits=(accounts||[]).filter(a=>a&&sameAccountLabel(a.strategy,name));
+  return hits.length===1?hits[0]:null;
+}
+/* 有 uuid 必须走 uuid。列表行上没有时，用和总览同一份账户目录再对一次策略名。仍没有才退回策略名。 */
+async function leadersRequestKey(accounts, strategy){
+  const name=presentAccountId(strategy);
+  const own=accountRecordUuid(leadersRowForStrategy(accounts, name));
+  if(own)return own;
+  if(!name)return "";
+  try{
+    const uuid=matchAccountUuid(name, await loadAccountCatalog());
+    if(uuid)return uuid;
+  }catch(e){}
+  return name;
 }
 const FIX_KEY="pm_leaders_fixture";
 const BOARD_CACHE="pm_board_rows";
@@ -410,7 +430,8 @@ const FIX_CATALOG=[
   {address:"0x69d1983b8a327b2eb2897c7fc85ac6f637047c8b",user_name:"avalon",x_username:"avalon",smart_score:64.1},
   {address:"0x6e2c0e9474af7d720e5aba2a5b0bb6f723b7787c",user_name:null,x_username:null,smart_score:null,smart_score_reason:"not_yet_aggregated"}
 ];
-let ldStrategy="", ldActive=[], ldMain="", ldBound=false, fixFresh=false;
+let ldStrategy="", ldAccountKey="", ldActive=[], ldMain="", ldBound=false, fixFresh=false;
+function leadersCurrentKey(){ return ldAccountKey||ldStrategy; }
 function leadersUseFixture(){ return Q.get("fixture")==="1" || (Q.get("mock")==="1" && (PAGE==="leaders" || PAGE==="markets")); }
 function parseAddr(v){ const s=String(v==null?"":v).trim().toLowerCase(); return ADDR_RE.test(s)?s:""; }
 function appHref(path, params){
@@ -635,11 +656,12 @@ async function writeLeader(method, address){
   if(!addr){ const err=new Error("地址需要是 0x 开头的 40 位十六进制"); err.status=400; throw err; }
   if(!ldStrategy){ const err=new Error("没有策略实例"); err.status=404; throw err; }
   if(leadersUseFixture()) return fixtureWrite(method, ldStrategy, addr);
+  const key=leadersCurrentKey();
   const d=method==="DELETE"
-    ? await api(leadersWritePath(ldStrategy, addr),{method:"DELETE"})
-    : await api(leadersWritePath(ldStrategy),{method:"POST",body:{address:addr}});
+    ? await api(leadersWritePath(key, addr),{method:"DELETE"})
+    : await api(leadersWritePath(key),{method:"POST",body:{address:addr}});
   if(d && Array.isArray(d.active)) return normalizeLeaders(d);
-  return normalizeLeaders(await api(leadersReadPath(ldStrategy)));
+  return normalizeLeaders(await api(leadersReadPath(key)));
 }
 async function afterWrite(d){
   closeOvls();
@@ -696,16 +718,19 @@ async function renderLeaders(){
   bindLeadersUi();
   const fx=leadersUseFixture();
   let accounts=[];
+  ldStrategy="";
+  ldAccountKey="";
   try{
     if(fx){
       ldStrategy=Q.get("s")||"paper";
+      ldAccountKey=ldStrategy;
       accounts=[{strategy:"paper"}];
       if(ldStrategy!=="paper") accounts.push({strategy:ldStrategy});
     }else{
       const list=await api("/v1/accounts");
-      const rows=Array.isArray(list.accounts)?list.accounts:(Array.isArray(list.items)?list.items:[]);
-      accounts=rows.filter(a=>a&&a.strategy&&a.strategy!=="null"&&a.strategy!=="undefined");
-      ldStrategy=Q.get("s")||(accounts[0]&&accounts[0].strategy)||"";
+      accounts=leadersStrategyRows(list);
+      ldStrategy=presentAccountId(Q.get("s"))||(accounts[0]&&accounts[0].strategy)||"";
+      ldAccountKey=ldStrategy?await leadersRequestKey(accounts, ldStrategy):"";
     }
   }catch(e){
     leadersFail(e);
@@ -726,7 +751,7 @@ async function renderLeaders(){
       data=fixtureRead(ldStrategy);
       ldMain=ldStrategy==="paper"?fixtureState().main_leader:"";
     }else{
-      data=normalizeLeaders(await api(leadersReadPath(ldStrategy)));
+      data=normalizeLeaders(await api(leadersReadPath(leadersCurrentKey())));
       ldMain="";
       try{
         const ov=await api("/v1/overview?range=24h");
@@ -751,7 +776,7 @@ async function renderLeaders(){
         next:data.next_cursor,
         limit:20,
         async load(cursor, limit){
-          const base=leadersReadPath(ldStrategy)+"&limit="+encodeURIComponent(limit);
+          const base=leadersReadPath(leadersCurrentKey())+"&limit="+encodeURIComponent(limit);
           const path=base+(cursor?"&cursor="+encodeURIComponent(cursor):"");
           try{
             const d=normalizeLeaders(await api(path));
@@ -805,6 +830,7 @@ async function renderStrategies(){
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
 window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,
   accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
+  leadersReadPath,leadersWritePath,leadersRequestKey,leadersCurrentKey,renderLeaders,writeLeader,
   saveDraft:(id,params,name)=>api("/v1/me/strategies/"+encodeURIComponent(id),{method:"PATCH",body:{params,mode:"paper"},confirm:name}),
   createDraft:(name,template_id,params)=>api("/v1/me/strategies",{method:"POST",body:{name,template_id,params,mode:"paper"},confirm:name})};
 
