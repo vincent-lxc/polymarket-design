@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Wakeloom 织迹 官网静态生成器。
-用法：python3 tools/build_site.py   （在仓库根目录运行，输出写到 zh/ en/ 及根目录的 index.html、sitemap.xml、robots.txt）
+用法：python3 tools/build_site.py   （在仓库根目录运行，输出写到 zh/ en/ 及根目录的 index.html、sitemap.xml、robots.txt、llms.txt）
 数据：构建时读公开接口生成 SEO 快照（排行榜 + 前 50 详情 + JSON-LD）；页面打开后由 site-live.js 再请求接口刷新数字。其余 leader 走 _shell + _redirects。
 """
 import json, os, re, sys, html, shutil, urllib.request, datetime as dt
@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = "https://www.wakeloom.com"
+# 根路径分享图。不能用 favicon；尺寸 1200×630，由 tools/render_og_home.py 生成。
+OG_IMAGE = SITE + "/assets/og-home.png"
 API = os.environ.get("WAKELOOM_API", "https://api.wakeloom.com").rstrip("/")
 MIN_RESOLVED = 20          # 详情页只收录已结算市场数 ≥ N 的地址
 BUILT = dt.datetime.now(dt.timezone.utc)
@@ -464,11 +466,31 @@ def content(lang):
     fp = {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in qs]}
     write(f"{lang}/faq/index.html", page(lang, "faq/", "faq", body, [fp, crumbs(lang, [(L("常见问题", "FAQ"), "faq/")])]))
 
+ROOT_TITLE = "Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘 | Wallet analytics for Polymarket"
+ROOT_DESC = "从链上历史筛出长期表现稳定的 Polymarket 交易者，先用模拟盘跟单再决定。Find Polymarket traders with steady long-term results and paper-trade them first."
+
+def root_social():
+    """根路径 / 的 OG / Twitter。og:url 与 canonical 同为站点根，不用 favicon。"""
+    title, desc = E(ROOT_TITLE), E(ROOT_DESC)
+    alt = E("Wakeloom 织迹，用于 Polymarket 的钱包分析与模拟盘")
+    return (
+        f'<meta property="og:type" content="website"><meta property="og:site_name" content="Wakeloom">'
+        f'<meta property="og:title" content="{title}"><meta property="og:description" content="{desc}">'
+        f'<meta property="og:url" content="{SITE}/"><meta property="og:image" content="{OG_IMAGE}">'
+        f'<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">'
+        f'<meta property="og:image:alt" content="{alt}">'
+        f'<meta property="og:locale" content="zh_CN"><meta property="og:locale:alternate" content="en_US">'
+        f'<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{title}">'
+        f'<meta name="twitter:description" content="{desc}"><meta name="twitter:image" content="{OG_IMAGE}">'
+        f'<meta name="twitter:image:alt" content="{alt}">'
+    )
+
 def root(D):
     graph = ld_clean({"@context": "https://schema.org", "@graph": [ORG, website("zh")]})
-    s = f'''<!doctype html><html lang="zh-CN" data-waitlist="{"on" if WAITLIST_ON else "off"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘 | Wallet analytics for Polymarket</title>
-<meta name="description" content="从链上历史筛出长期表现稳定的 Polymarket 交易者，先用模拟盘跟单再决定。Find Polymarket traders with steady long-term results and paper-trade them first.">
+    s = f'''<!doctype html><html lang="zh-CN" data-waitlist="{"on" if WAITLIST_ON else "off"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{E(ROOT_TITLE)}</title>
+<meta name="description" content="{E(ROOT_DESC)}">
 <link rel="canonical" href="{SITE}/"><link rel="alternate" hreflang="zh-CN" href="{SITE}/zh/"><link rel="alternate" hreflang="en" href="{SITE}/en/"><link rel="alternate" hreflang="x-default" href="{SITE}/">
+{root_social()}
 <link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icons/wakeloom.svg" type="image/svg+xml"><link rel="stylesheet" href="/site.css?v={CSS_V}"><meta name="theme-color" content="#0d0d10">
 <script type="application/ld+json">{json.dumps(graph, ensure_ascii=False, separators=(",", ":"))}</script>
 <script>/* 只在根路径（x-default 选语言页）跳转一次：手动选过的优先，其次 navigator.languages 第一项，zh 开头去中文，其余英文。/zh/ /en/ 页面本身不跳转。 */
@@ -552,6 +574,83 @@ def write_redirects():
     ]
     write("_redirects", "\n".join(lines) + "\n")
 
+# llms.txt 的结论摘要。问题原文必须和 FAQ 一致；这里不写收费、价格、评分，也不链到 app 子域。
+LLMS_SUMMARY = {
+ "zh": [
+  ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例跟随。Wakeloom 第一期只做模拟盘，实盘跟单即将推出。"),
+  ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。近 90 天同时看胜率、收益率、最大回撤，以及收益是否集中在一个事件上。"),
+  ("Polymarket 排行榜第一名值得跟吗？", "不一定。按金额排的榜首常常是一次重仓押中，或成交里有刷量和做市对冲，这类表现很难复制。上榜也不代表以后还会这样。"),
+  ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。发现对方成交到自己下单之间有延迟，薄盘口还会更差。偏离过大就放弃，先在模拟盘里看扣掉成本后的结果。"),
+  ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。登录时的签名不能用来转账，也不能授权交易。"),
+  ("胜率和收益率哪个更重要？", "单看哪个都不够，要和回撤一起看。高胜率也可能一次失手就抹掉多次结果。"),
+  ("对方平仓了我怎么办？", "跟着平。对方减仓或平仓时，按同样比例减仓或平仓。一键暂停所有跟随的全局停止即将推出。"),
+  ("数据从哪来？多久更新？", "来自 Polygon 链上成交记录和 Polymarket 的公开接口。拿不到的数据显示「无数据」，不会用 0 填充，页面会写明数据截至时间。"),
+  ("跟单有风险吗？会亏钱吗？", "有风险，也会亏钱。过去的表现不代表以后。第一期只开放模拟盘。"),
+  ("Wakeloom 和 Polymarket 是什么关系？", "没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。"),
+ ],
+ "en": [
+  ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet and mirror it proportionally. Wakeloom's first phase is paper trading only. Live copy trading is coming soon (即将推出)."),
+  ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days and check win rate, ROI, max drawdown, and whether results come from a single event."),
+  ("Is the #1 trader on a Polymarket leaderboard worth copying?", "Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future."),
+  ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. The market can move before the next order, and thin books are worse. Trades that deviate too far are skipped. Net results are measured in paper trading first."),
+  ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or holds your private key. The login signature cannot transfer funds or approve trades."),
+  ("Which matters more, win rate or ROI?", "Neither alone. Read them together with drawdown. A high win rate can still be wiped out by one loss."),
+  ("What happens when the trader I follow closes a position?", "We close too, by the same proportion. A global stop that pauses all copying at once is coming soon (即将推出)."),
+  ("Where does the data come from, and how often is it updated?", 'From Polygon on-chain fills and Polymarket\'s public APIs. Missing values are shown as "No data", never filled with 0, and each page states its data time.'),
+  ("Is copy trading risky? Can I lose money?", "Yes. It is risky and you can lose money. Past results do not predict future ones. Phase one is paper trading only."),
+  ("How is Wakeloom related to Polymarket?", "It is not affiliated. Wakeloom is an independent analytics tool for Polymarket and only reads public on-chain and API data."),
+ ],
+}
+LLMS_BAN = ("稳赚", "保证收益", "保证盈利", "guaranteed", "app.wakeloom.com", "收费", "评分", "价格", "price", "rating", "$", "¥")
+
+def write_llms():
+    for lang in ("zh", "en"):
+        if [q for q, _ in FAQ[lang]] != [q for q, _ in LLMS_SUMMARY[lang]]:
+            raise SystemExit(f"llms.txt 的{lang}问题列表和 FAQ 不一致")
+    pages = [
+        (f"{SITE}/", "首页（语言选择，中英）", "双语入口。公测前预览，尚未正式上线。"),
+        (f"{SITE}/zh/", "首页（中文）", "用于 Polymarket 的钱包分析与模拟盘跟单。"),
+        (f"{SITE}/en/", "Home (English)", "Wallet analytics and paper copy trading for Polymarket."),
+        (f"{SITE}/zh/leaderboard/", "排行榜", "按长期表现排序，而不是单次重仓。"),
+        (f"{SITE}/en/leaderboard/", "Leaderboard", "Consistent traders, not one-off whales."),
+        (f"{SITE}/zh/how-it-works/", "选人方法", "近 90 天窗口、回撤，以及排除单次重仓和刷量的规则。"),
+        (f"{SITE}/en/how-it-works/", "How it works", "How wallets are selected and which stats are shown."),
+        (f"{SITE}/zh/copy-trading/", "模拟盘跟单", "第一期只有模拟盘。实盘跟单即将推出。"),
+        (f"{SITE}/en/copy-trading/", "Paper copy trading", "Paper trading only in phase one. Live copy trading is coming soon (即将推出)."),
+        (f"{SITE}/zh/faq/", "常见问题", "每题先给结论。"),
+        (f"{SITE}/en/faq/", "FAQ", "Each answer leads with the conclusion."),
+        (f"{SITE}/zh/risk/", "风险提示", "跟单会亏钱；目前只有模拟盘。"),
+        (f"{SITE}/en/risk/", "Risk notice", "Copy trading can lose money. Paper trading only for now."),
+        (f"{SITE}/zh/about/", "关于", "Wakeloom 织迹是什么。"),
+        (f"{SITE}/en/about/", "About", "What Wakeloom is."),
+        (f"{SITE}/zh/privacy/", "隐私", "收集哪些数据、怎么使用。"),
+        (f"{SITE}/en/privacy/", "Privacy", "What data is collected and how it is used."),
+        (f"{SITE}/zh/terms/", "条款", "使用 Wakeloom 的条款。"),
+        (f"{SITE}/en/terms/", "Terms", "The terms for using Wakeloom."),
+    ]
+    lines = [
+        "# Wakeloom 织迹",
+        "",
+        "> 公测前预览，尚未正式上线。Wakeloom 织迹是用于 Polymarket 的钱包分析与模拟盘跟单工具。实盘跟单即将推出。",
+        "",
+        "Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trade copying a wallet before using money. This site is a pre-launch preview and is not yet launched. Live copy trading is coming soon (即将推出). Copy trading can lose money. Past results are not future results.",
+        "",
+        "## 主要页面 / Pages",
+        "",
+    ]
+    lines += [f"- [{name}]({url}): {note}" for url, name, note in pages]
+    lines += ["", "## FAQ 结论摘要 / FAQ conclusions", "", "### 中文", ""]
+    lines += [f"- **{q}** {a}" for q, a in LLMS_SUMMARY["zh"]]
+    lines += ["", "### English", ""]
+    lines += [f"- **{q}** {a}" for q, a in LLMS_SUMMARY["en"]]
+    lines += [""]
+    text = "\n".join(lines)
+    low = text.lower()
+    for w in LLMS_BAN:
+        if w.lower() in low:
+            raise SystemExit(f"llms.txt 含红线用词 {w}")
+    write("llms.txt", text)
+
 def main():
     D = load()
     snaps = D.get("snap_pages") or []
@@ -561,7 +660,7 @@ def main():
         home(lang, D); leaderboard(lang, D); content(lang); leader_shell(lang)
         rk = {l["address"].lower(): i + 1 for i, l in enumerate(D["leaders"])}
         for a, u in snaps: leader(lang, a, u, rk.get(a), D)
-    root(D); sitemap(D); write_redirects()
+    root(D); sitemap(D); write_redirects(); write_llms()
     json.dump({"built_at": BUILT.strftime("%Y-%m-%dT%H:%M:%SZ"), "data_as_of": D["as_of"], "source": API + (D["source"] or ""), "leaders": len(D["leaders"]), "leader_pages_seo": len(snaps), "sitemap_addrs": len(D["pages"]), "mode": "client-live+seo-snap-50", "sitemap_api": D["sitemap_ok"], "error": D["err"]},
               open(os.path.join(ROOT, "build-info.json"), "w"), indent=1)
 
