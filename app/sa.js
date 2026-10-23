@@ -11,6 +11,17 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+  function uiLang() {
+    var lang = window.PMLang && PMLang.lang;
+    if (lang === "en" || lang === "zh") return lang;
+    return document.documentElement && document.documentElement.dataset.lang === "en" ? "en" : "zh";
+  }
+  function onboardPhrase() {
+    return SA.onboardMessage(uiLang());
+  }
+  function onboardHtml() {
+    return '<span class="sa-onboard">' + esc(onboardPhrase()) + "</span>";
+  }
   function q() { return new URLSearchParams(location.search); }
   function mockMode() { return q().get("mock") === "1" && q().get("sa") === "1"; }
   function api(path, opt) {
@@ -22,6 +33,8 @@
     var now = q();
     if (now.get("mock") === "1") u.searchParams.set("mock", "1");
     if (now.get("sa") === "1") u.searchParams.set("sa", "1");
+    var lang = now.get("lang");
+    if (lang === "zh" || lang === "en") u.searchParams.set("lang", lang);
     Object.keys(params || {}).forEach(function (k) {
       if (params[k] != null && params[k] !== "") u.searchParams.set(k, String(params[k]));
     });
@@ -318,6 +331,7 @@
   }
 
   function statusHtml(a) {
+    if (SA.engineOnboarding(a)) return '<span class="sa-status wait">' + esc(SA.onboardStatus(uiLang())) + "</span>";
     var label = SA.stateLabel(a.state);
     return '<span class="sa-status ' + (a.state === "running" ? "run" : "stop") + '">' + esc(label) + "</span>";
   }
@@ -388,15 +402,16 @@
 
   function accountCells(a, schema) {
     var m = a.metrics || {};
+    var on = SA.engineOnboarding(a);
     return [
       esc(SA.strategyCaption(a)),
       '<b>' + esc(a.name) + "</b>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a),
       esc(SA.formatUsd(a.capital_usd, false)),
-      '<span class="' + (m.net_pnl_usd > 0 ? "up" : m.net_pnl_usd < 0 ? "dn" : "") + '">' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span>",
-      '<span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + "</span>",
+      on ? onboardHtml() : '<span class="' + (m.net_pnl_usd > 0 ? "up" : m.net_pnl_usd < 0 ? "dn" : "") + '">' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span>",
+      on ? onboardHtml() : '<span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + "</span>",
       esc(m.trades == null ? "—" : Number(m.trades).toLocaleString("en-US")),
       esc(SA.formatUsd(m.fees_usd, false)),
-      esc(SA.formatPct(m.max_drawdown_pct)),
+      on ? onboardHtml() : esc(SA.formatPct(m.max_drawdown_pct)),
       esc(SA.formatRuntime(m.runtime_sec)),
       esc(a.current_segment == null ? "—" : String(a.current_segment)),
       statusHtml(a) + (a.archived ? ' <span class="tag">已归档</span>' : "")
@@ -411,7 +426,9 @@
   function cardHtml(a, schema) {
     var m = a.metrics || {};
     var pick = SA.selectionId(a);
-    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + '</div><div class="ret ' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</div><div class="sa-meta">' + esc(SA.strategyCaption(a)) + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
+    var on = SA.engineOnboarding(a);
+    var ret = on ? '<div class="ret sa-onboard">' + esc(onboardPhrase()) + "</div>" : '<div class="ret ' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + "</div>";
+    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + "</div>" + ret + '<div class="sa-meta">' + esc(SA.strategyCaption(a)) + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
   }
   var HEAD = "<tr><th></th><th>账户</th><th>策略</th><th class='r'>资金</th><th class='r'>净收益</th><th class='r'>收益率</th><th class='r'>成交</th><th class='r'>手续费</th><th class='r'>回撤</th><th class='r'>运行时长</th><th class='r'>分段</th><th>状态</th><th class='r'>操作</th></tr>";
 
@@ -644,7 +661,9 @@
           capital_usd: capital,
           current_segment: 1,
           segments: [{ segment: 1, started_at: new Date().toISOString(), ended_at: null, params_diff_vs_prev: null }],
-          metrics: { equity_usd: capital, net_pnl_usd: 0, return_pct: 0, fees_usd: 0, gross_pnl_usd: 0, trades: 0, open_positions: 0, max_drawdown_pct: 0, runtime_sec: 0 },
+          metrics: { equity_usd: 0, net_pnl_usd: 0, return_pct: 0, fees_usd: 0, gross_pnl_usd: 0, trades: 0, open_positions: 0, max_drawdown_pct: 0, runtime_sec: 0 },
+          reasons: { equity_usd: "no_equity_points", return_pct: "no_equity_points", equity_curve: "no_equity_points" },
+          series: { points: [] },
           pending_settlement_count: 0,
           wallet_close_status: { open_positions_count: 0, unwithdrawn_usd: 0, can_delete: false },
           copied_from: fromId || null
@@ -754,8 +773,26 @@
   }
   function legendHtml(lines) {
     return '<div class="sa-legend">' + lines.map(function (l) {
-      return '<button type="button" data-act="focus" data-id="' + esc(l.account_id) + '"' + (l.accent ? ' class="on"' : "") + '><i style="border-top-color:' + l.color + (l.dash ? ";border-top-style:dashed" : "") + '"></i>' + labeledName(l.name || l.account_id, l.archived) + "</button>";
+      var tag = l.onboarding ? ' <span class="sa-status wait">' + esc(SA.onboardStatus(uiLang())) + "</span>" : "";
+      return '<button type="button" data-act="focus" data-id="' + esc(l.account_id) + '"' + (l.accent ? ' class="on"' : "") + '><i style="border-top-color:' + l.color + (l.dash ? ";border-top-style:dashed" : "") + '"></i>' + labeledName(l.name || l.account_id, l.archived) + tag + "</button>";
     }).join("") + "</div>";
+  }
+  function compareChartHtml(model) {
+    var lines = model.lines || [];
+    var anyPoints = lines.some(function (l) { return l.points && l.points.length; });
+    var waiting = lines.filter(function (l) { return l.onboarding; });
+    var phrase = onboardPhrase();
+    var body = (!anyPoints && waiting.length)
+      ? '<div class="ndbox sa-empty-curve" role="status" id="sa-onboard-curve"><span class="nd sa-onboard">' + esc(phrase) + "</span></div>"
+      : chartSvg(model) + '<div class="sa-tip"></div>';
+    var note = anyPoints && waiting.length
+      ? '<p class="sa-note" id="sa-onboard-note">' + waiting.map(function (l) { return esc((l.name || l.account_id) + " · " + phrase); }).join("<br>") + "</p>"
+      : "";
+    return body + legendHtml(lines) + note;
+  }
+  function compareHeadName(r) {
+    var tag = SA.engineOnboarding(r) ? ' <span class="sa-status wait">' + esc(SA.onboardStatus(uiLang())) + "</span>" : "";
+    return labeledName(r.name, r.archived) + tag;
   }
   function detailSeries(a) {
     var fromSeries = a && a.series && Array.isArray(a.series.points) ? a.series.points : null;
@@ -775,14 +812,20 @@
     var flash = detailState.flash || [];
     detailState.flash = [];
     var series = detailSeries(a);
+    var on = SA.engineOnboarding(a);
     var chart = "";
-    if (series) {
+    if (on) {
+      chart = '<div class="ndbox sa-empty-curve" role="status" id="sa-onboard-curve"><span class="nd sa-onboard">' + esc(onboardPhrase()) + "</span></div>";
+    } else if (series) {
       var model = SA.chartModel([series], { focusId: a.id, axis: "calendar", metric: "return_pct", width: 720, height: 240 });
       chart = '<div class="sa-chart hero" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
       detailState.model = model;
     } else {
       chart = '<div class="ndbox sa-empty-curve" role="status"><span class="nd">暂无曲线数据</span></div>';
     }
+    var eqBlock = on
+      ? '<section class="card" id="sa-eq"><div class="sa-big sa-onboard">' + esc(onboardPhrase()) + '</div><div class="sa-sub"><span class="sa-onboard">' + esc(onboardPhrase()) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>"
+      : '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(SA.formatUsd(m.equity_usd, false)) + '</div><div class="sa-sub"><span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</span><span>净收益 ' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>";
     var segList = (a.segments || []).map(function (seg) {
       var diff = seg.params_diff_vs_prev ? SA.diffText(seg.params_diff_vs_prev, schema) : "";
       return "<li>第 " + esc(seg.segment) + " 段" + (diff ? " · " + esc(diff) : "") + "</li>";
@@ -790,7 +833,7 @@
     var locked = !SA.paramsEditable(a);
     var fields = schema.map(function (p) { return fieldHtml(p, (a.params || {})[p.key]); }).join("");
     var legacyLine = act.legacy ? '<p class="sa-warn" id="sa-legacy" role="status">' + esc(act.note) + "</p>" : "";
-    mount.innerHTML = '<div class="top"><h1>' + esc(a.name) + '</h1>' + statusHtml(a) + '<a class="btn sm" href="' + esc(href("/account")) + '">全部账户</a></div>' + legacyLine + banner(flash, false) + '<div id="sa-err"></div>' + settleHtml(a) + rpcHtml(a) + '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(SA.formatUsd(m.equity_usd, false)) + '</div><div class="sa-sub"><span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</span><span>净收益 ' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>" + '<section class="card" id="sa-curve"><div class="sa-chartbar"><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div></div>" + chart + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "") + "</section>" + '<section class="card" id="sa-params"><div class="hd"><h2>参数</h2>' + (locked ? '<span class="tag">只读</span>' : '<span class="tag or">可编辑</span>') + '</div>' + (act.lockHint && a.state === "running" ? '<div class="sa-warn">' + esc(act.lockHint) + "</div>" : "") + (act.note && !act.legacy ? '<div class="sa-warn">' + esc(act.note) + "</div>" : "") + '<form class="sa-form' + (locked ? " sa-lock" : "") + '" id="sa-edit">' + fields + "</form><div class='sa-ops' style='margin-top:12px'>" + opsHtml(a) + (locked ? "" : '<button type="button" class="btn pri" data-act="save-start">保存并启动</button>') + "</div></section>" + '<section class="card" id="sa-pos"><div class="hd"><h2>持仓</h2></div><div id="sa-pos-body"></div></section><section class="card" id="sa-trd"><div class="hd"><h2>成交</h2></div><div id="sa-trd-body"></div></section>';
+    mount.innerHTML = '<div class="top"><h1>' + esc(a.name) + '</h1>' + statusHtml(a) + '<a class="btn sm" href="' + esc(href("/account")) + '">全部账户</a></div>' + legacyLine + banner(flash, false) + '<div id="sa-err"></div>' + settleHtml(a) + rpcHtml(a) + eqBlock + '<section class="card" id="sa-curve"><div class="sa-chartbar"><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div></div>" + chart + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "") + "</section>" + '<section class="card" id="sa-params"><div class="hd"><h2>参数</h2>' + (locked ? '<span class="tag">只读</span>' : '<span class="tag or">可编辑</span>') + '</div>' + (act.lockHint && a.state === "running" ? '<div class="sa-warn">' + esc(act.lockHint) + "</div>" : "") + (act.note && !act.legacy ? '<div class="sa-warn">' + esc(act.note) + "</div>" : "") + '<form class="sa-form' + (locked ? " sa-lock" : "") + '" id="sa-edit">' + fields + "</form><div class='sa-ops' style='margin-top:12px'>" + opsHtml(a) + (locked ? "" : '<button type="button" class="btn pri" data-act="save-start">保存并启动</button>') + "</div></section>" + '<section class="card" id="sa-pos"><div class="hd"><h2>持仓</h2></div><div id="sa-pos-body"></div></section><section class="card" id="sa-trd"><div class="hd"><h2>成交</h2></div><div id="sa-trd-body"></div></section>';
     if (locked) document.querySelectorAll("#sa-edit input,#sa-edit select").forEach(function (el) { el.disabled = true; });
     var host = document.getElementById("sa-chart");
     if (host && detailState.model) bindChart(host, detailState.model, function () {});
@@ -842,17 +885,18 @@
     focusId = compareState.focus || (d.series[0] && d.series[0].account_id) || "";
     var model = SA.chartModel(d.series || [], { focusId: focusId, hoverId: compareState.hover || "", axis: d.axis, metric: d.metric, width: 760, height: 280 });
     compareState.model = model;
-    var table = SA.compareTableModel(d.schemas || compareState.schemas || {}, d.table || []);
-    var head = "<tr><th>指标</th>" + (d.table || []).map(function (r) { return "<th>" + labeledName(r.name, r.archived) + "</th>"; }).join("") + "</tr>";
-    function tr(row) { return "<tr><th>" + esc(row.label) + "</th>" + row.cells.map(function (c) { return "<td class='num'>" + esc(c) + "</td>"; }).join("") + "</tr>"; }
+    var table = SA.compareTableModel(d.schemas || compareState.schemas || {}, d.table || [], uiLang());
+    var head = "<tr><th>指标</th>" + (d.table || []).map(function (r) { return "<th>" + compareHeadName(r) + "</th>"; }).join("") + "</tr>";
+    var phrase = onboardPhrase();
+    function tr(row) { return "<tr><th>" + esc(row.label) + "</th>" + row.cells.map(function (c) { return "<td class='num" + (c === phrase ? " sa-onboard" : "") + "'>" + esc(c) + "</td>"; }).join("") + "</tr>"; }
     var body = '<tr><th colspan="' + ((d.table || []).length + 1) + '">共同指标</th></tr>' + table.common.map(tr).join("");
     table.sections.forEach(function (sec) {
       body += '<tr><th colspan="' + ((d.table || []).length + 1) + '">' + esc(sec.label) + "</th></tr>" + sec.rows.map(tr).join("");
     });
     var axis = d.axis, metric = d.metric, scope = d.scope;
-    mount.innerHTML = '<div class="top"><h1>对比 · ' + (d.table || []).length + ' 个账户</h1><a class="btn sm" href="' + esc(href("/account")) + '">返回账户</a></div><div class="sa-chartbar"><div class="seg"><button type="button" data-act="metric" data-v="return_pct"' + (metric === "equity_usd" ? "" : ' class="on"') + '>收益率 %</button><button type="button" data-act="metric" data-v="equity_usd"' + (metric === "equity_usd" ? ' class="on"' : "") + '>绝对净值</button></div><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + '>只看当前分段</button></div><div class="seg"><button type="button" data-act="axis" data-v="elapsed"' + (axis === "calendar" ? "" : ' class="on"') + '>按运行时长</button><button type="button" data-act="axis" data-v="calendar"' + (axis === "calendar" ? ' class="on"' : "") + '>统一时间窗口</button></div></div><div class="sa-chart hero" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div>' + legendHtml(model.lines) + '</div><p class="sa-note">' + esc(TWR) + ' 分段竖线只画在当前选中的账户上，停在别的账户上时改画那一条。灰色区间是停止时段。</p><section class="card" id="sa-cmp"><div class="hd"><h2>参数与指标</h2><span class="tag">最多 4 行，不分页</span></div><div class="tw"><table>' + head + body + "</table></div><div class='sa-ops' style='margin-top:10px'>" + (d.table || []).map(function (r) { return '<button type="button" class="btn sm" data-act="drop" data-id="' + esc(r.account_id) + '">移除 ' + labeledName(r.name, r.archived) + "</button>"; }).join("") + "</div></section>";
+    mount.innerHTML = '<div class="top"><h1>对比 · ' + (d.table || []).length + ' 个账户</h1><a class="btn sm" href="' + esc(href("/account")) + '">返回账户</a></div><div class="sa-chartbar"><div class="seg"><button type="button" data-act="metric" data-v="return_pct"' + (metric === "equity_usd" ? "" : ' class="on"') + '>收益率 %</button><button type="button" data-act="metric" data-v="equity_usd"' + (metric === "equity_usd" ? ' class="on"' : "") + '>绝对净值</button></div><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + '>只看当前分段</button></div><div class="seg"><button type="button" data-act="axis" data-v="elapsed"' + (axis === "calendar" ? "" : ' class="on"') + '>按运行时长</button><button type="button" data-act="axis" data-v="calendar"' + (axis === "calendar" ? ' class="on"' : "") + '>统一时间窗口</button></div></div><div class="sa-chart hero" id="sa-chart">' + compareChartHtml(model) + '</div><p class="sa-note">' + esc(TWR) + ' 分段竖线只画在当前选中的账户上，停在别的账户上时改画那一条。灰色区间是停止时段。</p><section class="card" id="sa-cmp"><div class="hd"><h2>参数与指标</h2><span class="tag">最多 4 行，不分页</span></div><div class="tw"><table>' + head + body + "</table></div><div class='sa-ops' style='margin-top:10px'>" + (d.table || []).map(function (r) { return '<button type="button" class="btn sm" data-act="drop" data-id="' + esc(r.account_id) + '">移除 ' + labeledName(r.name, r.archived) + "</button>"; }).join("") + "</div></section>";
     var host = document.getElementById("sa-chart");
-    if (host) bindChart(host, model, function (id) {
+    if (host && host.querySelector("svg")) bindChart(host, model, function (id) {
       if ((compareState.hover || "") === (id || "")) return;
       compareState.hover = id || "";
       paintCompare();
@@ -880,7 +924,14 @@
         }
         for (var i = 0; i < (data.table || []).length; i++) {
           var row = data.table[i];
-          if (row.params && row.archived != null) continue;
+          var seriesHit = (data.series || []).filter(function (s) { return s.account_id === row.account_id; })[0];
+          if (seriesHit) {
+            if (!row.reasons && seriesHit.reasons) row.reasons = seriesHit.reasons;
+            if (!row.state && seriesHit.state) row.state = seriesHit.state;
+          }
+          var pointsReady = seriesHit && Array.isArray(seriesHit.points) && seriesHit.points.length;
+          var needReasons = !pointsReady && !SA.engineOnboarding(row) && !(seriesHit && SA.engineOnboarding(seriesHit));
+          if (row.params && row.archived != null && !needReasons) continue;
           try {
             var acc = await fetchAccount(row.account_id);
             if (!row.params) {
@@ -892,6 +943,14 @@
             if (!row.process_kind && acc.process_kind) row.process_kind = acc.process_kind;
             if (!SA.presentText(row.strategy) && SA.presentText(acc.strategy)) row.strategy = acc.strategy;
             if (row.archived == null) row.archived = !!acc.archived;
+            if (!row.reasons) row.reasons = (acc && acc.reasons) || (acc && acc.metrics && acc.metrics.reasons) || row.reasons;
+            if (!row.state && acc && acc.state) row.state = acc.state;
+            if (seriesHit && acc) {
+              if (!seriesHit.reasons) seriesHit.reasons = acc.reasons || (acc.metrics && acc.metrics.reasons) || seriesHit.reasons;
+              if (!seriesHit.state && acc.state) seriesHit.state = acc.state;
+              var livePts = (acc.series && acc.series.points) || acc.points;
+              if (Array.isArray(livePts) && livePts.length) seriesHit.points = livePts;
+            }
           } catch (e) {}
         }
       }

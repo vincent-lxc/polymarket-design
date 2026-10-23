@@ -216,7 +216,7 @@ assert.ok(problems.some((p) => /跟单比例/.test(p) && /改小/.test(p)));
 const page = SA.mockPage(SA.mockAccounts(), { archived: false, strategy_id: "copy", limit: 20 });
 assert.equal(page.items.length, 20);
 assert.equal(page.accounts.length, page.items.length);
-assert.equal(page.total, 46);
+assert.equal(page.total, 47);
 assert.ok(page.next_cursor);
 const page2 = SA.mockPage(SA.mockAccounts(), { archived: false, strategy_id: "copy", limit: 20, cursor: page.next_cursor });
 assert.equal(page2.items[0].id !== page.items[0].id, true);
@@ -271,5 +271,37 @@ assert.equal(SA.hasCursorPage(leadersNew), true);
 
 assert.match(SA.formatPct(0.135), /\+13\.5%/);
 assert.equal(SA.formatRuntime(9 * 86400), "9 天");
+
+const fresh = SA.mockAccounts().find((a) => a.id === "copy-new");
+assert.equal(SA.engineOnboarding(fresh), true);
+assert.equal(SA.engineOnboarding(paper), false);
+assert.equal(fresh.state, "running");
+assert.equal(SA.onboardMessage("zh"), "引擎接入中，暂无净值");
+assert.equal(SA.onboardMessage("en"), "Engine onboarding — no equity yet");
+assert.equal(SA.onboardStatus("zh"), "引擎接入中");
+assert.equal(SA.onboardStatus("en"), "Engine onboarding");
+const restored = JSON.parse(JSON.stringify(fresh));
+restored.series = { points: [{ t: 0, equity_usd: 10000, return_pct: 0 }] };
+assert.equal(SA.engineOnboarding(restored), false);
+assert.equal(SA.engineOnboarding({ state: "running", reasons: { equity_curve: "no_equity_points" } }), true);
+assert.equal(SA.engineOnboarding({ state: "running", reasons: { equity_curve: "no_equity_points" }, series: { points: [{ t: 0 }] } }), false);
+assert.equal(SA.engineOnboarding({ state: "stopped", reasons: { equity_curve: "no_equity_points" } }), false);
+const onboardCmp = SA.mockCompare(["paper20000", "copy-new"], { axis: "elapsed" });
+assert.equal(onboardCmp.series.find((s) => s.account_id === "copy-new").points.length, 0);
+assert.ok(onboardCmp.series.find((s) => s.account_id === "paper20000").points.length > 0);
+const onboardModel = SA.compareTableModel(onboardCmp.schemas, onboardCmp.table);
+const retCells = onboardModel.common.find((r) => r.key === "return_pct").cells;
+assert.equal(retCells[1], "引擎接入中，暂无净值");
+assert.equal(String(retCells[1]).includes("%"), false);
+assert.equal(SA.compareTableModel(onboardCmp.schemas, onboardCmp.table, "en").common.find((r) => r.key === "return_pct").cells[1], "Engine onboarding — no equity yet");
+["net_pnl_usd", "gross_pnl_usd", "max_drawdown_pct"].forEach((key) => {
+  const cell = onboardModel.common.find((r) => r.key === key).cells[1];
+  assert.equal(cell, "引擎接入中，暂无净值");
+  assert.equal(/[0-9]/.test(cell), false);
+});
+assert.match(onboardModel.common.find((r) => r.key === "return_pct").cells[0], /\+13\.5%/);
+const lines = SA.chartModel(onboardCmp.series, { focusId: "paper20000", axis: "elapsed" }).lines;
+assert.equal(lines.find((l) => l.account_id === "copy-new").onboarding, true);
+assert.equal(lines.find((l) => l.account_id === "paper20000").onboarding, false);
 
 console.log("sa-core tests ok");

@@ -87,7 +87,9 @@
     "登出": "Log out",
     "当前地址": "Address",
     "复制": "Copy",
-    "关闭钱包": "Close wallet"
+    "关闭钱包": "Close wallet",
+    "引擎接入中": "Engine onboarding",
+    "引擎接入中，暂无净值": "Engine onboarding — no equity yet"
   };
 
   function applyStatic() {

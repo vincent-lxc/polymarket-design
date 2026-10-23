@@ -175,6 +175,52 @@
     return String(state);
   }
 
+  var NO_EQUITY = "no_equity_points";
+
+  function bagHasCode(bag, depth) {
+    if (!bag || typeof bag !== "object" || depth > 2) return false;
+    var keys = Object.keys(bag);
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i] === NO_EQUITY) return true;
+      var v = bag[keys[i]];
+      if (v === NO_EQUITY) return true;
+      if (v && typeof v === "object" && bagHasCode(v, depth + 1)) return true;
+    }
+    return false;
+  }
+
+  function hasNoEquityReason(a) {
+    if (!a || typeof a !== "object") return false;
+    if (a.equity_reason === NO_EQUITY || a.reason === NO_EQUITY || a.error === NO_EQUITY) return true;
+    if (bagHasCode(a.reasons, 0)) return true;
+    if (a.metrics && bagHasCode(a.metrics.reasons, 0)) return true;
+    if (a.series && (bagHasCode(a.series.reasons, 0) || a.series.error === NO_EQUITY || a.series.reason === NO_EQUITY)) return true;
+    return false;
+  }
+
+  function hasEquityPoints(a) {
+    if (!a || typeof a !== "object") return false;
+    if (a.series && Array.isArray(a.series.points) && a.series.points.length) return true;
+    if (Array.isArray(a.points) && a.points.length) return true;
+    return false;
+  }
+
+  /* 状态仍是 running，收益接口给出 no_equity_points，且还没有净值点。有点之后立刻恢复。 */
+  function engineOnboarding(a) {
+    if (!a || typeof a !== "object") return false;
+    if (a.state && a.state !== "running") return false;
+    if (hasEquityPoints(a)) return false;
+    return hasNoEquityReason(a);
+  }
+
+  function onboardMessage(lang) {
+    return lang === "en" ? "Engine onboarding — no equity yet" : "引擎接入中，暂无净值";
+  }
+
+  function onboardStatus(lang) {
+    return lang === "en" ? "Engine onboarding" : "引擎接入中";
+  }
+
   function canDelete(a) {
     if (!a) return false;
     var w = a.wallet_close_status;
@@ -495,9 +541,12 @@
     return String(value);
   }
 
+  var ONBOARD_METRICS = { net_pnl_usd: 1, return_pct: 1, gross_pnl_usd: 1, max_drawdown_pct: 1 };
+
   /* 先共同指标，再按策略把参数逐行列出。别的策略那一格是「—」。 */
-  function compareTableModel(schemas, rows) {
+  function compareTableModel(schemas, rows, lang) {
     rows = rows || [];
+    var phrase = onboardMessage(lang === "en" ? "en" : "zh");
     var common = COMMON_METRICS.map(function (pair) {
       return {
         section: "common",
@@ -505,6 +554,7 @@
         label: pair[1],
         cells: rows.map(function (r) {
           if (pair[0] === "strategy_label") return strategyCaption(r);
+          if (ONBOARD_METRICS[pair[0]] && engineOnboarding(r)) return phrase;
           return formatMetric(pair[0], r[pair[0]]);
         })
       };
@@ -636,6 +686,7 @@
         account_id: s.account_id,
         name: s.name,
         archived: !!s.archived,
+        onboarding: engineOnboarding(s),
         accent: accent,
         color: accent ? ACCENT : GRAY[i % GRAY.length],
         dash: accent ? null : DASH[i % DASH.length],
@@ -741,7 +792,7 @@
           summary: "按你设的比例跟随领导者下单。参数、说明和默认值都由接口给出。",
           fee_model: "net_of_fees",
           launchable: true,
-          account_count: 46,
+          account_count: 47,
           params_schema: [
             { key: "copy_ratio", label_zh: "跟单比例", help_zh: "相对领导者成交额的比例。", type: "number", default: 0.3, min: 0.05, max: 1, step: 0.05, unit: "x" },
             { key: "fees_on", label_zh: "计算手续费", help_zh: "打开后，收益率按扣费后的净值计算。", type: "bool", default: false },
@@ -835,6 +886,16 @@
           { segment: 1, started_at: "2026-10-14T01:12:00Z", ended_at: "2026-10-18T02:00:00Z", params_diff_vs_prev: null },
           { segment: 2, started_at: "2026-10-18T02:04:00Z", ended_at: null, params_diff_vs_prev: { copy_ratio: "0.25 → 0.3" }, boundary: "params" }
         ]
+      }),
+      mockAccount({
+        id: "copy-new", name: "copy-new", strategy_id: "copy", strategy_label: "跟单 copy", state: "running",
+        capital_usd: 10000, current_segment: 1,
+        series: { points: [] },
+        params: { copy_ratio: 0.3, fees_on: false, daily_loss_usd: 800, max_positions: 200 },
+        params_diff: {},
+        rpc_capacity: { required_rpm: 180, available_rpm: 420, observed_429_1h: 0, providers_healthy: 3, providers_total: 3, status: "ok" },
+        reasons: { equity_usd: "no_equity_points", net_pnl_usd: "no_equity_points", return_pct: "no_equity_points", equity_curve: "no_equity_points" },
+        metrics: m(0, 0, 0, 0, 0, 0, 0, 0, 0)
       }),
       mockAccount({
         id: "paper20000fees", name: "paper20000fees", strategy_id: "copy", strategy_label: "跟单 copy", state: "stopped",
@@ -983,6 +1044,20 @@
     var metric = opts.metric === "equity_usd" ? "equity_usd" : "return_pct";
     var scope = opts.scope === "current_segment" ? "current_segment" : "all";
     var series = chosen.map(function (a, i) {
+      if (engineOnboarding(a)) {
+        return {
+          account_id: a.id,
+          name: a.name,
+          strategy_id: a.strategy_id,
+          strategy_label: a.strategy_label,
+          points: [],
+          segments: [],
+          gaps: [],
+          archived: !!a.archived,
+          state: a.state,
+          reasons: a.reasons || {}
+        };
+      }
       var end = a.metrics.return_pct * (scope === "current_segment" ? 0.35 : 1);
       var s = mockSeries(a.id, a.name, a.strategy_id, a.strategy_label, end * (1 + i * 0.02), a.capital_usd);
       if (scope === "current_segment") {
@@ -1017,7 +1092,9 @@
         runtime_sec: a.metrics.runtime_sec,
         current_segment: a.current_segment,
         params: a.params,
-        params_diff: a.params_diff
+        params_diff: a.params_diff,
+        state: a.state,
+        reasons: a.reasons || {}
       };
     });
     return {
@@ -1092,6 +1169,9 @@
     isAccountV2: isAccountV2,
     hasCursorPage: hasCursorPage,
     stateLabel: stateLabel,
+    engineOnboarding: engineOnboarding,
+    onboardMessage: onboardMessage,
+    onboardStatus: onboardStatus,
     canDelete: canDelete,
     deleteBlockReason: deleteBlockReason,
     settlementNote: settlementNote,
