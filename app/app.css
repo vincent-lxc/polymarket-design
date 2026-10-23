@@ -115,8 +115,8 @@ td.r,th.r{text-align:right}
  .lgrid{grid-template-columns:1fr 1fr}.lgrid .cell:last-child{grid-column:1/-1}
  .tpls{grid-template-columns:1fr}.form{grid-template-columns:1fr 1fr}
  .top h1{font-size:18px}
- .tabs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));position:fixed;bottom:0;left:0;right:0;background:rgba(14,14,16,.96);border-top:1px solid var(--line);padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:40}
- .tabs a{text-align:center;font-size:11px;color:var(--mu);padding:6px 1px;border-radius:8px}
+ .tabs{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));position:fixed;bottom:0;left:0;right:0;background:rgba(14,14,16,.96);border-top:1px solid var(--line);padding:8px 2px calc(8px + env(safe-area-inset-bottom));z-index:40}
+ .tabs a{text-align:center;font-size:10px;color:var(--mu);padding:6px 0;border-radius:8px}
  .tabs a.on{color:var(--or);font-weight:600}
  .drawer{width:100%;max-width:100%;top:auto;bottom:0;height:auto;max-height:86vh;border-left:0;border-top:1px solid var(--line);border-radius:16px 16px 0 0;transform:translateY(105%)}
 }

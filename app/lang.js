@@ -51,6 +51,7 @@
     "总览": "Overview",
     "排行": "Board",
     "账户": "Account",
+    "对比": "Compare",
     "配置": "Config",
     "健康": "Health",
     "钱包": "Wallet",
@@ -86,7 +87,10 @@
     "登出": "Log out",
     "当前地址": "Address",
     "复制": "Copy",
-    "关闭钱包": "Close wallet"
+    "关闭钱包": "Close wallet",
+    "等待运行": "Waiting to run",
+    "净值从引擎接入后开始计算": "Equity is tracked once the engine is connected",
+    "暂无净值": "No equity yet"
   };
 
   function applyStatic() {

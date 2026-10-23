@@ -67,10 +67,11 @@ function toLogin(){
   location.replace("/login?next="+encodeURIComponent(next));
 }
 class ApiError extends Error{constructor(status,body,offline){super((body&&body.message)||("HTTP "+status));this.status=status;this.body=body;this.offline=!!offline}}
-async function api(path,{method="GET",body,auth=true,confirm}={}){
+async function api(path,{method="GET",body,auth=true,confirm,headers}={}){
   const h={"Accept":"application/json"};
   if(auth&&token.get())h.Authorization="Bearer "+token.get();
   if(body!==undefined)h["Content-Type"]="application/json";
+  if(headers)Object.assign(h,headers);
   if(confirm!=null){h["X-Confirm-Phrase"]=encodeURIComponent(confirm);body=Object.assign({},body,{confirm});}
   let res; try{res=await fetch(API+path,{method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});}
   catch(e){throw new ApiError(0,null,true);}
@@ -222,8 +223,10 @@ function renderOverview(d){
 
 /* ---------- 账户 / Leaders / 健康 / 配置 / 策略 ---------- */
 async function renderAccount(){
-  const list=await api("/v1/accounts"); const accs=list.accounts||[];
-  const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
+  const list=await api("/v1/accounts");
+  if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
+  const accs=(list.accounts||[]).filter(a=>a&&a.strategy&&a.strategy!=="null");
+  const s=Q.get("s")||(accs[0]&&accs[0].strategy); if(!s||s==="null"){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
   const d=await api("/v1/accounts/"+encodeURIComponent(s)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+s;
   const steps=document.querySelector(".steps"); if(steps) steps.innerHTML=accs.map(x=>`<a class="${x.strategy===s?"on":""}" href="/account?s=${encodeURIComponent(x.strategy)}">${esc(x.strategy)}</a>`).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
@@ -315,7 +318,7 @@ function normalizeLeaders(d){
       status:l.status||"following"
     });
   });
-  return Object.assign({}, src, {active, following_count:active.length});
+  return Object.assign({}, src, {active, following_count: src.total!=null && isFinite(Number(src.total)) ? Number(src.total) : active.length});
 }
 function rememberBoard(leaders){
   try{
@@ -556,7 +559,8 @@ async function renderLeaders(){
       if(ldStrategy!=="paper") accounts.push({strategy:ldStrategy});
     }else{
       const list=await api("/v1/accounts");
-      accounts=list.accounts||[];
+      const rows=Array.isArray(list.accounts)?list.accounts:(Array.isArray(list.items)?list.items:[]);
+      accounts=rows.filter(a=>a&&a.strategy&&a.strategy!=="null"&&a.strategy!=="undefined");
       ldStrategy=Q.get("s")||(accounts[0]&&accounts[0].strategy)||"";
     }
   }catch(e){
@@ -592,6 +596,35 @@ async function renderLeaders(){
   }
   paintLeaders(data,{strategy:ldStrategy, main:ldMain, fixture:fx});
   paintScreen(data);
+  if(!fx && window.PMSA && window.PMSA_UI && PMSA.hasCursorPage(data) && data.active && data.active.length){
+    const host=document.getElementById("ld-on");
+    if(host){
+      const cursorTotal=data.total!=null&&isFinite(Number(data.total))?Number(data.total):(data.next_cursor?data.active.length+1:data.active.length);
+      PMSA_UI.mountCursor({
+        host,
+        total:cursorTotal,
+        count:data.active.length,
+        next:data.next_cursor,
+        limit:20,
+        async load(cursor, limit){
+          const base=leadersReadPath(ldStrategy)+"&limit="+encodeURIComponent(limit);
+          const path=base+(cursor?"&cursor="+encodeURIComponent(cursor):"");
+          try{
+            const d=normalizeLeaders(await api(path));
+            const total=d.total!=null&&isFinite(Number(d.total))?Number(d.total):(d.next_cursor?d.active.length+1:d.active.length);
+            return {total, next:d.next_cursor, count:d.active.length, html:d.active.map(l=>leaderRow(l, ldMain)).join("")};
+          }catch(e){
+            if(PMSA.pagerOnHttpError(PMSA.pagerInit(limit), e)){
+              const d=normalizeLeaders(await api(base));
+              const total=d.total!=null&&isFinite(Number(d.total))?Number(d.total):(d.next_cursor?d.active.length+1:d.active.length);
+              return {reset:true, total, next:d.next_cursor, count:d.active.length, html:d.active.map(l=>leaderRow(l, ldMain)).join("")};
+            }
+            throw e;
+          }
+        }
+      });
+    }
+  }
   const pending=parseAddr(Q.get("add"));
   if(pending){
     try{ const u=new URL(location.href); u.searchParams.delete("add"); history.replaceState(null,"",u.pathname+u.search+u.hash); }catch(e){}
@@ -616,6 +649,12 @@ async function renderConfig(){
   rows($("#cf-rpc"),'<tr><th class="r hm">#</th><th>名称</th><th>状态</th><th class="hm">Endpoint / Key</th></tr>',(r.providers||[]).map((p,i)=>`<tr><td class="r mu hm">${i+1}</td><td><b>${esc(p.name)}</b></td><td>${RPCTAG[p.status]||esc(p.status)}</td><td class="num mu hm">${esc(p.endpoint_hint||"")}${p.key_hint?" · ••••"+esc(p.key_hint):""}</td></tr>`).join("")||`<tr><td colspan="4">${nd("no_rpc")}</td></tr>`);
 }
 async function renderStrategies(){
+  if(window.PMSA && window.PMSA_UI){
+    try{
+      const cat=await api("/v1/strategies?limit=20");
+      if(PMSA.isStrategyCatalog(cat)) return PMSA_UI.openStrategies();
+    }catch(e){ if(e.status!==404) throw e; }
+  }
   const d=await api("/v1/me/strategies");
   rows($("#st-mine"),'<tr><th>名称</th><th class="hm">模板</th><th>状态</th><th class="r">操作</th></tr>',(d.strategies||[]).map(s=>`<tr><td><b>${esc(s.name)}</b> <span class="tag">模拟盘</span></td><td class="hm mu">${esc(s.template_id||"空白")}</td><td><span class="tag ${s.state==="running"?"live":"idle"}">${s.state==="running"?"运行中":"已暂停"}</span></td><td class="r"><a class="btn sm" href="#edit">修改参数</a></td></tr>`).join("")||`<tr><td colspan="4">${nd("no_strategies")}</td></tr>`);
 }
@@ -687,14 +726,59 @@ async function renderBoard(win){
     asofEl.setAttribute("data-sort", "smart_score");
   }
   const pass=tr("通过","Pass"), fail=tr("未通过","Fail");
-  tb.innerHTML=leaders.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};
+  const boardRows=list=>list.map(l=>{const m=l.metrics||{},R=l.metric_reasons||{};
     const follow=canFollow?`<div style="margin-top:6px"><a class="btn sm ld-follow" href="${esc(appHref("/leaders",{add:l.address,s:followStrategy}))}">${followLabel}</a></div>`:"";
     return `<tr class="rl" onclick="location.href='/leader?addr=${l.address}'"><td><a href="/leader?addr=${l.address}" title="${esc(l.address)}"><b>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?"@"+esc(l.user_name):esc(short(l.address))}</b></a>${l.user_name&&!/^0x/i.test(l.user_name)&&l.user_name.length<=24?`<div class="fk">${esc(short(l.address))}</div>`:""}${follow}</td><td class="r num">${M(l.smart_score,x=>x.toFixed(1))}</td><td class="r num">${M(m.win_rate,x=>pct(x,false,0),R.win_rate)}</td><td class="r num hm ${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</td><td class="r num hm">${M(m.max_drawdown,x=>pct(x,false,1),R.max_drawdown)}</td><td class="r num hm">${M(m.resolved_markets,x=>x.toLocaleString(),R.resolved_markets)}</td><td class="r num hm ${cls(m.realized_pnl)}">${V(m.realized_pnl,x=>usd(x,true))}</td><td>${l.gate_pass?`<span class="tag live">${pass}</span>`:`<span class="tag" title="${esc((l.gate_failures||[]).map(g=>g.code||g).join(", "))}">${fail}</span>`}</td></tr>`;
   }).join("");
-  tb.querySelectorAll("a.ld-follow").forEach(a=>a.addEventListener("click",ev=>ev.stopPropagation()));
+  tb.innerHTML=boardRows(leaders);
+  if(!tb.dataset.followStop){
+    tb.dataset.followStop="1";
+    tb.addEventListener("click",ev=>{ if(ev.target.closest("a.ld-follow")) ev.stopPropagation(); });
+  }
   const src=d.source==="analytics_sqlite"?tr("本地快照","local snapshot"):tr("公开接口","public API");
   const srcEl=$("#bd-src");
   if(srcEl) srcEl.textContent=tr(`数据来自${src}。按综合评分排序；胜率和收益率只作展示。算不出来时显示「—」。`,`Source: ${src}. Ranked by composite score. Win rate and ROI are display columns. Missing values show —.`);
+  const boardBag=(d&&typeof d==="object"&&Object.prototype.hasOwnProperty.call(d,"next_cursor"))?d:(lb&&typeof lb==="object"&&Object.prototype.hasOwnProperty.call(lb,"next_cursor")?lb:null);
+  if(boardBag && window.PMSA && window.PMSA_UI){
+    const host=document.getElementById("mk-board");
+    if(host){
+      const pack=rows=>{
+        const bag=rows.bag;
+        const list=rows.list;
+        const total=bag&&bag.total!=null&&isFinite(Number(bag.total))?Number(bag.total):(bag&&bag.next_cursor?list.length+1:list.length);
+        return {total, next:bag?bag.next_cursor:null, count:list.length, html:boardRows(list)};
+      };
+      const readBoard=async(cursor, limit)=>{
+        const path=`/v1/public/leaderboard?window=${encodeURIComponent(win||"90d")}&metric=smart_score&limit=${encodeURIComponent(limit)}`+(cursor?`&cursor=${encodeURIComponent(cursor)}`:"");
+        const ndata=await api(path,{auth:false});
+        const nlb=ndata.leaderboard||{};
+        const list=sortBySmartScore(nlb.leaders||[]);
+        rememberBoard(list);
+        const bag=(ndata&&Object.prototype.hasOwnProperty.call(ndata,"next_cursor"))?ndata:(Object.prototype.hasOwnProperty.call(nlb,"next_cursor")?nlb:null);
+        return pack({bag, list});
+      };
+      const first=pack({bag:boardBag, list:leaders});
+      PMSA_UI.mountCursor({
+        host,
+        total:first.total,
+        count:first.count,
+        next:first.next,
+        limit:50,
+        async load(cursor, limit){
+          try{ return await readBoard(cursor, limit); }
+          catch(e){
+            if(PMSA.pagerOnHttpError(PMSA.pagerInit(limit), e)){
+              const again=await readBoard(null, limit);
+              again.reset=true;
+              return again;
+            }
+            throw e;
+          }
+        }
+      });
+      return;
+    }
+  }
   document.querySelectorAll(".tw .xp").forEach(b=>b.remove());
   const tw=tb.closest(".tw"), trs=[...tb.querySelectorAll("tr")], L=innerWidth<900?10:20;
   if(trs.length>L){ trs.slice(L).forEach(x=>x.classList.add("more")); const b=document.createElement("button"); b.className="btn sm xp"; const n=trs.length; const openL=tr("收起","Show less"), shut=tr("展开全部（共"+n+"条）","Show all ("+n+")"); b.textContent=shut; b.onclick=()=>{const o=tw.classList.toggle("open");b.textContent=o?openL:shut}; tw.after(b); }
@@ -784,7 +868,7 @@ async function renderMarkets(){
 }
 
 /* ---------- 入口 ---------- */
-const R={overview:async()=>renderOverview(await api("/v1/overview?range=24h")),account:renderAccount,leaders:renderLeaders,health:renderHealth,config:renderConfig,strategies:renderStrategies};
+const R={overview:async()=>renderOverview(await api("/v1/overview?range=24h")),account:renderAccount,leaders:renderLeaders,health:renderHealth,config:renderConfig,strategies:renderStrategies,compare:async()=>{ if(window.PMSA_UI) return PMSA_UI.openCompare(); }};
 async function boot(){
   if(PAGE==="login")return initLogin();
   const lo=$("#logout"); if(lo) lo.onclick=async e=>{e.preventDefault(); try{await api("/v1/auth/logout",{method:"POST"})}catch(_){} token.clear(); location.href="/login";};
@@ -794,6 +878,10 @@ async function boot(){
     if(PAGE==="leaders"){
       try{ const state=await renderLeaders(); stripDemo(); badge("demo","本地 fixture（?mock=1）。去掉 mock 与 fixture 后走 BFF"); keepMock(); return state; }
       catch(e){ console.warn(e); return; }
+    }
+    if(Q.get("sa")==="1" && window.PMSA_UI && (PAGE==="strategies"||PAGE==="account"||PAGE==="compare")){
+      try{ await PMSA_UI.renderMock(); badge("demo","策略与账户示例（?mock=1&sa=1）"); keepMock(); return; }
+      catch(e){ console.warn(e); return fallback("?mock=1"); }
     }
     return fallback("?mock=1");
   }
