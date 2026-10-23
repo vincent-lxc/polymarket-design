@@ -83,7 +83,11 @@ async function api(path,{method="GET",body,auth=true,confirm,headers}={}){
 }
 
 /* ---------- 示例数据标记 ---------- */
-function badge(kind,title){ document.querySelectorAll(".demo-badge,.live-badge,.demo-banner").forEach(e=>e.remove());
+function revealMetrics(){
+  const root=document.documentElement;
+  if(root&&root.classList&&typeof root.classList.remove==="function") root.classList.remove("pending-metrics");
+}
+function badge(kind,title){ revealMetrics(); document.querySelectorAll(".demo-badge,.live-badge,.demo-banner").forEach(e=>e.remove());
   const tr=(zh,en)=>window.PMLang?PMLang.t(zh,en):zh;
   const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?tr("示例，不是你的账户","Sample, not your account"):tr("数据更新中","Data updating"); b.title=title||""; document.body.appendChild(b); document.body.classList.toggle("live",kind!=="demo");
   if(kind==="demo"){ const ban=document.createElement("div"); ban.className="demo-banner"; ban.setAttribute("role","status"); ban.textContent="示例，不是你的账户"; const main=document.querySelector(".main")||document.body; main.prepend(ban); document.documentElement.classList.add("mock-demo"); } }
@@ -317,11 +321,168 @@ async function overviewInstanceHrefs(acc){
   }
   return rows.map(a=>overviewInstanceHref(a, catalog));
 }
-async function renderOverview(d){
+/* 总览时间片。BFF 认 ?range=。没回显区间时，1h 从曲线末尾裁，7d 若载荷盖不住就空着，不假装还是 24h。 */
+const OV_RANGES=["1h","24h","7d"];
+const OV_RANGE_MS={"1h":3600000,"24h":86400000,"7d":7*86400000};
+let ovRange="24h", ovReq=0, ovLast=null;
+function normalizeOverviewRange(raw){
+  const s=String(raw==null?"":raw).trim().toLowerCase();
+  return OV_RANGES.includes(s)?s:"";
+}
+function overviewRangeEcho(d){
+  if(!d||typeof d!=="object") return "";
+  const raw=d.range!=null?d.range:(d.window!=null?d.window:(d.meta&&typeof d.meta==="object"?d.meta.range:""));
+  return normalizeOverviewRange(raw);
+}
+function curvePoints(curve){
+  return (curve||[]).map(p=>({t:new Date(p&&p.t).getTime(), raw:p})).filter(p=>isFinite(p.t)&&p.raw&&isFinite(Number(p.raw.equity))).sort((a,b)=>a.t-b.t);
+}
+function sliceOverviewCurve(curve, range, echo){
+  const r=normalizeOverviewRange(range)||"24h";
+  const echoed=normalizeOverviewRange(echo||"");
+  const pts=curvePoints(curve);
+  const win=OV_RANGE_MS[r]||OV_RANGE_MS["24h"];
+  if(pts.length<2) return {curve:[], mode:echoed&&echoed!==r?"unsupported":"empty"};
+  const span=pts[pts.length-1].t-pts[0].t, end=pts[pts.length-1].t;
+  const sliced=pts.filter(p=>p.t>=end-win).map(p=>p.raw);
+  const cropped=sliced.length<pts.length, short=span<win*0.5;
+  /* 回显是另一档、又裁不出更短的一段：不要把 24h 曲线留在 7d 下面。 */
+  if(echoed&&echoed!==r&&!cropped) return {curve:[], mode:"unsupported"};
+  /* 没回显、又要 7d，载荷却盖不满：空着，不假装已切到 7d。 */
+  if(!echoed&&r==="7d"&&short&&!cropped) return {curve:[], mode:"empty"};
+  if(sliced.length<2) return {curve:[], mode:"empty"};
+  return {curve:sliced, mode:"on"};
+}
+function readOverviewRange(){
+  let q=""; try{ q=normalizeOverviewRange(new URLSearchParams(location.search).get("range")); }catch(e){}
+  if(q) return q;
+  const on=document.querySelector("#ov-range span.on");
+  const from=on&&normalizeOverviewRange(on.getAttribute("data-range")||on.dataset.range||on.textContent);
+  return from||"24h";
+}
+function setOverviewRangeUi(range, mode){
+  document.querySelectorAll("#ov-range [data-range]").forEach(s=>{
+    const id=normalizeOverviewRange(s.getAttribute("data-range")||(s.dataset&&s.dataset.range)||s.textContent);
+    const on=id===range;
+    s.classList.toggle("on", on);
+    s.classList.toggle("off", on&&mode==="unsupported");
+    if(s.setAttribute) s.setAttribute("aria-pressed", on?"true":"false");
+  });
+  const note=$("#ov-range-note");
+  if(!note) return;
+  if(mode==="unsupported"){ note.hidden=false; note.textContent=range+" 暂不支持"; }
+  else if(mode==="empty"){ note.hidden=false; note.textContent=range+" 暂无曲线"; }
+  else { note.hidden=true; note.textContent=""; }
+}
+function shareCardFromTotals(eq, pnl, p, curve, note){
+  const pts=(curve||[]).map(x=>Number(x&&x.equity)).filter(n=>isFinite(n));
+  let range="";
+  if(curve&&curve.length){
+    const a=bj(curve[0].t), b=bj(curve[curve.length-1].t);
+    if(a&&b) range=a+" – "+b;
+  }
+  return {eq:usd(eq)||"无数据", pnl:usd(pnl,true)||"—", pct:pct(p)||"—", up:pnl!=null&&pnl>=0, note:note||"", range, v:pts};
+}
+function paintShareCard(card){
+  const cv=$("#shcv");
+  if(cv&&cv.dataset){
+    cv.dataset.eq=card.eq; cv.dataset.pnl=card.pnl; cv.dataset.pct=card.pct; cv.dataset.up=card.up?"1":"0";
+    cv.dataset.note=card.note; cv.dataset.range=card.range; cv.dataset.v=JSON.stringify(card.v||[]);
+    cv.dataset.shell="0"; cv.dataset.live="1";
+  }
+  if(window.PMShare&&typeof PMShare.paint==="function") PMShare.paint(card);
+}
+/* 心跳与总览同一套：heartbeat / as_of / 健康里的 last_signal_at。没有时间就写未知，不留 10-21 壳。 */
+function heartbeatLabel(sources){
+  const list=[];
+  (Array.isArray(sources)?sources:[sources]).forEach(d=>{ if(d&&typeof d==="object") list.push(d); });
+  for(const d of list){
+    const hb=d.heartbeat;
+    if(hb&&typeof hb==="object"){
+      const shown=bj(hb.as_of||hb.at||hb.ts||hb.time||hb.updated_at||hb.last_sync_at);
+      if(shown){
+        const age=hb.age_sec!=null?hb.age_sec:(hb.within_sec!=null?hb.within_sec:hb.lag_sec);
+        if(age!=null&&isFinite(Number(age))) return "心跳 "+shown+" · "+Math.max(0,Math.round(Number(age)))+" 秒内";
+        return "更新 "+shown;
+      }
+    }else if((typeof hb==="string"||typeof hb==="number")&&bj(hb)) return "更新 "+bj(hb);
+    const copy=d.services&&d.services.copy;
+    const shown=bj(d.as_of)||bj(d.updated_at)||bj(d.generated_at)||bj(d.last_sync_at)||(copy&&(bj(copy.last_heartbeat_at)||bj(copy.last_signal_at)));
+    if(shown) return "更新 "+shown;
+  }
+  return "";
+}
+function paintHeartbeat(sources){
+  const hb=$(".hbt"); if(!hb) return;
+  const text=heartbeatLabel(sources);
+  if(text){ hb.textContent=text; hb.removeAttribute&&hb.removeAttribute("data-unknown"); return; }
+  hb.textContent="心跳时间未知";
+  if(hb.setAttribute) hb.setAttribute("data-unknown","1");
+}
+function bindOverviewRange(){
+  const box=$("#ov-range"); if(!box||box.dataset.bound) return;
+  box.dataset.bound="1";
+  const go=s=>{
+    const r=normalizeOverviewRange(s.getAttribute("data-range")||s.dataset.range);
+    if(!r||r===ovRange) return;
+    const prevUrl=location.pathname+location.search+location.hash;
+    try{ const u=new URL(location.href); u.searchParams.set("range", r); history.replaceState(null,"",u.pathname+u.search+u.hash); }catch(e){}
+    loadOverview(r).catch(e=>{
+      console.warn(e);
+      if(e&&e.status===401) return;
+      if(document.body.classList.contains("live")){
+        try{ history.replaceState(null,"",prevUrl); }catch(err){}
+        setOverviewRangeUi(ovRange,"on");
+        const note=$("#ov-range-note"); if(note){ note.hidden=false; note.textContent=r+" 暂时取不到"; }
+        return;
+      }
+      fallback(e&&e.offline?"接口连不上，已回退到示例数据":"接口出错："+(e&&e.message||""));
+    });
+  };
+  box.addEventListener("click", ev=>{ const s=ev.target.closest&&ev.target.closest("[data-range]"); if(s) go(s); });
+  box.addEventListener("keydown", ev=>{
+    if(ev.key!=="Enter"&&ev.key!==" ") return;
+    const s=ev.target.closest&&ev.target.closest("[data-range]"); if(!s) return;
+    ev.preventDefault(); go(s);
+  });
+}
+async function loadOverview(range){
+  const r=normalizeOverviewRange(range)||"24h";
+  const prev=ovRange;
+  setOverviewRangeUi(r,"on");
+  const seq=++ovReq;
+  const still=()=>seq===ovReq;
+  let d;
+  try{ d=await api("/v1/overview?range="+encodeURIComponent(r)); }
+  catch(e){
+    if(!still()) return;
+    if(e&&(e.status===400||e.status===404||e.status===422)){
+      ovRange=r;
+      setOverviewRangeUi(r,"unsupported");
+      const base=ovLast?Object.assign({}, ovLast, {equity_curve:[]}):{totals:null,accounts:[],equity_curve:[],reasons:{},as_of:null};
+      await renderOverview(base, still);
+      return;
+    }
+    if(still()){ ovRange=prev; setOverviewRangeUi(prev,"on"); }
+    throw e;
+  }
+  if(!still()) return;
+  ovRange=r;
+  if(d&&d.totals) ovLast=d;
+  const sliced=sliceOverviewCurve(d&&d.equity_curve, r, overviewRangeEcho(d));
+  setOverviewRangeUi(r, sliced.mode);
+  await renderOverview(Object.assign({}, d, {equity_curve:sliced.curve}), still);
+}
+async function renderOverview(d, still){
+  if(still&&!still()) return;
   applyCurveNote(d&&d.reasons);
   const t=d.totals, R=Object.assign({},d.reasons);
   const acc=(d&&d.accounts)||[];
-  if(!t){ $("#ov-eq").innerHTML=nd(R.copy_db||"no_totals"); $("#ov-note").textContent=""; }
+  if(!t){
+    $("#ov-eq").innerHTML=nd(R.copy_db||"no_totals"); $("#ov-note").textContent="";
+    paintShareCard(shareCardFromTotals(null,null,null,[], ""));
+    drawCurve([], false);
+  }
   else{
     const miss=acc.filter(a=>a.equity_usd==null).map(a=>a.strategy);
     const ok=acc.filter(a=>a.equity_usd!=null);
@@ -334,12 +495,13 @@ async function renderOverview(d){
     $("#ov-sub").innerHTML=`<span class="${cls(pnl)} num">扣费净盈亏 ${M(pnl,x=>usd(x,true))} · ${M(p,pct)}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span${todayTitle(t)}>今日盈亏 ${V(t.today_pnl_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,"no_daily_baseline")}${todayMiss(t)}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString(),R.fills)}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString(),R.open_positions)}</b></span>`;
     const kv=(l,x,s,r)=>`<div><span class="lbl">${l}</span><b class="${s?cls(x):""}">${V(x,v=>usd(v,s),r)}</b></div>`;
     $("#ov-kv").innerHTML=kv("现金合计",t.cash_usd,0,R.cash_usd)+kv("持仓市值合计",t.positions_value_usd,0,R.positions_value_usd)+kv("浮动盈亏合计",t.unrealized_usd,1,R.unrealized_usd)+kv("已实现盈亏合计",t.realized_usd,1,R.realized_usd);
-    const cv=$("#shcv"); if(cv){ cv.dataset.eq=usd(eq)||"无数据"; cv.dataset.pnl=usd(pnl,true)||"—"; cv.dataset.pct=pct(p)||"—"; cv.dataset.up=pnl>=0?1:0; cv.dataset.note=$("#ov-note").textContent;
-      if(d.equity_curve&&d.equity_curve.length){ cv.dataset.v=JSON.stringify(d.equity_curve.map(x=>x.equity)); cv.dataset.range=`${bj(d.equity_curve[0].t)} – ${bj(d.equity_curve.at(-1).t)}`; } }
+    paintShareCard(shareCardFromTotals(eq,pnl,p,d.equity_curve,$("#ov-note").textContent));
     drawCurve(d.equity_curve, partial(d.reasons));
   }
+  if(still&&!still()) return;
   if(t||acc.length){
     const hrefs=await overviewInstanceHrefs(acc);
+    if(still&&!still()) return;
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
       acc.map((a,i)=>`<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
   }
@@ -348,12 +510,13 @@ async function renderOverview(d){
   const ml=d.main_leader, lead=$("#ov-lead .h");
   if(lead) lead.innerHTML=ml?`${who(ml.user_name,ml.address)} <span class="tag live">${esc(ml.status_zh)}</span>`:nd(R.main_leader||"no_main_leader");
   fillLeadCard(ml,R);
-  const hb=$(".hbt"); if(hb) hb.textContent=`更新 ${bj(d.as_of)}`;
+  paintHeartbeat(d);
 }
 
 /* ---------- 账户 / Leaders / 健康 / 配置 / 策略 ---------- */
 async function renderAccount(){
   const list=await api("/v1/accounts");
+  paintHeartbeat(list);
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
   const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordUuid(a)));
   const wantId=presentAccountId(Q.get("id"));
@@ -386,6 +549,7 @@ async function renderAccount(){
   if(d.positions) rows($("#ac-pos"),'<tr><th>市场</th><th class="hm">方向</th><th class="r hm">股数</th><th class="r hm">均价 / 现价</th><th class="r">浮动</th></tr>',d.positions.map(p=>`<tr><td>${marketHtml(p.title, p)}</td><td class="hm">${esc(p.outcome||"—")}</td><td class="r num hm">${p.shares}</td><td class="r num hm">${Math.round(p.avg_price*100)}¢ / ${p.last_mark==null?"—":Math.round(p.last_mark*100)+"¢"}</td><td class="r num ${cls(p.unrealized_usd)}">${M(p.unrealized_usd,x=>usd(x,true),(p.reasons&&p.reasons.unrealized_usd)||"not_yet_aggregated")}</td></tr>`).join(""));
   if(d.activity) rows($("#ac-act"),'<tr><th class="hm">时间</th><th>市场</th><th class="hm">用途</th><th class="r">金额</th><th>结果</th></tr>',d.activity.map(activityRow).join(""));
   else if($("#ac-act")){ const sec=$("#ac-act"); const hd=sec.querySelector(".hd"); sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>'; }
+  paintHeartbeat([d, a, list]);
 }
 /* ---------- Leaders 在跟（注册表） ---------- */
 /* GET/POST/DELETE /v1/accounts/{id}/leaders。id 优先用当前账户 uuid（与账户详情/总览同一 id）。
@@ -806,6 +970,7 @@ async function renderLeaders(){
 const RPCTAG={"live":'<span class="tag live">live</span>',"待机":'<span class="tag idle">待机</span>',"已踢出":'<span class="tag kick">已踢出</span>'};
 async function renderHealth(){
   const d=await api("/v1/health");
+  paintHeartbeat(d);
   rows($("#hl-rpc"),'<tr><th>节点</th><th>状态</th><th class="r">延迟 p50</th><th class="r hm">p95</th></tr>',(d.rpc||[]).map(r=>`<tr><td><b>${esc(r.name)}</b></td><td>${RPCTAG[r.status]||esc(r.status)}</td><td class="r num">${M(r.latency_p50_ms,x=>Math.round(x)+" ms",r.reasons&&r.reasons.latency_p50_ms)}</td><td class="r num hm">${M(r.latency_p95_ms,x=>Math.round(x)+" ms")}</td></tr>`).join("")||`<tr><td colspan="4">${nd("no_rpc")}</td></tr>`);
   const j=d.rejects_24h, box=$("#hl-rej .mr"), lb=$("#hl-rej .lbl");
   if(!j){ box.innerHTML=nd(d.reasons&&d.reasons.rejects_24h||"no_signals_24h"); lb.textContent="近 24h"; }
@@ -813,7 +978,8 @@ async function renderHealth(){
     box.innerHTML=j.by_reason.map(x=>`<div><div style="display:flex;justify-content:space-between">${rejectTag(x.code,x.zh,x.known)}<span class="num">${x.count}</span></div><div class="meter"><i style="width:${x.count/mx*100}%"></i></div></div>`).join(""); }
 }
 async function renderConfig(){
-  const [w,r]=await Promise.all([api("/v1/config/wallet"),api("/v1/config/rpc")]);
+  const [w,r,health]=await Promise.all([api("/v1/config/wallet"),api("/v1/config/rpc"),api("/v1/health").catch(()=>null)]);
+  paintHeartbeat(health?[health,w,r]:[w,r]);
   $("#cf-wallet .kv").innerHTML=w.bound?`<div><span class="lbl">钱包地址</span><b title="${esc(w.address)}">${esc(short(w.address))}</b></div><div><span class="lbl">绑定状态</span><b class="up">已绑定</b></div>`:`<div><span class="lbl">绑定状态</span><b>未绑定</b></div><div><span class="lbl">钱包地址</span><b>${nd("not_bound")}</b></div>`;
   rows($("#cf-rpc"),'<tr><th class="r hm">#</th><th>名称</th><th>状态</th><th class="hm">Endpoint / Key</th></tr>',(r.providers||[]).map((p,i)=>`<tr><td class="r mu hm">${i+1}</td><td><b>${esc(p.name)}</b></td><td>${RPCTAG[p.status]||esc(p.status)}</td><td class="num mu hm">${esc(p.endpoint_hint||"")}${p.key_hint?" · ••••"+esc(p.key_hint):""}</td></tr>`).join("")||`<tr><td colspan="4">${nd("no_rpc")}</td></tr>`);
 }
@@ -830,6 +996,7 @@ async function renderStrategies(){
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
 window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,
   accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
+  heartbeatLabel,normalizeOverviewRange,overviewRangeEcho,sliceOverviewCurve,shareCardFromTotals,loadOverview,
   leadersReadPath,leadersWritePath,leadersRequestKey,leadersCurrentKey,renderLeaders,writeLeader,
   saveDraft:(id,params,name)=>api("/v1/me/strategies/"+encodeURIComponent(id),{method:"PATCH",body:{params,mode:"paper"},confirm:name}),
   createDraft:(name,template_id,params)=>api("/v1/me/strategies",{method:"POST",body:{name,template_id,params,mode:"paper"},confirm:name})};
@@ -1039,7 +1206,7 @@ async function renderMarkets(){
 }
 
 /* ---------- 入口 ---------- */
-const R={overview:async()=>renderOverview(await api("/v1/overview?range=24h")),account:renderAccount,leaders:renderLeaders,health:renderHealth,config:renderConfig,strategies:renderStrategies,compare:async()=>{ if(window.PMSA_UI) return PMSA_UI.openCompare(); }};
+const R={overview:async()=>{ bindOverviewRange(); await loadOverview(readOverviewRange()); },account:renderAccount,leaders:renderLeaders,health:renderHealth,config:renderConfig,strategies:renderStrategies,compare:async()=>{ if(window.PMSA_UI) return PMSA_UI.openCompare(); }};
 async function boot(){
   if(PAGE==="login")return initLogin();
   const lo=$("#logout"); if(lo) lo.onclick=async e=>{e.preventDefault(); try{await api("/v1/auth/logout",{method:"POST"})}catch(_){} token.clear(); location.href="/login";};
