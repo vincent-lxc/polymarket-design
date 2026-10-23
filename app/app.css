@@ -38,6 +38,9 @@ html.pending-metrics #ov-eq,html.pending-metrics .hbt,html.pending-metrics #ac-m
 html.pending-metrics #ov-chart svg,html.pending-metrics #shcv{opacity:0}
 html.pending-metrics #ov-chart{background:#1a1a1e;border-radius:8px;min-height:84px}
 html.pending-metrics #ov-mirrors .tw,html.pending-metrics #ov-accts .tw,html.pending-metrics #ov-lead,html.pending-metrics main section.card:not([id]),html.pending-metrics .rail>.rc:not(.note){visibility:hidden}
+html.pending-leader .top h1,html.pending-leader #ld-idl,html.pending-leader #ld-perf .kv b,html.pending-leader #ld-perf .lgrid,html.pending-leader #ld-perf svg{color:transparent!important;user-select:none}
+html.pending-leader .top h1,html.pending-leader #ld-idl{background:#26262b;border-radius:8px}
+html.pending-leader #ld-perf svg{opacity:0}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:var(--r-pill);border:0;background:var(--card2);color:var(--mu);white-space:nowrap}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--gr)}
 .paper{background:var(--elev);color:var(--mu)}.paper::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--mu)}

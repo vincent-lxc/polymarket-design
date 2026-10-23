@@ -163,14 +163,14 @@ const headers = fs.readFileSync(new URL("./_headers", import.meta.url), "utf8");
 for (const html of [ov, cfg, hl]) {
   assert.equal(html.includes("心跳 10-21 12:40"), false);
   assert.match(html, /pending-metrics/);
-  assert.match(html, /api\.js\?v=p0fe2/);
-  assert.match(html, /app\.css\?v=p0fe2/);
+  assert.match(html, /api\.js\?v=p0fe3/);
+  assert.match(html, /app\.css\?v=p0fe3/);
 }
 assert.match(ov, /id="ov-range"/);
 assert.match(ov, /data-range="1h"/);
 assert.match(ov, /data-range="7d"/);
 assert.match(ov, /data-shell="1"/);
-assert.match(ov, /share\.js\?v=p0fe2/);
+assert.match(ov, /share\.js\?v=p0fe3/);
 assert.match(share, /PMShare/);
 assert.match(share, /D\.live!=="1"/);
 assert.match(api, /\/v1\/overview\?range=/);
@@ -180,5 +180,38 @@ assert.equal((api.match(/\/v1\/overview\?range=24h/g) || []).length, 1);
 assert.match(headers, /CDN-Cache-Control: no-store/);
 assert.match(headers, /\/overview/);
 assert.doesNotMatch(api, /leader\?addr=.*lunadegen/);
+
+assert.equal(PM.mirrorMarketName({ market: "Ipswich O/U", title: undefined }), "Ipswich O/U");
+assert.equal(PM.mirrorMarketName({ title: "不要用标题", market: "Xi Jinping out" }), "Xi Jinping out");
+assert.equal(PM.mirrorMarketName({ market: null, title: "Fed", slug: "ipswich-ou" }), "ipswich-ou");
+assert.equal(PM.mirrorMarketName({ market: null, title: "Fed" }), null);
+assert.equal(PM.marketHtml(PM.mirrorMarketName({ market: null, title: "Fed" }), { title: "Fed" }), "未命名市场");
+assert.equal(PM.marketHtml("Ipswich O/U", { market: "Ipswich O/U" }).includes("Ipswich O/U"), true);
+
+assert.equal(PM.formatShares(609.1500000000001), "609.15");
+assert.equal(PM.formatShares(5.72), "5.72");
+assert.equal(PM.formatShares(45.7), "45.70");
+assert.equal(PM.formatShares(null), "—");
+
+const ariel = PM.leaderIdentity({
+  address: "0xe18ecc345e00ee7c4f2d1f676f3dd2acb112f826",
+  profile: { user_name: "ArielFilipino", x_username: null, portfolio_value_usd: 205044.869 }
+});
+assert.equal(ariel.heading, "@ArielFilipino");
+assert.equal(ariel.x, "");
+assert.equal(ariel.title, "Leader @ArielFilipino · Wakeloom 织迹");
+assert.equal(ariel.crumb.includes("lunadegen"), false);
+assert.equal(ariel.crumb.includes("0x7a3f"), false);
+assert.equal(ariel.crumb.includes("X @"), false);
+assert.equal(ariel.crumb.includes("0xe18e"), true);
+assert.equal(ariel.title.includes("lunadegen"), false);
+
+const leaderHtml = fs.readFileSync(new URL("./leader.html", import.meta.url), "utf8");
+assert.match(leaderHtml, /<title>Leader · Wakeloom 织迹<\/title>/);
+assert.match(leaderHtml, /pending-leader/);
+assert.doesNotMatch(leaderHtml, /<title>[^<]*lunadegen/);
+assert.match(api, /mirrorMarketName\(m\)/);
+assert.match(api, /formatShares\(p\.shares\)/);
+assert.match(api, /profile\.x_username/);
 
 console.log("p0 shell tests ok");

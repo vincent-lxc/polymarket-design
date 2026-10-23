@@ -883,7 +883,8 @@
   function sideRow(kind, item) {
     if (kind === "positions") {
       var name = window.PM && PM.marketHtml ? PM.marketHtml(item.title || item.market, item) : esc(item.title || item.market || "未命名市场");
-      return "<tr><td>" + name + "</td><td>" + esc(item.outcome || "—") + "</td><td class='r num'>" + esc(item.shares == null ? "—" : item.shares) + "</td><td class='r num'>" + esc(SA.formatUsd(item.unrealized_usd, true)) + "</td></tr>";
+      var shares = window.PM && PM.formatShares ? PM.formatShares(item.shares) : (item.shares == null || item.shares === "" ? "—" : (isFinite(Number(item.shares)) ? Number(item.shares).toFixed(2) : "—"));
+      return "<tr><td>" + name + "</td><td>" + esc(item.outcome || "—") + "</td><td class='r num'>" + esc(shares) + "</td><td class='r num'>" + esc(SA.formatUsd(item.unrealized_usd, true)) + "</td></tr>";
     }
     var when = window.PM && PM.bj ? (PM.bj(item.decided_at) || "—") : esc(item.decided_at || "—");
     var market = window.PM && PM.marketHtml ? PM.marketHtml(item.market, item) : esc(item.market || "未命名市场");
