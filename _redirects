@@ -17,5 +17,5 @@
 # 不要把 /en|zh/leader/:addr 200 改写到 /leader/_shell/index.html。
 # html_handling=auto-trailing-slash 会把该 index.html 308 到 /leader/_shell/，
 # 而 :addr 又能匹配 _shell，sitemap 上的钱包页就会 ERR_TOO_MANY_REDIRECTS。
-# 已有静态页由文件直接提供；没有静态页时 Worker 返回壳页正文，地址栏仍是 /leader/{addr}/。
+# /en|zh/leader/{addr}/ 由 Worker 按 BFF 做服务端渲染，不把静态快照或 _shell 交给爬虫。
 # 公开打开壳目录由 Worker 301 到排行榜（这里不写 301，否则 Worker 取壳模板时会被资产层提前跳走）。
