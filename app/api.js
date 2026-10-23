@@ -202,6 +202,17 @@ function accountRecordId(a){
   if(!a||typeof a!=="object")return "";
   return presentAccountId(a.id)||presentAccountId(a.account_id);
 }
+/* 账户详情只认 uuid。策略名（paper20000）即使写在 id 上也不能拿去请求。 */
+function looksLikeAccountUuid(v){
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(presentAccountId(v));
+}
+function accountRecordUuid(a){
+  if(!a||typeof a!=="object")return "";
+  const id=presentAccountId(a.id), alt=presentAccountId(a.account_id);
+  if(looksLikeAccountUuid(id))return id;
+  if(looksLikeAccountUuid(alt))return alt;
+  return "";
+}
 function accountListItems(list){
   if(Array.isArray(list))return list;
   if(!list||typeof list!=="object")return [];
@@ -222,14 +233,47 @@ function matchAccountId(label, accounts){
   if(hits.length!==1)return "";
   return accountRecordId(hits[0]);
 }
+function matchAccountUuid(label, accounts){
+  const key=presentAccountId(label);
+  if(!key)return "";
+  const hits=(accounts||[]).filter(a=>a&&typeof a==="object"&&(sameAccountLabel(a.strategy,key)||sameAccountLabel(a.name,key)));
+  if(hits.length!==1)return "";
+  return accountRecordUuid(hits[0]);
+}
 function accountDetailHref(id){
   const key=presentAccountId(id);
-  if(!key)return appHref("/account");
+  if(!looksLikeAccountUuid(key))return appHref("/account");
   return appHref("/account",{id:key});
 }
 function overviewInstanceHref(row, catalog){
-  const id=accountRecordId(row)||matchAccountId(row&&(row.strategy||row.name), catalog||[]);
-  return accountDetailHref(id);
+  const own=accountRecordUuid(row);
+  if(own)return accountDetailHref(own);
+  const label=row&&(presentAccountId(row.strategy)||presentAccountId(row.name)||presentAccountId(row.id));
+  return accountDetailHref(matchAccountUuid(label, catalog||[]));
+}
+/* 旧链 ?s=策略名 收成 ?id=uuid。只删 s，mock / sa / lang 等其它参数留着。没有 uuid 时返回 null，调用方不要改地址。 */
+function accountIdSearch(search, id){
+  const key=presentAccountId(id);
+  if(!looksLikeAccountUuid(key))return null;
+  const u=new URLSearchParams(String(search||"").replace(/^\?/,""));
+  u.delete("s");
+  u.set("id", key);
+  const q=u.toString();
+  return q?"?"+q:"";
+}
+function replaceNamedAccountLocation(id){
+  let search="", path="/account", hash="";
+  try{ search=location.search||""; path=location.pathname||"/account"; hash=location.hash||""; }
+  catch(e){ return false; }
+  const cur=new URLSearchParams(String(search).replace(/^\?/,""));
+  if(!presentAccountId(cur.get("s")))return false;
+  const next=accountIdSearch(search, id);
+  if(next==null)return false;
+  const url=path+next+hash;
+  if(path+search+hash===url)return false;
+  try{ history.replaceState(null,"",url); }
+  catch(e){ return false; }
+  return true;
 }
 function overviewAccountLink(row, catalog){
   const href=overviewInstanceHref(row, catalog);
@@ -240,32 +284,35 @@ async function loadAccountCatalog(){
   const rows=[]; const seen=new Set();
   function take(page){
     accountListItems(page).forEach(a=>{
-      const id=accountRecordId(a);
+      const id=accountRecordId(a)||accountRecordUuid(a);
       if(id){ if(seen.has(id))return; seen.add(id); }
       rows.push(a);
     });
   }
-  let page=null;
-  try{ page=await api("/v1/accounts"); }
-  catch(e){
-    try{ page=await api("/v1/accounts?limit=100&archived=false"); }
-    catch(e2){ return rows; }
-  }
-  take(page);
-  let cursor=page&&presentAccountId(page.next_cursor), prev="";
-  for(let n=0;n<8&&cursor&&cursor!==prev;n++){
-    prev=cursor;
-    try{ page=await api("/v1/accounts?limit=100&archived=false&cursor="+encodeURIComponent(cursor)); }
-    catch(e){ break; }
+  /* 和账户列表同一条 v2 查询。不带 limit 的 /v1/accounts 可能只有策略名、没有 uuid，对上了也不能当详情 id。 */
+  async function pull(base){
+    let page=await api(base);
     take(page);
-    cursor=page&&presentAccountId(page.next_cursor);
+    let cursor=page&&presentAccountId(page.next_cursor), prev="";
+    for(let n=0;n<8&&cursor&&cursor!==prev;n++){
+      prev=cursor;
+      page=await api(base+(base.includes("?")?"&":"?")+"cursor="+encodeURIComponent(cursor));
+      take(page);
+      cursor=page&&presentAccountId(page.next_cursor);
+    }
   }
+  let any=false;
+  for(const base of ["/v1/accounts?limit=100&archived=false","/v1/accounts?limit=100&archived=true"]){
+    try{ await pull(base); any=true; }
+    catch(e){}
+  }
+  if(!any){ try{ await pull("/v1/accounts"); }catch(e){} }
   return rows;
 }
 async function overviewInstanceHrefs(acc){
   const rows=acc||[];
   let catalog=[];
-  if(rows.some(a=>!accountRecordId(a))){
+  if(rows.some(a=>!accountRecordUuid(a))){
     try{ catalog=await loadAccountCatalog(); }catch(e){ catalog=[]; }
   }
   return rows.map(a=>overviewInstanceHref(a, catalog));
@@ -273,9 +320,10 @@ async function overviewInstanceHrefs(acc){
 async function renderOverview(d){
   applyCurveNote(d&&d.reasons);
   const t=d.totals, R=Object.assign({},d.reasons);
+  const acc=(d&&d.accounts)||[];
   if(!t){ $("#ov-eq").innerHTML=nd(R.copy_db||"no_totals"); $("#ov-note").textContent=""; }
   else{
-    const acc=d.accounts||[]; const miss=acc.filter(a=>a.equity_usd==null).map(a=>a.strategy);
+    const miss=acc.filter(a=>a.equity_usd==null).map(a=>a.strategy);
     const ok=acc.filter(a=>a.equity_usd!=null);
     /* 前端口径：Σ equity（不含缺标记价的实例）；BFF 合计在缺失时为 null，故前端自行加总 */
     const eq=ok.length?ok.reduce((s,a)=>s+a.equity_usd,0):null;
@@ -289,6 +337,8 @@ async function renderOverview(d){
     const cv=$("#shcv"); if(cv){ cv.dataset.eq=usd(eq)||"无数据"; cv.dataset.pnl=usd(pnl,true)||"—"; cv.dataset.pct=pct(p)||"—"; cv.dataset.up=pnl>=0?1:0; cv.dataset.note=$("#ov-note").textContent;
       if(d.equity_curve&&d.equity_curve.length){ cv.dataset.v=JSON.stringify(d.equity_curve.map(x=>x.equity)); cv.dataset.range=`${bj(d.equity_curve[0].t)} – ${bj(d.equity_curve.at(-1).t)}`; } }
     drawCurve(d.equity_curve, partial(d.reasons));
+  }
+  if(t||acc.length){
     const hrefs=await overviewInstanceHrefs(acc);
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
       acc.map((a,i)=>`<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
@@ -305,22 +355,21 @@ async function renderOverview(d){
 async function renderAccount(){
   const list=await api("/v1/accounts");
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
-  const accs=accountListItems(list).filter(a=>a&&presentAccountId(a.strategy));
+  const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordUuid(a)));
   const wantId=presentAccountId(Q.get("id"));
   const wantName=presentAccountId(Q.get("s"));
-  let current=null;
-  if(wantId) current=accs.find(x=>accountRecordId(x)===wantId)||null;
-  if(!current&&wantName){
-    const matched=matchAccountId(wantName, accs);
-    if(matched) current=accs.find(x=>accountRecordId(x)===matched)||null;
-  }
-  if(!current) current=accs.find(x=>accountRecordId(x))||null;
-  const id=current?accountRecordId(current):"";
-  const label=(current&&presentAccountId(current.strategy))||id;
+  let id="";
+  if(looksLikeAccountUuid(wantId)) id=wantId;
+  else if(wantName) id=matchAccountUuid(wantName, accs);
+  else id=accountRecordUuid(accs.find(x=>accountRecordUuid(x))||null);
+  if(id&&wantName) replaceNamedAccountLocation(id);
+  const current=id?accs.find(x=>accountRecordUuid(x)===id)||null:null;
+  const label=(current&&(presentAccountId(current.strategy)||presentAccountId(current.name)))||id;
   const steps=document.querySelector(".steps");
   if(steps) steps.innerHTML=accs.map(x=>{
-    const xid=accountRecordId(x);
-    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountDetailHref(xid))}">${esc(x.strategy)}</a>`;
+    const xid=accountRecordUuid(x);
+    const text=presentAccountId(x.strategy)||presentAccountId(x.name)||xid;
+    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountDetailHref(xid))}">${esc(text)}</a>`;
   }).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
   if(!id){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
   const d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
@@ -755,7 +804,7 @@ async function renderStrategies(){
 }
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
 window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,
-  accountRecordId,matchAccountId,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountListItems,renderOverview,
+  accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
   saveDraft:(id,params,name)=>api("/v1/me/strategies/"+encodeURIComponent(id),{method:"PATCH",body:{params,mode:"paper"},confirm:name}),
   createDraft:(name,template_id,params)=>api("/v1/me/strategies",{method:"POST",body:{name,template_id,params,mode:"paper"},confirm:name})};
 

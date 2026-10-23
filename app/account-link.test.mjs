@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 
-const UUID = "6f1c0c3e-1b7a-4c2d-9a10-paper20000xx";
+const UUID = "6f1c0c3e-1b7a-4c2d-9a10-aabbccddeeff";
 const UUID_B = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
 function node(leaf) {
@@ -109,9 +109,20 @@ assert.equal(PM.matchAccountId("missing", catalog), "");
 assert.equal(PM.matchAccountId("paper20000", catalog.concat([{ id: "other-uuid-other-uuid-other-uuid", strategy: "paper20000", name: "paper20000" }])), "");
 assert.equal(PM.overviewInstanceHref({ strategy: "paper20000" }, catalog), "/account?id=" + UUID);
 assert.equal(PM.overviewInstanceHref({ id: UUID_B, strategy: "paper20000" }, catalog), "/account?id=" + UUID_B);
+assert.equal(PM.overviewInstanceHref({ id: "paper20000", strategy: "paper20000" }, catalog), "/account?id=" + UUID);
+assert.equal(PM.overviewInstanceHref({ id: "paper20000", account_id: UUID, strategy: "paper20000" }, []), "/account?id=" + UUID);
+assert.equal(PM.matchAccountUuid("paper20000", [{ id: "paper20000", account_id: UUID, name: "paper20000" }]), UUID);
+assert.equal(PM.matchAccountUuid("paper20000", catalog.concat([{ id: UUID_B, strategy: "paper20000", name: "paper20000" }])), "");
 assert.equal(PM.overviewInstanceHref({ strategy: "nope" }, catalog), "/account");
 assert.equal(PM.overviewInstanceHref({ strategy: "paper20000" }, []).includes("?s="), false);
+assert.equal(PM.overviewInstanceHref({ id: "paper20000", strategy: "paper20000" }, []).includes("?s="), false);
+assert.equal(PM.overviewInstanceHref({ id: "paper20000", strategy: "paper20000" }, []).includes("paper20000"), false);
 assert.equal(PM.accountDetailHref(""), "/account");
+assert.equal(PM.accountDetailHref("paper20000"), "/account");
+assert.equal(PM.accountIdSearch("?s=paper20000&mock=1", UUID), "?mock=1&id=" + UUID);
+assert.equal(PM.accountIdSearch("?mock=1&s=paper20000&sa=1", UUID), "?mock=1&sa=1&id=" + UUID);
+assert.equal(PM.accountIdSearch("?s=paper20000", "paper20000"), null);
+assert.equal(PM.accountIdSearch("?s=paper20000", ""), null);
 
 const link = PM.overviewAccountLink({ strategy: "paper20000" }, catalog);
 assert.match(link, new RegExp('href="/account\\?id=' + UUID + '"'));
@@ -154,6 +165,15 @@ const direct = pm.store["#ov-accts"]._table.innerHTML;
 assert.match(direct, new RegExp('href="/account\\?id=' + UUID + '"'));
 assert.equal(pm.calls.length, 0);
 
+pm.calls.length = 0;
+pm.catalog = catalog;
+await PM.renderOverview(Object.assign({}, overview, { accounts: [{ ...row, id: "paper20000" }] }));
+const namedId = pm.store["#ov-accts"]._table.innerHTML;
+assert.match(namedId, new RegExp('href="/account\\?id=' + UUID + '"'));
+assert.equal(namedId.includes("?s="), false);
+assert.equal(namedId.includes("id=paper20000"), false);
+assert.ok(pm.calls.some((url) => url.includes("/v1/accounts?limit=100")));
+
 pm.catalog = [];
 await PM.renderOverview(overview);
 const bare = pm.store["#ov-accts"]._table.innerHTML;
@@ -161,13 +181,28 @@ assert.match(bare, /href="\/account"/);
 assert.equal(bare.includes("?s="), false);
 assert.match(bare, />paper20000</);
 
+const legacy = loadApi("?s=paper20000&mock=1");
+legacy.location.pathname = "/account";
+legacy.location.hash = "#keep";
+const rewritten = [];
+legacy.history.replaceState = function (_state, _title, url) { rewritten.push(url); };
+assert.equal(legacy.PM.replaceNamedAccountLocation("paper20000"), false);
+assert.equal(rewritten.length, 0);
+assert.equal(legacy.PM.replaceNamedAccountLocation(UUID), true);
+assert.equal(rewritten[0], "/account?mock=1&id=" + UUID + "#keep");
+assert.equal(rewritten[0].includes("s="), false);
+assert.equal(rewritten[0].includes("mock=1"), true);
+
 const apiSrc = fs.readFileSync(new URL("./api.js", import.meta.url), "utf8");
 const saSrc = fs.readFileSync(new URL("./sa.js", import.meta.url), "utf8");
 assert.equal(apiSrc.includes("/account?s="), false);
 assert.equal(saSrc.includes('href("/account", { s:'), false);
 assert.match(saSrc, /href\("\/account", \{ id: id \}\)/);
 assert.match(saSrc, /openNamedAccount\(params\.get\("s"\)\)/);
+assert.match(saSrc, /replaceNamedAccountLocation/);
+assert.match(saSrc, /matchAccountUuid/);
 assert.equal(saSrc.includes('openDetail(params.get("s")'), false);
 assert.match(apiSrc, /\/leaders\?window=/);
+assert.match(apiSrc, /appHref\("\/leaders",\{s:/);
 
 console.log("account-link tests ok");
