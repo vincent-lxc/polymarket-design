@@ -51,6 +51,7 @@
     "总览": "Overview",
     "排行": "Board",
     "账户": "Account",
+    "对比": "Compare",
     "配置": "Config",
     "健康": "Health",
     "钱包": "Wallet",
