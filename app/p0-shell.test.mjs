@@ -214,4 +214,25 @@ assert.match(api, /mirrorMarketName\(m\)/);
 assert.match(api, /formatShares\(p\.shares\)/);
 assert.match(api, /profile\.x_username/);
 
+const bannedShell = /alchemy|drpc|quicknode|ankr|weird_new_code|价格偏移过大|sk-•|84 ms|1,412/;
+assert.equal(bannedShell.test(hl), false);
+assert.equal(bannedShell.test(cfg), false);
+assert.match(hl, /id="hl-rej"/);
+assert.match(hl, /<div class="mr"><\/div>/);
+assert.doesNotMatch(hl, /<tr><td/);
+assert.doesNotMatch(cfg, /<tr><td/);
+assert.doesNotMatch(cfg, /删除 RPC ·/);
+
+const sa = fs.readFileSync(new URL("./sa.js", import.meta.url), "utf8");
+assert.match(sa, /function askArchive/);
+assert.match(sa, /if \(act === "archive" && account\) return askArchive\(account\);\n    if \(\(act === "start" \|\| act === "unarchive"\) && account\)/);
+assert.match(sa, /id="sa-do-arch" disabled/);
+assert.match(sa, /id="sa-cap"[^>]*type="number"/);
+assert.match(sa, /id="sa-newcap" type="number"/);
+assert.match(sa, /numeric \? ' type="number"'/);
+for (const page of ["account.html", "compare.html", "leaders.html", "markets.html", "strategies.html"]) {
+  const html = fs.readFileSync(new URL("./" + page, import.meta.url), "utf8");
+  assert.match(html, /sa\.js\?v=p0fe4/);
+}
+
 console.log("p0 shell tests ok");

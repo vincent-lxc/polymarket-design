@@ -568,8 +568,10 @@
     } else if (p.enum && p.enum.length) {
       control = '<select class="in" name="' + esc(path) + '" id="' + id + '">' + p.enum.map(function (opt) { return '<option value="' + esc(opt) + '"' + (String(opt) === String(v) ? " selected" : "") + ">" + esc(opt) + "</option>"; }).join("") + "</select>";
     } else {
+      var numeric = p.type === "number" || p.type === "integer" || ((p.type == null || p.type === "") && (p.min != null || p.max != null || p.step != null || p.unit === "usd" || p.unit === "pct" || p.unit === "x"));
       var placeholder = (p.key === "stop_loss_pct" || path === "stop_loss_pct" || String(path).slice(-15) === ".stop_loss_pct") ? ' placeholder="留空关闭"' : "";
-      control = '<input class="in num" name="' + esc(path) + '" id="' + id + '" inputmode="decimal" value="' + esc(v) + '"' + placeholder + (p.min != null ? ' min="' + esc(p.min) + '"' : "") + (p.max != null ? ' max="' + esc(p.max) + '"' : "") + (p.step != null ? ' step="' + esc(p.step) + '"' : "") + ">";
+      var step = p.step != null ? ' step="' + esc(p.step) + '"' : (numeric ? ' step="any"' : "");
+      control = '<input class="in num" name="' + esc(path) + '" id="' + id + '"' + (numeric ? ' type="number"' : "") + ' inputmode="decimal" value="' + esc(v) + '"' + placeholder + (p.min != null ? ' min="' + esc(p.min) + '"' : "") + (p.max != null ? ' max="' + esc(p.max) + '"' : "") + step + ">";
     }
     return '<div class="f"><label for="' + id + '">' + esc(label) + "</label>" + control + help + "</div>";
   }
@@ -622,7 +624,7 @@
       return "<tr><td><b>" + esc(p.label_zh || p.label || p.title || p.key) + '</b><div class="fk">' + esc(leaf.path) + "</div></td><td>" + esc(p.help_zh || "—") + "</td><td class='num'>" + esc(SA.formatParam(p.default, p)) + "</td><td class='num'>" + range + "</td></tr>";
     }).join("");
     var blocked = s.launchable === false;
-    mount.innerHTML = '<div class="top"><h1>' + esc(s.label || id) + '</h1><a class="btn sm" href="' + esc(href("/strategies")) + '">全部策略</a></div><p class="sa-sumtxt">' + esc(s.summary || "") + "</p>" + (blocked ? '<div class="sa-warn">' + esc(SA.errorText("strategy_not_launchable")) + "</div>" : "") + '<section class="card" id="sa-schema"><div class="hd"><h2>参数</h2><span class="tag">接口下发</span></div><div class="tw"><table class="sa-schema"><tr><th>参数</th><th>含义</th><th>默认</th><th>范围</th></tr>' + rows + "</table></div></section>" + '<section class="card" id="sa-run"><div class="hd"><h2>用这组参数开跑</h2></div><div id="sa-err"></div><form class="sa-form" id="sa-launch">' + schema.map(function (p) { return fieldHtml(p, p.default); }).join("") + '<div class="f"><label for="sa-name">账户名</label><input class="in" id="sa-name" name="name" required placeholder="给这个账户起个名字"></div><div class="f"><label for="sa-cap">模拟盘资金</label><input class="in num" id="sa-cap" name="capital_usd" required inputmode="decimal" value="10000"></div><div class="f"><label for="sa-type">账户类型</label><select class="in" id="sa-type" name="account_type"><option value="paper" selected>模拟盘</option><option value="wallet">钱包</option></select><div class="sa-note">选钱包时如果还不能开，会停在这张表，并显示即将推出。</div></div><div class="wide sa-ops"><button class="btn pri" type="submit"' + (blocked ? " disabled" : "") + ">用这组参数开跑</button></div></form></section>" + '<section class="card" id="sa-used"><div class="hd"><h2>用这个策略的账户</h2></div><div class="tw sa-table"><table>' + HEAD + (page.items || []).map(function (a) { return rowHtml(a, schema); }).join("") + '</table></div><div class="sa-cards">' + (page.items || []).map(function (a) { return cardHtml(a, schema); }).join("") + "</div>" + pagerBox(SA.pagerNote(pager, page.total, (page.items || []).length), 20, "used") + "</section>";
+    mount.innerHTML = '<div class="top"><h1>' + esc(s.label || id) + '</h1><a class="btn sm" href="' + esc(href("/strategies")) + '">全部策略</a></div><p class="sa-sumtxt">' + esc(s.summary || "") + "</p>" + (blocked ? '<div class="sa-warn">' + esc(SA.errorText("strategy_not_launchable")) + "</div>" : "") + '<section class="card" id="sa-schema"><div class="hd"><h2>参数</h2><span class="tag">接口下发</span></div><div class="tw"><table class="sa-schema"><tr><th>参数</th><th>含义</th><th>默认</th><th>范围</th></tr>' + rows + "</table></div></section>" + '<section class="card" id="sa-run"><div class="hd"><h2>用这组参数开跑</h2></div><div id="sa-err"></div><form class="sa-form" id="sa-launch">' + schema.map(function (p) { return fieldHtml(p, p.default); }).join("") + '<div class="f"><label for="sa-name">账户名</label><input class="in" id="sa-name" name="name" required placeholder="给这个账户起个名字"></div><div class="f"><label for="sa-cap">模拟盘资金</label><input class="in num" id="sa-cap" name="capital_usd" type="number" required inputmode="decimal" min="0" step="any" value="10000"></div><div class="f"><label for="sa-type">账户类型</label><select class="in" id="sa-type" name="account_type"><option value="paper" selected>模拟盘</option><option value="wallet">钱包</option></select><div class="sa-note">选钱包时如果还不能开，会停在这张表，并显示即将推出。</div></div><div class="wide sa-ops"><button class="btn pri" type="submit"' + (blocked ? " disabled" : "") + ">用这组参数开跑</button></div></form></section>" + '<section class="card" id="sa-used"><div class="hd"><h2>用这个策略的账户</h2></div><div class="tw sa-table"><table>' + HEAD + (page.items || []).map(function (a) { return rowHtml(a, schema); }).join("") + '</table></div><div class="sa-cards">' + (page.items || []).map(function (a) { return cardHtml(a, schema); }).join("") + "</div>" + pagerBox(SA.pagerNote(pager, page.total, (page.items || []).length), 20, "used") + "</section>";
     var form = document.getElementById("sa-launch");
     if (form) {
       bindSubmitAttempt(form);
@@ -1049,6 +1051,7 @@
     if (input) input.addEventListener("input", sync);
     sync();
     go.onclick = async function () {
+      if (go.disabled) return;
       try {
         if (mockMode()) {
           if (input.value !== a.name) throw Object.assign(new Error("name"), { status: 400, body: { error: "confirm_name_mismatch" } });
@@ -1067,8 +1070,27 @@
       }
     };
   }
+  function askArchive(a) {
+    var name = a && a.name ? String(a.name) : "";
+    openSheet('<h2>归档 · ' + esc(name) + '</h2><p class="sa-note">归档后资金不再计入已分配。可以以后取消归档。请输入账户名再确认，点开这一层不会提交。</p><div class="f"><label for="sa-confirm">输入账户名以确认</label><input class="in" id="sa-confirm" autocomplete="off"></div><div class="row"><button type="button" class="btn" data-act="sheet-close">取消</button><button type="button" class="btn pri" id="sa-do-arch" disabled>归档</button></div>');
+    var input = document.getElementById("sa-confirm");
+    var go = document.getElementById("sa-do-arch");
+    function sync() { go.disabled = !name || !input || input.value !== name; }
+    if (input) input.addEventListener("input", sync);
+    sync();
+    go.onclick = async function () {
+      if (go.disabled || !input || input.value !== name) return;
+      try {
+        await mutate(a.id, "archive");
+        if (selected.has(a.id)) selected.set(a.id, { id: a.id, name: name, archived: true });
+        closeSheet();
+        toast("已归档，资金不再计入已分配。可以取消归档。");
+        await refresh();
+      } catch (e) { toast(explain(e)); }
+    };
+  }
   function askCapital(a) {
-    openSheet('<h2>调整资金 · ' + esc(a.name) + '</h2><p class="sa-note">运行中也可以改资金。改完会新开一段，收益率按时间加权重算。</p><div class="f"><label for="sa-newcap">新的分配资金</label><input class="in num" id="sa-newcap" value="' + esc(a.capital_usd == null ? "" : a.capital_usd) + '"></div><div class="row"><button type="button" class="btn" data-act="sheet-close">取消</button><button type="button" class="btn pri" id="sa-do-cap">保存</button></div>');
+    openSheet('<h2>调整资金 · ' + esc(a.name) + '</h2><p class="sa-note">运行中也可以改资金。改完会新开一段，收益率按时间加权重算。</p><div class="f"><label for="sa-newcap">新的分配资金</label><input class="in num" id="sa-newcap" type="number" min="0" step="any" value="' + esc(a.capital_usd == null ? "" : a.capital_usd) + '"></div><div class="row"><button type="button" class="btn" data-act="sheet-close">取消</button><button type="button" class="btn pri" id="sa-do-cap">保存</button></div>');
     document.getElementById("sa-do-cap").onclick = async function () {
       var n = Number(document.getElementById("sa-newcap").value);
       if (!isFinite(n) || n <= 0) { toast(SA.errorText("invalid_capital")); return; }
@@ -1213,14 +1235,15 @@
     if (act === "capital" && account) return askCapital(account);
     if (act === "edit" && account) { location.href = href("/account", { id: account.id }) + "#sa-params"; return; }
     if (act === "save-start") return saveAndStart();
-    if ((act === "start" || act === "archive" || act === "unarchive") && account) {
+    if (act === "archive" && account) return askArchive(account);
+    if ((act === "start" || act === "unarchive") && account) {
       try {
         await mutate(account.id, act);
-        if (selected.has(account.id) && (act === "archive" || act === "unarchive")) {
+        if (selected.has(account.id) && act === "unarchive") {
           var kept = selected.get(account.id);
-          selected.set(account.id, { id: account.id, name: (kept && kept.name) || account.name, archived: act === "archive" });
+          selected.set(account.id, { id: account.id, name: (kept && kept.name) || account.name, archived: false });
         }
-        toast(act === "start" ? "已启动。" : act === "archive" ? "已归档，资金不再计入已分配。可以取消归档。" : "已取消归档。");
+        toast(act === "start" ? "已启动。" : "已取消归档。");
         await refresh();
       } catch (e) { toast(explain(e)); }
     }
