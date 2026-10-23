@@ -1,6 +1,10 @@
-/** 官网 Worker：旧 /app 前缀 301 到 app.wakeloom.com；钱包页避免 /leader/_shell 自跳。 */
+/** 官网 Worker：旧 /app 前缀 301 到 app.wakeloom.com；钱包页避免 /leader/_shell 自跳。
+ *  IndexNow 密钥和 /llms.txt 在资产层之前返回，避免被重定向或改写。 */
 
 export const APP_ORIGIN = "https://app.wakeloom.com";
+
+/** IndexNow 密钥。正文必须与根目录同名 .txt 完全一致，不能多一个换行。 */
+export const INDEXNOW_KEY = "fc81fd20e5cda8d8f5d37c7bf054a1cd";
 
 /** 以前挂在官网根上的 App 页面，直接送到子域上的同名文件。 */
 export const LEGACY_APP_PAGES = [
@@ -97,8 +101,41 @@ async function shellDocument(request, env, lang) {
   return new Response(res.body, { status: 200, headers });
 }
 
+function plain(body, status, cache, method) {
+  return new Response(method === "HEAD" ? null : body, {
+    status,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": cache,
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+/** 根路径密钥文件。命中后不再交给资产层，因此不会被 trailing-slash 或 _redirects 改写。 */
+export function indexNowResponse(request) {
+  const url = new URL(request.url);
+  if (url.pathname !== `/${INDEXNOW_KEY}.txt`) return null;
+  return plain(INDEXNOW_KEY, 200, "public, max-age=86400", request.method);
+}
+
+/** /llms.txt 原样返回。资产层若给出 3xx，不把 Location 交给客户端。 */
+export async function llmsResponse(request, env) {
+  const url = new URL(request.url);
+  if (url.pathname !== "/llms.txt") return null;
+  const assetUrl = new URL("/llms.txt", url.origin);
+  const res = await env.ASSETS.fetch(new Request(assetUrl.toString(), { method: "GET", redirect: "manual" }));
+  if (!res || res.status !== 200) return plain("not found\n", 404, "no-store", request.method);
+  const body = await res.text();
+  return plain(body, 200, "public, max-age=3600", request.method);
+}
+
 export default {
   async fetch(request, env) {
+    const keyed = indexNowResponse(request);
+    if (keyed) return keyed;
+    const llms = await llmsResponse(request, env);
+    if (llms) return llms;
     const url = new URL(request.url);
     const dest = appRedirect(url);
     if (dest) return Response.redirect(dest, 301);

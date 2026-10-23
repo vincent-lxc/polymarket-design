@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { appRedirect, isShellRedirect, leaderDecision } from "./www.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import worker, { INDEXNOW_KEY, appRedirect, isShellRedirect, leaderDecision } from "./www.mjs";
+
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const host = "https://www.wakeloom.com";
 assert.equal(
@@ -66,5 +70,77 @@ const rules = fs
   .join("\n");
 assert.equal(/:addr/.test(rules), false);
 assert.equal(/_shell\/index\.html 200/.test(rules), false);
+
+const keyPath = `/${INDEXNOW_KEY}.txt`;
+assert.equal(INDEXNOW_KEY.length, 32);
+assert.match(INDEXNOW_KEY, /^[0-9a-f]{32}$/);
+assert.equal(appRedirect(host + keyPath), null);
+assert.equal(appRedirect(host + "/llms.txt"), null);
+assert.equal(leaderDecision(keyPath), null);
+assert.equal(leaderDecision("/llms.txt"), null);
+
+const keyFile = fs.readFileSync(path.join(repo, `${INDEXNOW_KEY}.txt`));
+assert.deepEqual(keyFile, Buffer.from(INDEXNOW_KEY));
+
+const boom = { ASSETS: { fetch() { throw new Error("密钥文件不应交给资产层"); } } };
+const keyRes = await worker.fetch(new Request(host + keyPath), boom);
+assert.equal(keyRes.status, 200);
+assert.equal(keyRes.headers.get("location"), null);
+assert.equal(keyRes.headers.get("content-type"), "text/plain; charset=utf-8");
+assert.equal(await keyRes.text(), INDEXNOW_KEY);
+const keyHead = await worker.fetch(new Request(host + keyPath, { method: "HEAD" }), boom);
+assert.equal(keyHead.status, 200);
+assert.equal(keyHead.headers.get("location"), null);
+assert.equal(await keyHead.text(), "");
+
+const llmsRedir = {
+  ASSETS: { async fetch() { return new Response(null, { status: 301, headers: { Location: host + "/en/" } }); } },
+};
+const blocked = await worker.fetch(new Request(host + "/llms.txt"), llmsRedir);
+assert.equal(blocked.status, 404);
+assert.equal(blocked.headers.get("location"), null);
+assert.equal((await blocked.text()).includes("<"), false);
+
+function fileFor(pathname) {
+  let rel = decodeURIComponent(pathname.split("?")[0]);
+  if (rel.endsWith("/")) rel += "index.html";
+  const full = path.normalize(path.join(repo, rel));
+  if (full !== repo && !full.startsWith(repo + path.sep)) return null;
+  if (fs.existsSync(full) && fs.statSync(full).isFile()) return full;
+  return null;
+}
+const assets = {
+  async fetch(request) {
+    const file = fileFor(new URL(request.url).pathname);
+    if (!file) return new Response("not found", { status: 404 });
+    return new Response(fs.readFileSync(file));
+  },
+};
+const llms = await worker.fetch(new Request(host + "/llms.txt"), { ASSETS: assets });
+assert.equal(llms.status, 200);
+assert.equal(llms.headers.get("location"), null);
+assert.match(llms.headers.get("content-type"), /^text\/plain/);
+const llmsBody = await llms.text();
+assert.equal(llmsBody, fs.readFileSync(path.join(repo, "llms.txt"), "utf8"));
+assert.match(llmsBody, /公测前预览，尚未正式上线/);
+assert.doesNotMatch(llmsBody, /app\.wakeloom\.com/);
+
+const home = await worker.fetch(new Request(host + "/"), { ASSETS: assets });
+assert.equal(home.status, 200);
+const homeHtml = await home.text();
+assert.equal(homeHtml, fs.readFileSync(path.join(repo, "index.html"), "utf8"));
+assert.match(homeHtml, /rel="canonical" href="https:\/\/www\.wakeloom\.com\/"/);
+assert.doesNotMatch(homeHtml, /rel="canonical" href="https:\/\/www\.wakeloom\.com\/en\/"/);
+assert.match(homeHtml, /property="og:image" content="https:\/\/www\.wakeloom\.com\/assets\/og-home\.png"/);
+assert.match(homeHtml, /name="twitter:card" content="summary_large_image"/);
+assert.match(homeHtml, /hreflang="x-default" href="https:\/\/www\.wakeloom\.com\/"/);
+assert.match(homeHtml, /application\/ld\+json/);
+assert.match(homeHtml, /"@type":"Organization"/);
+
+const en = await worker.fetch(new Request(host + "/en/"), { ASSETS: assets });
+const enHtml = await en.text();
+assert.match(enHtml, /rel="canonical" href="https:\/\/www\.wakeloom\.com\/en\/"/);
+assert.match(enHtml, /application\/ld\+json/);
+assert.match(enHtml, /"@type":"Organization"/);
 
 console.log("www redirect tests ok");

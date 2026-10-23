@@ -1,9 +1,9 @@
-/** 本地预览官网：静态文件 + 与 Worker 相同的钱包页决策（无壳页自跳）。 */
+/** 本地预览官网：走 workers/www.mjs 的同一条 fetch，静态文件由文件系统充当 ASSETS。 */
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { leaderDecision } from "../workers/www.mjs";
+import worker from "../workers/www.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.PORT || 8765);
@@ -18,6 +18,7 @@ const types = {
   ".xml": "application/xml",
   ".json": "application/json",
   ".webmanifest": "application/manifest+json",
+  ".txt": "text/plain; charset=utf-8",
 };
 
 function safeFile(urlPath) {
@@ -29,45 +30,34 @@ function safeFile(urlPath) {
   return null;
 }
 
-function send(res, file) {
-  const ext = path.extname(file);
-  res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
-  fs.createReadStream(file).pipe(res);
-}
+const env = {
+  ASSETS: {
+    async fetch(request) {
+      const u = new URL(request.url);
+      const file = safeFile(u.pathname);
+      if (file) {
+        const ext = path.extname(file);
+        return new Response(fs.readFileSync(file), {
+          status: 200,
+          headers: { "content-type": types[ext] || "application/octet-stream" },
+        });
+      }
+      if (!u.pathname.endsWith("/") && safeFile(u.pathname + "/")) {
+        return new Response(null, { status: 308, headers: { Location: u.pathname + "/" + u.search } });
+      }
+      return new Response("not found", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+    },
+  },
+};
 
-const server = http.createServer((req, res) => {
-  const u = new URL(req.url || "/", "http://127.0.0.1");
-  const lead = leaderDecision(u.pathname);
-  if (lead && lead.action === "redirect") {
-    res.writeHead(lead.status, { Location: lead.to + u.search });
-    res.end();
-    return;
-  }
-  if (lead && lead.action === "wallet") {
-    const page = safeFile(`/${lead.lang}/leader/${lead.addr}/index.html`);
-    if (page) return send(res, page);
-    const shell = safeFile(`/${lead.lang}/leader/_shell/index.html`);
-    if (shell) {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "X-Wakeloom-Leader": "shell" });
-      fs.createReadStream(shell).pipe(res);
-      return;
-    }
-    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("not found");
-    return;
-  }
-  const file = safeFile(u.pathname);
-  if (file) return send(res, file);
-  if (!u.pathname.endsWith("/")) {
-    const idx = safeFile(u.pathname + "/");
-    if (idx) {
-      res.writeHead(301, { Location: u.pathname + "/" + u.search });
-      res.end();
-      return;
-    }
-  }
-  res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-  res.end("not found");
+const server = http.createServer(async (req, res) => {
+  const request = new Request("http://127.0.0.1:" + port + (req.url || "/"), { method: req.method || "GET", redirect: "manual" });
+  const out = await worker.fetch(request, env);
+  const headers = {};
+  out.headers.forEach((value, key) => { headers[key] = value; });
+  const buf = Buffer.from(await out.arrayBuffer());
+  res.writeHead(out.status, headers);
+  res.end(req.method === "HEAD" ? undefined : buf);
 });
 
 server.listen(port, "127.0.0.1", () => {
