@@ -176,4 +176,201 @@ for (const bad of [
   assert.equal(localPreviewURL(bad, previewPort), null, bad);
 }
 
+const liveAddr = "0x" + "ab".repeat(20);
+const otherAddr = "0x" + "cd".repeat(20);
+const thirdAddr = "0x" + "ef".repeat(20);
+
+function leaderFixture(address, extra) {
+  return {
+    leader: Object.assign({
+      address,
+      indexable: true,
+      user_name: "vinii",
+      x_username: "viiniijunior",
+      updated_at: "2026-10-23T10:06:23.000Z",
+      window: "90d",
+      win_rate: 0.1234,
+      roi: 0.25,
+      max_drawdown: 0.051,
+      smart_score: 65.71452351227633,
+      gate_failures: ["trade_count"],
+      metrics: {
+        win_rate: 0.1234,
+        roi: 0.25,
+        max_drawdown: 0.051,
+        resolved_markets: 42,
+        realized_pnl: 1200,
+        smart_score: 65.71452351227633,
+        gate_pass: true,
+        gate_failures: ["trade_count"],
+        mm_score: 0.4,
+        categories: ["politics", "unknown"],
+        last_trade_at: "2026-10-16T19:48:17.000Z",
+      },
+      categories: [{ category: "politics" }, { category: "unknown" }],
+    }, extra),
+  };
+}
+
+function bffEnv(handler, assetLog) {
+  return {
+    BFF_FETCH: handler,
+    ASSETS: {
+      async fetch(request) {
+        if (assetLog) assetLog.push(new URL(request.url).pathname);
+        return assets.fetch(request);
+      },
+    },
+  };
+}
+
+const trueRes = await worker.fetch(
+  new Request(host + `/zh/leader/${liveAddr}/`),
+  bffEnv(async () => Response.json(leaderFixture(liveAddr))),
+);
+assert.equal(trueRes.status, 200);
+assert.equal(trueRes.headers.get("x-wakeloom-leader"), "ssr");
+assert.equal(trueRes.headers.get("x-wakeloom-indexable"), "true");
+assert.equal(trueRes.headers.get("x-robots-tag"), null);
+const trueHtml = await trueRes.text();
+assert.doesNotMatch(trueHtml, /noindex/);
+assert.doesNotMatch(trueHtml, /_shell/);
+assert.doesNotMatch(trueHtml, /smart_score|gate_failures|gate_pass|AggregateRating|"@type":"Review"|65\.71452351227633/);
+assert.match(trueHtml, /<title>0xabab…abab 的 Polymarket 交易数据：胜率、收益率、回撤 \| Wakeloom 织迹<\/title>/);
+assert.match(trueHtml, /0xabab…abab：近90天胜率 12\.3%、收益率 \+25\.0%、最大回撤 5\.1%。已结算市场 42 个。/);
+assert.match(trueHtml, new RegExp(`rel="canonical" href="https://www\\.wakeloom\\.com/zh/leader/${liveAddr}/"`));
+assert.match(trueHtml, new RegExp(`hreflang="zh-CN" href="https://www\\.wakeloom\\.com/zh/leader/${liveAddr}/"`));
+assert.match(trueHtml, new RegExp(`hreflang="en" href="https://www\\.wakeloom\\.com/en/leader/${liveAddr}/"`));
+assert.match(trueHtml, /hreflang="x-default" href="https:\/\/www\.wakeloom\.com\/"/);
+assert.match(trueHtml, /数据截至 2026-10-23 10:06 UTC/);
+assert.match(trueHtml, />12\.3%</);
+assert.match(trueHtml, /@vinii/);
+assert.doesNotMatch(trueHtml, /加载中|打开后从公开接口加载/);
+const ld = JSON.parse(trueHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+const types = ld["@graph"].map((node) => node["@type"]);
+assert.ok(types.includes("ProfilePage"));
+assert.ok(types.includes("Dataset"));
+assert.ok(types.includes("BreadcrumbList"));
+assert.equal(types.includes("AggregateRating"), false);
+assert.equal(types.includes("Review"), false);
+assert.equal(JSON.stringify(ld).includes("smart_score"), false);
+
+const falseRes = await worker.fetch(
+  new Request(host + `/en/leader/${liveAddr}/`),
+  bffEnv(async () => Response.json(leaderFixture(liveAddr, { indexable: false, win_rate: null, roi: null, metrics: { win_rate: null, roi: null, max_drawdown: 0.051 } }))),
+);
+assert.equal(falseRes.status, 200);
+assert.equal(falseRes.headers.get("x-wakeloom-indexable"), "false");
+const falseHtml = await falseRes.text();
+assert.match(falseHtml, /<meta name="robots" content="noindex,follow">/);
+assert.match(falseHtml, /0xabab…abab: max drawdown 5\.1%/);
+assert.doesNotMatch(falseHtml, /90-day win rate|ROI /);
+assert.doesNotMatch(falseHtml, /null|NaN/);
+assert.doesNotMatch(falseHtml, /_shell/);
+
+const paperRes = await worker.fetch(
+  new Request(host + `/zh/leader/${liveAddr}/`),
+  bffEnv(async () => Response.json(leaderFixture(liveAddr, { paper: true }))),
+);
+const paperHtml = await paperRes.text();
+assert.match(paperHtml, /模拟盘/);
+assert.doesNotMatch(paperHtml, /noindex/);
+
+let bffCalls = 0;
+const missing = await worker.fetch(
+  new Request(host + `/zh/leader/${otherAddr}/`),
+  bffEnv(async () => {
+    bffCalls += 1;
+    return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+  }),
+);
+assert.equal(missing.status, 404);
+assert.match(await missing.text(), /没有这个地址的公开数据/);
+assert.equal(bffCalls, 1);
+
+const bad = await worker.fetch(
+  new Request(host + "/zh/leader/not-an-address/"),
+  bffEnv(async () => {
+    throw new Error("invalid address must not call bff");
+  }),
+);
+assert.equal(bad.status, 404);
+
+const upperRes = await worker.fetch(
+  new Request(host + `/en/leader/${"0x" + "AB".repeat(20)}/`),
+  bffEnv(async () => {
+    throw new Error("uppercase redirect must not call bff");
+  }),
+);
+assert.equal(upperRes.status, 301);
+assert.equal(upperRes.headers.get("location"), host + `/en/leader/${liveAddr}/`);
+
+const downAssets = [];
+const down = await worker.fetch(
+  new Request(host + `/zh/leader/${liveAddr}/`),
+  bffEnv(async () => new Response("nope", { status: 500 }), downAssets),
+);
+assert.equal(down.status, 503);
+assert.equal(downAssets.length, 0);
+assert.doesNotMatch(await down.text(), /0x[a-f0-9]{40}/);
+
+const shellOnly = await worker.fetch(new Request(host + "/zh/leader/_shell/"), { ASSETS: assets });
+assert.equal(shellOnly.status, 301);
+assert.match(shellOnly.headers.get("location"), /\/zh\/leaderboard\/$/);
+
+function sitemapFetch(map) {
+  return async (url) => {
+    const offset = Number(new URL(url).searchParams.get("offset"));
+    const page = map[offset];
+    if (!page) return new Response("missing page", { status: 500 });
+    return Response.json({ sitemap: page });
+  };
+}
+
+const siteAssets = [];
+const siteRes = await worker.fetch(
+  new Request(host + "/sitemap.xml"),
+  bffEnv(sitemapFetch({
+    0: {
+      leaders: [
+        { address: liveAddr, updated_at: "2026-10-23T10:36:23.000Z" },
+        { address: otherAddr.toUpperCase(), updated_at: "2026-10-23T01:02:03.000Z" },
+      ],
+      next_offset: 2,
+    },
+    2: {
+      leaders: [{ address: thirdAddr, updated_at: "2026-10-22T00:00:00.000Z" }],
+      next_offset: null,
+    },
+  }), siteAssets),
+);
+assert.equal(siteRes.status, 200);
+assert.equal(siteRes.headers.get("x-wakeloom-sitemap"), "bff");
+assert.equal(siteAssets.length, 0);
+const xml = await siteRes.text();
+assert.doesNotMatch(xml, /app\.wakeloom\.com/);
+const leaderLocs = xml.match(/<loc>https:\/\/www\.wakeloom\.com\/(?:zh|en)\/leader\/0x[a-f0-9]{40}\//g) || [];
+assert.equal(leaderLocs.length, 6);
+for (const a of [liveAddr, otherAddr, thirdAddr]) {
+  assert.equal(xml.split(a).length - 1, 6);
+}
+assert.match(xml, new RegExp(`<loc>https://www\\.wakeloom\\.com/zh/leader/${liveAddr}/</loc><lastmod>2026-10-23T10:36:23\\.000Z</lastmod>`));
+assert.match(xml, /<loc>https:\/\/www\.wakeloom\.com\/zh\/faq\/<\/loc>/);
+assert.doesNotMatch(xml, /_shell/);
+
+const siteFailAssets = [];
+const siteFail = await worker.fetch(
+  new Request(host + "/sitemap.xml"),
+  bffEnv(async () => new Response("down", { status: 502 }), siteFailAssets),
+);
+assert.equal(siteFail.status, 503);
+assert.equal(siteFailAssets.length, 0);
+assert.equal(await siteFail.text(), "sitemap unavailable\n");
+
+const siteStuck = await worker.fetch(
+  new Request(host + "/sitemap.xml"),
+  bffEnv(async () => Response.json({ sitemap: { leaders: [{ address: liveAddr, updated_at: "2026-10-23T00:00:00.000Z" }], next_offset: 0 } })),
+);
+assert.equal(siteStuck.status, 503);
+
 console.log("www redirect tests ok");
