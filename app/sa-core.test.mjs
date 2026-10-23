@@ -32,6 +32,15 @@ assert.equal(SA.isStrategyCatalog({ items: [{ strategy_id: "copy" }], next_curso
 assert.equal(SA.isStrategyCatalog({ strategies: [{ name: "paper" }] }), false);
 assert.equal(SA.isAccountListV2({ accounts: [{ strategy: "paper20000" }] }), false);
 assert.equal(SA.isAccountListV2({ items: [], next_cursor: null, total: 0, summary: { mode: "paper" } }), true);
+assert.equal(SA.isAccountListV2({ accounts: [{ strategy: "zft-062", process_kind: "legacy" }], next_cursor: null, total: 7, summary: { mode: "paper" } }), true);
+assert.equal(SA.isAccountListV2({ accounts: [{ id: "a", strategy_id: "copy" }], summary: { mode: "paper" } }), true);
+const alias = SA.normalizeAccountPage({ accounts: [{ strategy: "zft-062", process_kind: "legacy" }], next_cursor: null, total: 1, summary: { mode: "paper" } });
+assert.equal(alias.items[0].strategy, "zft-062");
+assert.equal(alias.accounts.length, 1);
+const named = SA.normalizeAccountPage({ items: [{ id: "paper20000" }], summary: { mode: "paper" } });
+assert.equal(named.accounts[0].id, "paper20000");
+assert.equal(SA.isLegacyAccount({ process_kind: "legacy" }), true);
+assert.equal(SA.isLegacyAccount({ process_kind: "acct" }), false);
 assert.equal(SA.hasCursorPage({ active: [{ address: "0x1" }] }), false);
 assert.equal(SA.hasCursorPage({ active: [], next_cursor: null, total: 0 }), true);
 
@@ -146,7 +155,10 @@ assert.equal(SA.paramsEditable({ state: "stopped", process_kind: "acct", archive
 assert.equal(SA.paramsEditable({ state: "running", process_kind: "acct", params_editable: false }), false);
 const legacy = SA.rowActions({ state: "running", process_kind: "legacy" });
 assert.equal(legacy.primary.length, 0);
-assert.match(legacy.note, /存量账户/);
+assert.equal(legacy.secondary.length, 0);
+assert.equal(legacy.note, "旧版策略，暂不支持编辑");
+assert.equal(SA.errorText("legacy_account_readonly"), "旧版策略，暂不支持编辑");
+assert.ok(!/复制/.test(legacy.note));
 
 const schemas = {
   copy: [{ key: "copy_ratio", label_zh: "跟单比例", type: "number", unit: "x" }, { key: "fees_on", label_zh: "手续费开关", type: "bool" }],
@@ -202,11 +214,17 @@ assert.ok(problems.some((p) => /跟单比例/.test(p) && /改小/.test(p)));
 
 const page = SA.mockPage(SA.mockAccounts(), { archived: false, strategy_id: "copy", limit: 20 });
 assert.equal(page.items.length, 20);
+assert.equal(page.accounts.length, page.items.length);
 assert.equal(page.total, 46);
 assert.ok(page.next_cursor);
 const page2 = SA.mockPage(SA.mockAccounts(), { archived: false, strategy_id: "copy", limit: 20, cursor: page.next_cursor });
 assert.equal(page2.items[0].id !== page.items[0].id, true);
-assert.equal(SA.mockPage(SA.mockAccounts(), { archived: false, strategy_id: "zerofeetrend", limit: 20 }).total, 1);
+assert.equal(SA.mockPage(SA.mockAccounts(), { archived: false, strategy_id: "zerofeetrend", limit: 20 }).total, 0);
+const legPage = SA.mockPage(SA.mockAccounts(), { archived: false, process_kind: "legacy", limit: 20 });
+assert.equal(legPage.total, 1);
+assert.equal(legPage.items[0].id, "zft-062");
+assert.equal(legPage.items[0].strategy, "zft-062");
+assert.equal(legPage.accounts[0].strategy, "zft-062");
 
 const leadersOld = { active: [{ address: "0xabc" }] };
 const leadersNew = { active: [{ address: "0xabc" }], next_cursor: "n", total: 40 };

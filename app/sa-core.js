@@ -32,7 +32,7 @@
     insufficient_wallet_balance: "分配总额超过钱包可用余额。减少本次资金，或先收回其它账户的资金。",
     wallet_has_positions: "钱包账户还有持仓。先清仓，再删除。",
     wallet_funds_not_withdrawn: "资金还没收回。先把资金提回，再删除。",
-    legacy_account_readonly: "这是存量账户，只能查看。不能启动、停止或改参数。可以复制为新账户再改。",
+    legacy_account_readonly: "旧版策略，暂不支持编辑",
     account_limit_reached: "账户数量到了上限。先归档或删除不用的账户，再开新的。",
     rpc_not_configured: "还没有可用的 RPC。到配置页加上你自己的 RPC 后再开跑。一个 key 建议只给 1 到 2 个账户。",
     engine_unavailable: "进程没有起来，账户停在已停止。看健康页，或稍后再点启动。",
@@ -84,11 +84,34 @@
     return !!(first && (first.strategy_id || first.launchable != null));
   }
 
+  /* items 与 accounts 是同一份列表。旧响应只有 accounts，且靠 strategy 定位。 */
+  function accountListRows(d) {
+    if (!d || typeof d !== "object") return null;
+    if (Array.isArray(d.items)) return d.items;
+    if (Array.isArray(d.accounts)) return d.accounts;
+    return null;
+  }
+
+  function normalizeAccountPage(d) {
+    if (!d || typeof d !== "object") return d;
+    var items = accountListRows(d);
+    if (!items) return d;
+    var accounts = Array.isArray(d.accounts) ? d.accounts : items;
+    return Object.assign({}, d, { items: items, accounts: accounts });
+  }
+
+  function isLegacyAccount(a) {
+    return !!(a && a.process_kind === "legacy");
+  }
+
   function isAccountListV2(d) {
-    if (!d || typeof d !== "object" || !Array.isArray(d.items)) return false;
+    var rows = accountListRows(d);
+    if (!rows) return false;
+    /* 旧账户页：只有 accounts[].strategy，没有游标、汇总或 v2 字段。 */
+    if (!Array.isArray(d.items) && !Object.prototype.hasOwnProperty.call(d, "next_cursor") && !d.summary) return false;
     if (Object.prototype.hasOwnProperty.call(d, "next_cursor") || d.summary) return true;
-    var first = d.items[0];
-    return !!(first && (first.strategy_id || first.params_editable != null || first.current_segment != null || first.wallet_close_status));
+    var first = rows[0];
+    return !!(first && (first.strategy_id || first.process_kind || first.params_editable != null || first.current_segment != null || first.wallet_close_status));
   }
 
   function hasCursorPage(d) {
@@ -328,7 +351,7 @@
     var archived = !!(a && a.archived);
     var running = a && a.state === "running";
     if (legacy) {
-      return { legacy: true, paramsLocked: true, primary: [], secondary: ["copy"], note: errorText("legacy_account_readonly") };
+      return { legacy: true, paramsLocked: true, primary: [], secondary: [], note: errorText("legacy_account_readonly") };
     }
     if (archived) {
       return { archived: true, paramsLocked: true, primary: ["unarchive"], secondary: ["copy"], startDisabled: true, startHint: errorText("account_archived") };
@@ -686,6 +709,7 @@
       strategy_label: partial.strategy_label,
       account_type: partial.account_type || "paper",
       process_kind: partial.process_kind || "acct",
+      strategy: partial.strategy || "",
       state: partial.state,
       archived: !!partial.archived,
       params: partial.params || {},
@@ -753,7 +777,7 @@
         metrics: m(9780, -220, -0.022, 188, -32, 402, -0.031, 4, 0)
       }),
       mockAccount({
-        id: "zft-062", name: "zft-062", strategy_id: "zerofeetrend", strategy_label: "零费趋势 zerofeetrend",
+        id: "zft-062", name: "zft-062", strategy: "zft-062", strategy_id: "zerofeetrend", strategy_label: "零费趋势 zerofeetrend",
         state: "running", process_kind: "legacy", capital_usd: 10000, current_segment: 1,
         params: { entry_threshold: 0.62 }, params_diff: {},
         metrics: m(10410, 410, 0.041, 0, 410, 96, -0.021, 5, 2)
@@ -809,6 +833,8 @@
   function mockFilter(list, q) {
     return list.filter(function (a) {
       if (!!a.archived !== !!q.archived) return false;
+      if (q.process_kind && a.process_kind !== q.process_kind) return false;
+      if (!q.process_kind && q.strategy_id && a.process_kind === "legacy") return false;
       if (q.strategy_id && a.strategy_id !== q.strategy_id) return false;
       if (q.state && a.state !== q.state) return false;
       if (q.account_type && a.account_type !== q.account_type) return false;
@@ -830,6 +856,7 @@
     return {
       summary: mockSummary(q.mode),
       items: slice,
+      accounts: slice,
       next_cursor: next,
       total: filtered.length
     };
@@ -975,6 +1002,9 @@
     errorText: errorText,
     warningText: warningText,
     isStrategyCatalog: isStrategyCatalog,
+    accountListRows: accountListRows,
+    normalizeAccountPage: normalizeAccountPage,
+    isLegacyAccount: isLegacyAccount,
     isAccountListV2: isAccountListV2,
     isAccountV2: isAccountV2,
     hasCursorPage: hasCursorPage,

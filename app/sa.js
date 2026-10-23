@@ -94,7 +94,7 @@
     return seed;
   }
   function saveMock(list) { try { sessionStorage.setItem(mockKey(), JSON.stringify(list)); } catch (err) {} }
-  function findMock(id) { return mockList().filter(function (a) { return a.id === id; })[0] || null; }
+  function findMock(id) { return mockList().filter(function (a) { return a.id === id || (a.strategy && a.strategy === id); })[0] || null; }
 
   function sheet() {
     var el = document.getElementById("sa-sheet");
@@ -183,7 +183,53 @@
     if (query.state) p.set("state", query.state);
     if (query.sort) p.set("sort", query.sort);
     if (query.order) p.set("order", query.order);
-    return api("/v1/accounts?" + p.toString());
+    return SA.normalizeAccountPage(await api("/v1/accounts?" + p.toString()));
+  }
+  function dropLegacy(page) {
+    var raw = (page && page.items) || [];
+    var items = raw.filter(function (a) { return !SA.isLegacyAccount(a); });
+    var removed = raw.length - items.length;
+    var total = page && page.total != null ? Math.max(items.length, Number(page.total) - removed) : items.length;
+    return { items: items, next_cursor: page && page.next_cursor, total: total, summary: page && page.summary };
+  }
+  function accountQuery(g, extra) {
+    var filters = (listState && listState.filters) || {};
+    var qy = Object.assign({
+      archived: !!filters.archived,
+      state: filters.state || "",
+      sort: filters.sort || "return_pct",
+      order: filters.order || "desc"
+    }, extra || {});
+    if (g && g.id === "legacy") {
+      if (mockMode()) qy.process_kind = "legacy";
+      return qy;
+    }
+    if (g && g.id !== "all") qy.strategy_id = g.id;
+    return qy;
+  }
+  async function fetchLegacyGroup(filters) {
+    filters = filters || {};
+    if (mockMode()) {
+      return fetchAccounts({ limit: 100, archived: !!filters.archived, state: filters.state || "", sort: filters.sort || "return_pct", order: filters.order || "desc", process_kind: "legacy" });
+    }
+    var found = [];
+    var seen = {};
+    var cursor = "";
+    var summary = null;
+    for (var n = 0; n < 8; n++) {
+      var page = await fetchAccounts({ limit: 100, cursor: cursor, archived: !!filters.archived, state: filters.state || "", sort: filters.sort || "return_pct", order: filters.order || "desc" });
+      if (page && page.summary) summary = page.summary;
+      ((page && page.items) || []).forEach(function (a) {
+        if (!SA.isLegacyAccount(a)) return;
+        var key = a.id || a.strategy;
+        if (!key || seen[key]) return;
+        seen[key] = 1;
+        found.push(a);
+      });
+      if (!page || !page.next_cursor || page.next_cursor === cursor) break;
+      cursor = page.next_cursor;
+    }
+    return { items: found, accounts: found, next_cursor: null, total: found.length, summary: summary };
   }
   async function fetchStrategies(query) {
     query = query || {};
@@ -207,18 +253,34 @@
     }
     return api("/v1/strategies/" + encodeURIComponent(id));
   }
-  async function fetchAccount(id, scope) {
+  function unwrapAccount(d) {
+    if (!d || typeof d !== "object") return d;
+    if (d.strategy_id || d.id || d.process_kind) return d;
+    if (d.account && typeof d.account === "object") return Object.assign({}, d.account);
+    return d;
+  }
+  function markLegacy(account, key) {
+    if (!account || account.process_kind || account.strategy_id) return account;
+    account.process_kind = "legacy";
+    account.strategy = account.strategy || key;
+    if (!account.id) account.id = account.strategy || key;
+    if (!account.name) account.name = account.strategy || account.id;
+    return account;
+  }
+  async function fetchAccount(id, scope, viaStrategy) {
     if (mockMode()) {
       var a = findMock(id);
       if (!a) { var e = new Error("missing"); e.status = 404; e.body = { error: "account_not_found" }; throw e; }
       a = JSON.parse(JSON.stringify(a));
       if (scope === "current_segment" && a.metrics && a.metrics.return_pct != null) a.metrics.return_pct = a.metrics.return_pct * 0.35;
+      if (viaStrategy) markLegacy(a, id);
       return a;
     }
     var path = "/v1/accounts/" + encodeURIComponent(id);
     if (scope) path += "?scope=" + encodeURIComponent(scope);
-    var d = await api(path);
-    return (d && d.strategy_id) ? d : (d && d.account) || d;
+    var account = unwrapAccount(await api(path));
+    if (viaStrategy) account = markLegacy(account, id);
+    return account;
   }
   function pageOf(d, legacyKeys) {
     if (d && SA.hasCursorPage(d) && Array.isArray(d.items)) return { items: d.items, next_cursor: d.next_cursor, total: d.total != null ? Number(d.total) : d.items.length, paged: true };
@@ -278,16 +340,19 @@
     var t = SA.diffText(a.params_diff, schema);
     return t ? '<div class="sa-meta">' + esc(t) + "</div>" : "";
   }
+  function accountHref(a) {
+    if (SA.isLegacyAccount(a)) return href("/account", { s: a.strategy || a.id });
+    return href("/account", { id: a.id });
+  }
   function opsHtml(a) {
     var act = SA.rowActions(a);
+    if (act.legacy) return "";
     var id = esc(a.id);
     var bits = [];
     function b(name, label, dis, hint, pri) {
       bits.push('<button type="button" class="btn sm' + (pri ? " pri" : "") + '" data-act="' + name + '" data-id="' + id + '"' + (dis ? " disabled" : "") + (hint ? ' title="' + esc(hint) + '"' : "") + ">" + label + "</button>");
     }
-    if (act.legacy) {
-      bits.push('<span class="tag" title="' + esc(act.note) + '">只读</span>');
-    } else if (act.running) {
+    if (act.running) {
       b("stop", "停止", false, "", true);
       b("capital", "调整资金", false, "");
     } else if (act.archived) {
@@ -328,11 +393,11 @@
   function rowHtml(a, schema) {
     var cells = accountCells(a, schema);
     var check = '<input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(a.id) + '"' + (selected.has(a.id) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '">';
-    return "<tr><td>" + check + '</td><td><a href="' + esc(href("/account", { id: a.id })) + '">' + cells[1] + "</a></td><td>" + cells[0] + "</td><td class='r num'>" + cells[2] + "</td><td class='r num'>" + cells[3] + "</td><td class='r num'>" + cells[4] + "</td><td class='r num'>" + cells[5] + "</td><td class='r num'>" + cells[6] + "</td><td class='r num'>" + cells[7] + "</td><td class='r num'>" + cells[8] + "</td><td class='r num'>" + cells[9] + "</td><td>" + cells[10] + "</td><td class='r'>" + opsHtml(a) + "</td></tr>";
+    return "<tr><td>" + check + '</td><td><a href="' + esc(accountHref(a)) + '">' + cells[1] + "</a></td><td>" + cells[0] + "</td><td class='r num'>" + cells[2] + "</td><td class='r num'>" + cells[3] + "</td><td class='r num'>" + cells[4] + "</td><td class='r num'>" + cells[5] + "</td><td class='r num'>" + cells[6] + "</td><td class='r num'>" + cells[7] + "</td><td class='r num'>" + cells[8] + "</td><td class='r num'>" + cells[9] + "</td><td>" + cells[10] + "</td><td class='r'>" + opsHtml(a) + "</td></tr>";
   }
   function cardHtml(a, schema) {
     var m = a.metrics || {};
-    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(a.id) + '"' + (selected.has(a.id) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(href("/account", { id: a.id })) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + '</div><div class="ret ' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</div><div class="sa-meta">' + esc(a.strategy_label || "") + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
+    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(a.id) + '"' + (selected.has(a.id) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + '</div><div class="ret ' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</div><div class="sa-meta">' + esc(a.strategy_label || "") + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
   }
   var HEAD = "<tr><th></th><th>账户</th><th>策略</th><th class='r'>资金</th><th class='r'>净收益</th><th class='r'>收益率</th><th class='r'>成交</th><th class='r'>手续费</th><th class='r'>回撤</th><th class='r'>运行时长</th><th class='r'>分段</th><th>状态</th><th class='r'>操作</th></tr>";
 
@@ -412,10 +477,15 @@
     if (cat && SA.isStrategyCatalog(cat)) {
       for (var i = 0; i < cat.items.length; i++) {
         var s = cat.items[i];
-        var page = await fetchAccounts({ limit: 20, archived: filters.archived, state: filters.state, sort: filters.sort, order: filters.order, strategy_id: s.strategy_id });
-        if (!page || !page.total) continue;
+        var page = dropLegacy(await fetchAccounts({ limit: 20, archived: filters.archived, state: filters.state, sort: filters.sort, order: filters.order, strategy_id: s.strategy_id }));
+        if (!page.items.length) continue;
         var pager = SA.pagerRemember(SA.pagerInit(20), page.next_cursor);
         groups.push({ id: s.strategy_id, label: s.label || s.strategy_id, schema: s.params_schema || [], items: page.items, total: page.total, pager: pager, mobile: page.items.slice(), mobileNext: page.next_cursor });
+      }
+      var legacyPage = await fetchLegacyGroup(filters);
+      if (legacyPage.items && legacyPage.items.length) {
+        var lp = SA.pagerRemember(SA.pagerInit(100), null);
+        groups.push({ id: "legacy", label: "旧版策略", schema: [], items: legacyPage.items, total: legacyPage.items.length, pager: lp, mobile: legacyPage.items.slice(), mobileNext: null });
       }
     } else if (summaryPage && SA.isAccountListV2(summaryPage)) {
       var pager2 = SA.pagerRemember(SA.pagerInit(20), summaryPage.next_cursor);
@@ -428,12 +498,12 @@
     return (listState.groups || []).filter(function (g) { return g.id === id; })[0];
   }
   async function reloadGroup(g, pager) {
-    var page = await fetchAccounts({ limit: pager.limit, cursor: SA.pagerCursor(pager), archived: listState.filters.archived, state: listState.filters.state, sort: listState.filters.sort, order: listState.filters.order, strategy_id: g.id === "all" ? "" : g.id });
-    g.pager = SA.pagerRemember(pager, page.next_cursor);
-    g.items = page.items;
-    g.total = page.total;
-    g.mobile = page.items.slice();
-    g.mobileNext = page.next_cursor;
+    var page = g.id === "legacy" ? await fetchLegacyGroup(listState.filters) : dropLegacy(await fetchAccounts(accountQuery(g, { limit: pager.limit, cursor: SA.pagerCursor(pager) })));
+    g.pager = SA.pagerRemember(pager, g.id === "legacy" ? null : page.next_cursor);
+    g.items = page.items || [];
+    g.total = g.id === "legacy" ? g.items.length : page.total;
+    g.mobile = g.items.slice();
+    g.mobileNext = g.id === "legacy" ? null : page.next_cursor;
     if (page.summary) listState.summary = page.summary;
     paintList();
   }
@@ -492,7 +562,7 @@
     var mount = takeOver();
     var s = await fetchStrategy(id);
     document.title = (s.label || id) + " · 策略 · Wakeloom";
-    var page = await fetchAccounts({ limit: 20, strategy_id: id, archived: false, sort: "return_pct", order: "desc" });
+    var page = dropLegacy(await fetchAccounts({ limit: 20, strategy_id: id, archived: false, sort: "return_pct", order: "desc" }));
     var pager = SA.pagerRemember(SA.pagerInit(20), page.next_cursor);
     var schema = s.params_schema || [];
     var rows = schema.map(function (p) {
@@ -705,7 +775,8 @@
     }).join("");
     var locked = !SA.paramsEditable(a);
     var fields = schema.map(function (p) { return fieldHtml(p, (a.params || {})[p.key]); }).join("");
-    mount.innerHTML = '<div class="top"><h1>' + esc(a.name) + '</h1>' + statusHtml(a) + '<a class="btn sm" href="' + esc(href("/account")) + '">全部账户</a></div>' + banner(flash, false) + '<div id="sa-err"></div>' + settleHtml(a) + rpcHtml(a) + '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(SA.formatUsd(m.equity_usd, false)) + '</div><div class="sa-sub"><span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</span><span>净收益 ' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>" + '<section class="card" id="sa-curve"><div class="sa-chartbar"><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div></div>" + chart + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "") + "</section>" + '<section class="card" id="sa-params"><div class="hd"><h2>参数</h2>' + (locked ? '<span class="tag">只读</span>' : '<span class="tag or">可编辑</span>') + '</div>' + (act.lockHint && a.state === "running" ? '<div class="sa-warn">' + esc(act.lockHint) + "</div>" : "") + (act.note ? '<div class="sa-warn">' + esc(act.note) + "</div>" : "") + '<form class="sa-form' + (locked ? " sa-lock" : "") + '" id="sa-edit">' + fields + "</form><div class='sa-ops' style='margin-top:12px'>" + opsHtml(a) + (locked ? "" : '<button type="button" class="btn pri" data-act="save-start">保存并启动</button>') + "</div></section>" + '<section class="card" id="sa-pos"><div class="hd"><h2>持仓</h2></div><div id="sa-pos-body"></div></section><section class="card" id="sa-trd"><div class="hd"><h2>成交</h2></div><div id="sa-trd-body"></div></section>';
+    var legacyLine = act.legacy ? '<p class="sa-warn" id="sa-legacy" role="status">' + esc(act.note) + "</p>" : "";
+    mount.innerHTML = '<div class="top"><h1>' + esc(a.name) + '</h1>' + statusHtml(a) + '<a class="btn sm" href="' + esc(href("/account")) + '">全部账户</a></div>' + legacyLine + banner(flash, false) + '<div id="sa-err"></div>' + settleHtml(a) + rpcHtml(a) + '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(SA.formatUsd(m.equity_usd, false)) + '</div><div class="sa-sub"><span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</span><span>净收益 ' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>" + '<section class="card" id="sa-curve"><div class="sa-chartbar"><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div></div>" + chart + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "") + "</section>" + '<section class="card" id="sa-params"><div class="hd"><h2>参数</h2>' + (locked ? '<span class="tag">只读</span>' : '<span class="tag or">可编辑</span>') + '</div>' + (act.lockHint && a.state === "running" ? '<div class="sa-warn">' + esc(act.lockHint) + "</div>" : "") + (act.note && !act.legacy ? '<div class="sa-warn">' + esc(act.note) + "</div>" : "") + '<form class="sa-form' + (locked ? " sa-lock" : "") + '" id="sa-edit">' + fields + "</form><div class='sa-ops' style='margin-top:12px'>" + opsHtml(a) + (locked ? "" : '<button type="button" class="btn pri" data-act="save-start">保存并启动</button>') + "</div></section>" + '<section class="card" id="sa-pos"><div class="hd"><h2>持仓</h2></div><div id="sa-pos-body"></div></section><section class="card" id="sa-trd"><div class="hd"><h2>成交</h2></div><div id="sa-trd-body"></div></section>';
     if (locked) document.querySelectorAll("#sa-edit input,#sa-edit select").forEach(function (el) { el.disabled = true; });
     var host = document.getElementById("sa-chart");
     if (host && detailState.model) bindChart(host, detailState.model, function () {});
@@ -824,13 +895,13 @@
       var idx = list.findIndex(function (x) { return x.id === id; });
       if (idx < 0) throw Object.assign(new Error("missing"), { status: 404, body: { error: "account_not_found" } });
       var item = list[idx];
+      if (item.process_kind === "legacy") throw Object.assign(new Error("leg"), { status: 409, body: { error: "legacy_account_readonly" } });
       if (kind === "delete") { list.splice(idx, 1); saveMock(list); return; }
       if (kind === "archive") { item.archived = true; item.params_editable = false; }
       if (kind === "unarchive") { item.archived = false; item.params_editable = item.state === "stopped"; }
       if (kind === "stop") { item.state = "stopped"; item.params_editable = item.process_kind !== "legacy" && !item.archived; item.wallet_close_status = item.wallet_close_status || { can_delete: item.account_type !== "wallet", open_positions_count: 0, unwithdrawn_usd: 0 }; if (item.account_type !== "wallet") item.wallet_close_status.can_delete = true; }
       if (kind === "start") {
         if (item.archived) throw Object.assign(new Error("arch"), { status: 409, body: { error: "account_archived" } });
-        if (item.process_kind === "legacy") throw Object.assign(new Error("leg"), { status: 409, body: { error: "legacy_account_readonly" } });
         item.state = "running"; item.params_editable = false; if (item.wallet_close_status) item.wallet_close_status.can_delete = false;
       }
       list[idx] = item;
@@ -900,6 +971,7 @@
   }
   async function saveAndStart() {
     var a = detailState.account;
+    if (SA.isLegacyAccount(a)) { toast(SA.errorText("legacy_account_readonly")); return; }
     var form = document.getElementById("sa-edit");
     var params = readForm(form, detailState.schema || []);
     var problems = SA.validateParams(detailState.schema || [], params);
@@ -931,6 +1003,7 @@
   async function refresh() {
     var params = q();
     if (document.body.dataset.page === "compare") return loadCompare((params.get("ids") || "").split(",").filter(Boolean), compareState && compareState.data ? { axis: compareState.data.axis, metric: compareState.data.metric, scope: compareState.data.scope } : { axis: "elapsed", metric: "return_pct", scope: "all" });
+    if (params.get("s") && !params.get("id") && !params.get("new") && document.body.dataset.page === "account") return openDetail(params.get("s"), true);
     if (params.get("id") && document.body.dataset.page === "account") return openDetail(params.get("id"));
     if (document.body.dataset.page === "account") return loadGroups(filtersFromQuery());
   }
@@ -982,7 +1055,9 @@
       }
       if (act === "scope" && detailState) {
         detailState.scope = t.getAttribute("data-v");
-        detailState.account = await fetchAccount(detailState.account.id, detailState.scope);
+        var via = !!(detailState.viaStrategy || SA.isLegacyAccount(detailState.account));
+        var key = via ? (detailState.account.strategy || detailState.account.id) : detailState.account.id;
+        detailState.account = await fetchAccount(key, detailState.scope, via);
         detailState.sides.positions.pager = SA.pagerInit(detailState.sides.positions.pager.limit);
         detailState.sides.trades.pager = SA.pagerInit(detailState.sides.trades.pager.limit);
         paintDetail();
@@ -997,6 +1072,10 @@
     }
     if (act === "sheet-close") { closeSheet(); return; }
     var account = id ? (findMock(id) || (detailState && detailState.account && detailState.account.id === id ? detailState.account : null) || (listState && listState.groups.reduce(function (hit, g) { return hit || g.items.filter(function (a) { return a.id === id; })[0] || g.mobile.filter(function (a) { return a.id === id; })[0]; }, null))) : null;
+    if ((act === "stop" || act === "start" || act === "archive" || act === "unarchive" || act === "delete" || act === "edit" || act === "capital" || act === "save-start") && SA.isLegacyAccount(account || (detailState && detailState.account))) {
+      toast(SA.errorText("legacy_account_readonly"));
+      return;
+    }
     if (!account && id && !mockMode()) { try { account = await fetchAccount(id); } catch (e) { toast(explain(e)); return; } }
     if (act === "stop" && account) return askStop(account);
     if (act === "delete" && account) return askDelete(account);
@@ -1049,12 +1128,12 @@
       if (act === "next") up = SA.pagerNext(up);
       try {
         if (act === "more") {
-          var extra = await fetchAccounts({ limit: usedState.pager.limit, cursor: usedState.mobileNext, strategy_id: usedState.id, archived: false, sort: "return_pct", order: "desc" });
+          var extra = dropLegacy(await fetchAccounts({ limit: usedState.pager.limit, cursor: usedState.mobileNext, strategy_id: usedState.id, archived: false, sort: "return_pct", order: "desc" }));
           usedState.mobile = usedState.mobile.concat(extra.items || []);
           usedState.mobileNext = extra.next_cursor;
           usedState.total = extra.total;
         } else {
-          var got = await fetchAccounts({ limit: up.limit, cursor: SA.pagerCursor(up), strategy_id: usedState.id, archived: false, sort: "return_pct", order: "desc" });
+          var got = dropLegacy(await fetchAccounts({ limit: up.limit, cursor: SA.pagerCursor(up), strategy_id: usedState.id, archived: false, sort: "return_pct", order: "desc" }));
           usedState.pager = SA.pagerRemember(up, got.next_cursor);
           usedState.items = got.items || [];
           usedState.total = got.total;
@@ -1090,7 +1169,8 @@
       if (act === "prev") nextPager = SA.pagerPrev(g.pager);
       if (act === "next") nextPager = SA.pagerNext(g.pager);
       if (act === "more") {
-        var morePage = await fetchAccounts({ limit: g.pager.limit, cursor: g.mobileNext, archived: listState.filters.archived, state: listState.filters.state, sort: listState.filters.sort, order: listState.filters.order, strategy_id: g.id === "all" ? "" : g.id });
+        if (g.id === "legacy") { paintList(); return; }
+        var morePage = dropLegacy(await fetchAccounts(accountQuery(g, { limit: g.pager.limit, cursor: g.mobileNext })));
         g.mobile = g.mobile.concat(morePage.items || []);
         g.mobileNext = morePage.next_cursor;
         g.total = morePage.total;
@@ -1105,15 +1185,16 @@
     }
   }
 
-  async function openDetail(id) {
+  async function openDetail(id, viaStrategy) {
     var mount = takeOver();
     mount.innerHTML = "<p class='sa-note'>正在读取账户…</p>";
     try {
-      var account = await fetchAccount(id, q().get("scope") === "current_segment" ? "current_segment" : "all");
+      var account = await fetchAccount(id, q().get("scope") === "current_segment" ? "current_segment" : "all", !!viaStrategy);
       var schema = [];
       try { var st = await fetchStrategy(account.strategy_id); schema = st.params_schema || []; } catch (e) {}
       detailState = {
         account: account,
+        viaStrategy: !!viaStrategy || SA.isLegacyAccount(account),
         schema: schema,
         scope: q().get("scope") === "current_segment" ? "current_segment" : "all",
         flash: flashTake(),
@@ -1134,6 +1215,7 @@
     var params = q();
     if (params.get("new")) return paintLaunch(params.get("new"), params.get("from"));
     if (params.get("id")) return openDetail(params.get("id"));
+    if (params.get("s")) return openDetail(params.get("s"), true);
     takeOver();
     document.title = "账户 · Wakeloom 织迹";
     await loadGroups(filtersFromQuery());

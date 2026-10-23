@@ -96,6 +96,7 @@
   .sa-cards{display:grid}
   .sa-table{display:none}
   .sa-sel{position:fixed;left:10px;right:10px;bottom:64px;z-index:45}
+  #sa-mount{padding-bottom:180px}
   #ld-on.sa-paged .tw{display:none}
   #ld-on.sa-paged .sa-cards{display:grid;margin-top:8px}
   #bd-board.sa-paged .tw,#mk-board.sa-paged .tw{display:none}

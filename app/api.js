@@ -559,7 +559,8 @@ async function renderLeaders(){
       if(ldStrategy!=="paper") accounts.push({strategy:ldStrategy});
     }else{
       const list=await api("/v1/accounts");
-      accounts=list.accounts||[];
+      const rows=Array.isArray(list.accounts)?list.accounts:(Array.isArray(list.items)?list.items:[]);
+      accounts=rows.filter(a=>a&&a.strategy);
       ldStrategy=Q.get("s")||(accounts[0]&&accounts[0].strategy)||"";
     }
   }catch(e){
