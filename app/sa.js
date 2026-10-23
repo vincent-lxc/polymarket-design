@@ -1112,7 +1112,15 @@
     var params = q();
     if (document.body.dataset.page === "compare") return loadCompare((params.get("ids") || "").split(",").filter(Boolean), compareState && compareState.data ? { axis: compareState.data.axis, metric: compareState.data.metric, scope: compareState.data.scope } : { axis: "elapsed", metric: "return_pct", scope: "all" });
     if (params.get("s") && !params.get("id") && !params.get("new") && document.body.dataset.page === "account") return openNamedAccount(params.get("s"));
-    if (params.get("id") && document.body.dataset.page === "account") return openDetail(params.get("id"));
+    if (params.get("id") && document.body.dataset.page === "account") {
+      var rawId = params.get("id");
+      if (!mockMode() && window.PM && PM.looksLikeAccountUuid && !PM.looksLikeAccountUuid(rawId)) {
+        if (params.get("s")) return openNamedAccount(params.get("s"));
+        return loadGroups(filtersFromQuery());
+      }
+      if (params.get("s") && window.PM && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
+      return openDetail(rawId);
+    }
     if (document.body.dataset.page === "account") return loadGroups(filtersFromQuery());
   }
   async function onAct(ev) {
@@ -1308,6 +1316,12 @@
     }
     return rows;
   }
+  /* 真账户只接受 uuid。示例盘（?mock=1&sa=1）的 id 就是名字，仍按原样打开。 */
+  function namedAccountId(label, rows) {
+    if (mockMode()) return window.PM && PM.matchAccountId ? PM.matchAccountId(label, rows) : "";
+    if (window.PM && PM.matchAccountUuid) return PM.matchAccountUuid(label, rows);
+    return "";
+  }
   /* ?s=策略名只用来在账户列表里找 uuid。找不到就留在账户列表，不再把策略名当成账户 id。 */
   async function openNamedAccount(name) {
     var label = SA.presentText(name);
@@ -1315,11 +1329,13 @@
     var id = "";
     try {
       var rows = mockMode() ? mockList() : await collectAccounts(false);
-      id = window.PM && PM.matchAccountId ? PM.matchAccountId(label, rows) : "";
-      if (!id && !mockMode()) id = window.PM && PM.matchAccountId ? PM.matchAccountId(label, await collectAccounts(true)) : "";
+      id = namedAccountId(label, rows);
+      if (!id && !mockMode()) id = namedAccountId(label, await collectAccounts(true));
     } catch (e) { id = ""; }
     if (!id) return loadGroups(filtersFromQuery());
-    return openDetail(id, id === label);
+    /* 详情按 uuid 打开。地址栏若仍是 ?s=策略名，收成 ?id=，mock 等其它参数留着。 */
+    if (window.PM && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(id);
+    return openDetail(id, mockMode() && id === label);
   }
 
   async function openDetail(id, viaStrategy) {
@@ -1352,7 +1368,15 @@
     detailState = null;
     var params = q();
     if (params.get("new")) return paintLaunch(params.get("new"), params.get("from"));
-    if (params.get("id")) return openDetail(params.get("id"));
+    if (params.get("id")) {
+      var rawId = params.get("id");
+      if (!mockMode() && window.PM && PM.looksLikeAccountUuid && !PM.looksLikeAccountUuid(rawId)) {
+        if (params.get("s")) return openNamedAccount(params.get("s"));
+        return loadGroups(filtersFromQuery());
+      }
+      if (params.get("s") && window.PM && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
+      return openDetail(rawId);
+    }
     if (params.get("s")) return openNamedAccount(params.get("s"));
     takeOver();
     document.title = "账户 · Wakeloom 织迹";
