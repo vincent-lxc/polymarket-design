@@ -198,10 +198,126 @@
     return false;
   }
 
+  /* 详情曲线最多画这么多点。24h 约一千多点，7d 会更多；均匀抽点，首尾保留。 */
+  var CURVE_CAP = 480;
+
+  function finiteNum(v) {
+    if (v == null || v === "") return NaN;
+    var n = Number(v);
+    return isFinite(n) ? n : NaN;
+  }
+
+  /* ISO、毫秒、秒都收成毫秒。秒和毫秒用 1e12 分开（2001-09 之后的毫秒都更大）。 */
+  function curveInstant(t) {
+    if (t == null || t === "") return NaN;
+    if (typeof t === "number" || (typeof t === "string" && /^\d+(\.\d+)?$/.test(String(t).trim()))) {
+      var n = Number(t);
+      if (!isFinite(n)) return NaN;
+      if (Math.abs(n) < 1e12) n *= 1000;
+      return n;
+    }
+    var parsed = Date.parse(t);
+    return isFinite(parsed) ? parsed : NaN;
+  }
+
+  function equityOf(p) {
+    if (!p || typeof p !== "object") return NaN;
+    var e = finiteNum(p.equity);
+    if (isFinite(e)) return e;
+    return finiteNum(p.equity_usd);
+  }
+
+  /* BFF：equity_curve[] = { t, equity, cash, positions_value }。空窗是 []。 */
+  function curveSource(a) {
+    if (!a || typeof a !== "object") return null;
+    if (Array.isArray(a.equity_curve) && a.equity_curve.length) return a.equity_curve;
+    if (Array.isArray(a.equity) && a.equity.length && typeof a.equity[0] === "object") return a.equity;
+    if (Array.isArray(a.equity_curve)) return a.equity_curve;
+    return null;
+  }
+
+  function normalizeCurvePoints(raw) {
+    if (!Array.isArray(raw)) return [];
+    var points = [];
+    for (var i = 0; i < raw.length; i++) {
+      var p = raw[i];
+      var ms = curveInstant(p && p.t);
+      var y = equityOf(p);
+      if (!isFinite(ms) || !isFinite(y)) continue;
+      points.push({ t: new Date(ms).toISOString(), equity_usd: y, _ms: ms });
+    }
+    points.sort(function (a, b) { return a._ms - b._ms; });
+    if (points.length > CURVE_CAP) {
+      var sampled = [];
+      var last = points.length - 1;
+      var used = {};
+      for (var k = 0; k < CURVE_CAP; k++) {
+        var idx = Math.round(k * last / (CURVE_CAP - 1));
+        if (used[idx]) continue;
+        used[idx] = 1;
+        sampled.push(points[idx]);
+      }
+      points = sampled;
+    }
+    return points.map(function (p) { return { t: p.t, equity_usd: p.equity_usd }; });
+  }
+
+  function hasReturnPoint(points) {
+    return (points || []).some(function (p) { return p && isFinite(finiteNum(p.return_pct)); });
+  }
+
+  /* 详情响应把 equity_curve 放在 account 旁边时，拆出来的账户对象要带上它。账户自己已有点则不覆盖。 */
+  function mergeDetailCurve(account, envelope) {
+    if (!account || typeof account !== "object") return account;
+    var own = Array.isArray(account.equity_curve) ? account.equity_curve : null;
+    if (own && own.length) return account;
+    if (!envelope || envelope === account || typeof envelope !== "object") return account;
+    var outer = Array.isArray(envelope.equity_curve) ? envelope.equity_curve : null;
+    if (outer && (outer.length || !own)) account.equity_curve = outer;
+    return account;
+  }
+
+  function seriesBundle(a, points, metric, source) {
+    return {
+      account_id: (a && (presentText(a.id) || presentText(a.account_id))) || "",
+      name: (a && a.name) || "",
+      points: points,
+      segments: (a && a.segments) || [],
+      gaps: (a && a.gaps) || [],
+      archived: !!(a && a.archived),
+      metric: metric,
+      source: source || ""
+    };
+  }
+
+  /* 优先 BFF 的 equity_curve。没有可画的点时，再退回 series.points / points。 */
+  function accountDetailSeries(a) {
+    if (!a || typeof a !== "object") return null;
+    var curve = normalizeCurvePoints(curveSource(a));
+    if (curve.length) return seriesBundle(a, curve, "equity_usd", "equity_curve");
+    var fromSeries = a.series && Array.isArray(a.series.points) ? a.series.points : null;
+    if (fromSeries && fromSeries.length) {
+      if (!hasReturnPoint(fromSeries)) {
+        var lifted = normalizeCurvePoints(fromSeries);
+        if (lifted.length) return seriesBundle(a, lifted, "equity_usd", "series");
+      }
+      return Object.assign({}, a.series, { metric: "return_pct", source: "series" });
+    }
+    if (Array.isArray(a.points) && a.points.length) {
+      if (!hasReturnPoint(a.points)) {
+        var liftedPts = normalizeCurvePoints(a.points);
+        if (liftedPts.length) return seriesBundle(a, liftedPts, "equity_usd", "points");
+      }
+      return seriesBundle(a, a.points, "return_pct", "points");
+    }
+    return null;
+  }
+
   function hasEquityPoints(a) {
     if (!a || typeof a !== "object") return false;
     if (a.series && Array.isArray(a.series.points) && a.series.points.length) return true;
     if (Array.isArray(a.points) && a.points.length) return true;
+    if (normalizeCurvePoints(curveSource(a)).length) return true;
     return false;
   }
 
@@ -1561,6 +1677,8 @@
     COMMON_METRICS: COMMON_METRICS,
     compareTableModel: compareTableModel,
     chartModel: chartModel,
+    mergeDetailCurve: mergeDetailCurve,
+    accountDetailSeries: accountDetailSeries,
     pickHero: pickHero,
     readParams: readParams,
     leafFields: leafFields,
