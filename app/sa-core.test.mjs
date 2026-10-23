@@ -318,4 +318,125 @@ const lines = SA.chartModel(onboardCmp.series, { focusId: "paper20000", axis: "e
 assert.equal(lines.find((l) => l.account_id === "copy-new").onboarding, true);
 assert.equal(lines.find((l) => l.account_id === "paper20000").onboarding, false);
 
+const writeSchema = [
+  { key: "copy_ratio", label_zh: "跟单比例", type: "number", default: 0.3, min: 0.05, max: 1, unit: "x" },
+  { key: "fees_on", label_zh: "计算手续费", type: "bool", default: false },
+  {
+    key: "risk", type: "object", label_zh: "上限",
+    fields: [
+      { key: "max_per_trade_usd", label_zh: "单笔上限", type: "number", unit: "usd", default: 5 },
+      { key: "max_positions", label_zh: "持仓上限", type: "integer", default: 10 }
+    ]
+  },
+  {
+    key: "exit", type: "object", label_zh: "出场",
+    properties: {
+      stop_loss_pct: { type: "number", unit: "pct", label_zh: "止损", default: 0.12 }
+    }
+  }
+];
+const typed = SA.readParams(writeSchema, {
+  copy_ratio: "0.5",
+  fees_on: "true",
+  "risk.max_per_trade_usd": "$15",
+  "risk.max_positions": "10",
+  "exit.stop_loss_pct": { value: "20%", reason: null }
+});
+assert.equal(typed.copy_ratio, 0.5);
+assert.equal(typeof typed.copy_ratio, "number");
+assert.equal(typed.fees_on, true);
+assert.equal(typeof typed.fees_on, "boolean");
+assert.equal(typed.risk.max_per_trade_usd, 15);
+assert.equal(typeof typed.risk.max_per_trade_usd, "number");
+assert.equal(typed.risk.max_positions, 10);
+assert.equal(typed.exit.stop_loss_pct, 0.2);
+assert.equal(typeof typed.exit.stop_loss_pct, "number");
+
+const emptied = SA.readParams(writeSchema, {
+  copy_ratio: "[object Object]",
+  fees_on: "[object Object]",
+  risk: { max_per_trade_usd: {}, max_positions: "" },
+  exit: { stop_loss_pct: {} }
+});
+assert.equal(emptied.copy_ratio, 0.3);
+assert.equal(typeof emptied.copy_ratio, "number");
+assert.equal(emptied.fees_on, false);
+assert.equal(emptied.risk.max_per_trade_usd, 5);
+assert.equal(typeof emptied.risk.max_per_trade_usd, "number");
+assert.equal(emptied.exit.stop_loss_pct, 0.12);
+assert.equal(JSON.stringify(emptied).includes("[object Object]"), false);
+assert.equal(JSON.stringify(emptied).includes(":{}"), false);
+
+const posted = SA.launchBody({
+  strategy_id: "copy",
+  name: "casey",
+  schema: writeSchema,
+  capital_usd: "10000",
+  params: {
+    copy_ratio: "0.4",
+    risk: { max_per_trade_usd: "8", max_positions: { value: "4", reason: null } },
+    exit: { stop_loss_pct: { value: 0.1, reason: null } },
+    ignored_empty: {}
+  }
+});
+assert.equal(posted.capital_usd, 10000);
+assert.equal(typeof posted.capital_usd, "number");
+assert.equal(posted.params.copy_ratio, 0.4);
+assert.equal(posted.params.risk.max_per_trade_usd, 8);
+assert.equal(posted.params.risk.max_positions, 4);
+assert.equal(posted.params.exit.stop_loss_pct, 0.1);
+assert.equal(Object.prototype.hasOwnProperty.call(posted.params, "ignored_empty"), false);
+assert.equal(JSON.stringify(posted).includes("[object Object]"), false);
+assert.equal(JSON.stringify(posted).includes(":{}"), false);
+const loose = SA.launchBody({
+  strategy_id: "copy",
+  name: "loose",
+  capital_usd: "$2500",
+  params: {
+    copy_ratio: "0.2",
+    stop_loss_pct: { value: "0.15", reason: null },
+    risk: { max_per_trade_usd: "$9", max_positions: "[object Object]" },
+    empty_limit: {}
+  }
+});
+assert.equal(loose.capital_usd, 2500);
+const blankMoney = SA.launchBody({ strategy_id: "copy", name: "blank", params: { stop_loss_pct: {}, copy_ratio: "[object Object]" }, capital_usd: "" });
+assert.equal(blankMoney.capital_usd, undefined);
+assert.equal(Object.prototype.hasOwnProperty.call(blankMoney.params, "stop_loss_pct"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(blankMoney.params, "copy_ratio"), false);
+assert.equal(JSON.stringify(blankMoney).includes("[object Object]"), false);
+assert.equal(JSON.stringify(blankMoney).includes("capital_usd"), false);
+assert.equal(loose.params.copy_ratio, 0.2);
+assert.equal(loose.params.stop_loss_pct, 0.15);
+assert.equal(typeof loose.params.stop_loss_pct, "number");
+assert.equal(loose.params.risk.max_per_trade_usd, 9);
+assert.equal(Object.prototype.hasOwnProperty.call(loose.params.risk, "max_positions"), false);
+assert.equal(Object.prototype.hasOwnProperty.call(loose.params, "empty_limit"), false);
+assert.equal(JSON.stringify(loose).includes("[object Object]"), false);
+
+assert.equal(SA.formatParam({ value: 0.12, reason: null }, { type: "number", unit: "pct", label_zh: "止损" }), "12.0%");
+assert.equal(SA.formatParam({ value: 15, reason: null }, { type: "number", unit: "usd" }), "$15");
+assert.equal(SA.formatParam({}, { type: "number", unit: "usd" }), "—");
+assert.equal(SA.formatParam({ value: null, reason: "missing" }, null), "—");
+assert.equal(SA.formatParam("[object Object]", { type: "number" }), "—");
+assert.equal(SA.formatParam("0.25 → 0.3", { type: "number", unit: "x" }), "0.25 → 0.3");
+const diffLine = SA.diffText({
+  stop_loss_pct: { value: 0.12, reason: null },
+  max_per_trade_usd: {},
+  exit: { stop_loss_pct: { value: 0.05, reason: null } }
+}, writeSchema);
+assert.equal(diffLine.includes("[object Object]"), false);
+assert.match(diffLine, /止损 12\.0%/);
+assert.match(diffLine, /单笔上限 —/);
+assert.match(diffLine, /止损 5\.0%/);
+const bare = SA.diffText({ stop_loss_pct: { value: 0.12 } }, []);
+assert.equal(bare, "stop_loss_pct 0.12");
+assert.equal(bare.includes("[object Object]"), false);
+
+const card = SA.mockAccounts().find((a) => a.id === "paper20000");
+const cardLine = SA.diffText(card.params_diff, SA.mockStrategies().items[0].params_schema);
+assert.equal(cardLine.includes("[object Object]"), false);
+assert.match(cardLine, /止损 12\.0%/);
+assert.match(cardLine, /单笔上限 \$15/);
+
 console.log("sa-core tests ok");
