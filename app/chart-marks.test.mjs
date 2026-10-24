@@ -68,6 +68,9 @@ const history = [
 const live = loadChart("?addr=0xabc", "1");
 assert.equal(live.chart.state().live, true);
 assert.equal(live.chart.state().side, "Yes");
+assert.match(live.svg.innerHTML, /class="pc-skel"/);
+assert.doesNotMatch(live.svg.innerHTML, /\d¢/);
+assert.doesNotMatch(live.svg.innerHTML, /\$\d/);
 
 live.chart.paint({
   history,

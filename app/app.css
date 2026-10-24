@@ -42,6 +42,16 @@ html.pending-leader .top h1,html.pending-leader #ld-idl,html.pending-leader #ld-
 html.pending-leader .top .tag,html.pending-leader .top .pill{visibility:hidden}
 html.pending-leader .top h1,html.pending-leader #ld-idl{background:#26262b;border-radius:8px}
 html.pending-leader #ld-perf svg{opacity:0}
+html.pending-leader .top h1 .av{background:#26262b;color:transparent}
+/* 加载壳里的示意曲线不占位，灰条才是加载态。接口重画后会换掉整块。 */
+body[data-page="leader"] .ld-curve{position:relative;min-height:120px}
+body[data-page="leader"] .ld-curve-skel{display:block;width:100%;height:120px;border-radius:8px}
+body[data-page="leader"] svg[data-empty="1"]{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none}
+/* 账户列表默认只露灰骨架。?id= / ?s= 才露出详情壳。hidden 挡住样式表还没到时的详情闪现。 */
+html:not(.account-detail) #ac-legacy{display:none!important}
+html.account-detail #ac-legacy{display:block!important}
+html.account-detail #ac-list-skel{display:none!important}
+#ac-list-skel .sa-acard .sk{display:block}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:var(--r-pill);border:0;background:var(--card2);color:var(--mu);white-space:nowrap}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--gr)}
 .paper{background:var(--elev);color:var(--mu)}.paper::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--mu)}

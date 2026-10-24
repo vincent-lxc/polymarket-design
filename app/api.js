@@ -696,19 +696,45 @@ function accountStepHref(a){
   const name=presentAccountId(a&&a.strategy)||presentAccountId(a&&a.name)||accountRecordId(a);
   return name?appHref("/account",{id:name}):appHref("/account");
 }
+function showAccountDetailShell(){
+  const root=document.documentElement;
+  if(root&&root.classList&&root.classList.add) root.classList.add("account-detail");
+}
+/* 列表接口还没回来时，主区域停在灰骨架上，不切到详情壳。 */
+function paintAccountListWait(err){
+  const skel=document.getElementById("ac-list-skel");
+  /* 旧测试替身也会造出一个同 id 的空节点。只有真列表壳（class=sa）才接管错误态。 */
+  if(!skel||!skel.classList||typeof skel.classList.contains!=="function"||!skel.classList.contains("sa")) return false;
+  const missing=err&&err.status===404;
+  const msg=missing?"无数据":((err&&err.offline)?"连不上接口":((err&&err.message)||"没有完成"));
+  skel.removeAttribute("aria-busy");
+  skel.innerHTML='<div class="top"><h1>账户</h1></div><div class="ndbox"><span class="nd">'+esc(msg)+'</span></div>'+(missing?"":'<p style="margin-top:12px"><button type="button" class="btn sm" id="ac-list-retry">重试</button></p>');
+  const btn=document.getElementById("ac-list-retry");
+  if(btn&&btn.addEventListener) btn.addEventListener("click",()=>{
+    skel.setAttribute("aria-busy","true");
+    skel.innerHTML='<div class="top"><h1>账户</h1><span class="mu">加载中</span></div>';
+    renderAccount();
+  });
+  return true;
+}
 async function renderAccount(){
   const wantId=presentAccountId(Q.get("id"));
   const wantName=presentAccountId(Q.get("s"));
-  if(wantId||wantName) blankAccountShell();
+  if(wantId||wantName){
+    showAccountDetailShell();
+    blankAccountShell();
+  }
   let list;
   try{ list=await api("/v1/accounts"); }
   catch(e){
+    if(!wantId&&!wantName&&paintAccountListWait(e)) return;
     if(e&&e.status===404){ paintAccountEmpty(); return; }
     paintAccountError(e);
     return;
   }
   paintHeartbeat(list);
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
+  showAccountDetailShell();
   const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordId(a)||accountRecordUuid(a)));
   let id="";
   let current=null;

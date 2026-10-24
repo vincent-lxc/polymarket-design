@@ -1500,13 +1500,19 @@
     }
   }
 
+  function listSkeletonHtml() {
+    var row = "<tr><td><i class=\"sk\"></i></td><td><i class=\"sk l\"></i></td><td><i class=\"sk\"></i></td><td class='r'><i class=\"sk\"></i></td><td class='r'><i class=\"sk\"></i></td><td class='r'><i class=\"sk\"></i></td><td><i class=\"sk\"></i></td></tr>";
+    var card = '<article class="sa-acard"><i class="sk l"></i><i class="sk" style="display:block;margin-top:8px"></i></article>';
+    return '<div class="top"><h1>账户</h1><span class="mu">加载中</span></div><section class="card" aria-busy="true"><div class="tw sa-table"><table><tr><th></th><th>账户</th><th>策略</th><th class="r">资金</th><th class="r">净收益</th><th class="r">收益率</th><th>状态</th></tr>' + row + row + row + row + '</table></div><div class="sa-cards">' + card + card + card + card + "</div></section>";
+  }
   async function openAccounts() {
     detailState = null;
     var params = q();
     if (params.get("new")) return paintLaunch(params.get("new"), params.get("from"));
     if (params.get("id")) return openAccountByRef(params.get("id"));
     if (params.get("s")) return openNamedAccount(params.get("s"));
-    takeOver();
+    var mount = takeOver();
+    if (mount) mount.innerHTML = listSkeletonHtml();
     document.title = "账户 · Wakeloom 织迹";
     await loadGroups(filtersFromQuery());
   }
