@@ -91,6 +91,26 @@ assert.match(pos, /120 股/);
 assert.match(pos, /class="k-name"/);
 assert.match(pos, /k-amt"><span class="q-amt">120 股<\/span>/);
 assert.match(pos, /data-k="浮动"[^>]*>\+\$88\.20/);
+const shareCard = PM.leaderPositionBody({
+  open_positions: [{ token_id: "big", question: "Big book", outcome: "Yes", current_size: 5441.15, avg_price: 0.42, last_mark: 0.44, unrealized_pnl: 10 }]
+});
+assert.match(shareCard, /q-amt">5,441\.15 股</);
+assert.doesNotMatch(shareCard, /q-amt">5,441\.15</);
+const valued = PM.leaderPositionBody({
+  open_positions: [{ token_id: "big", question: "Big book", outcome: "Yes", current_size: 5441.15, current_value_usd: 2394.1, avg_price: 0.42, last_mark: 0.44, unrealized_pnl: 88.2 }],
+  our_positions: [{ token_id: "big", outcome: "Yes", current_size: 120, currentValue: 52.8 }]
+});
+assert.match(valued, /q-usd q-amt">\$2,394\.10</);
+assert.match(valued, /q-shares">5,441\.15 股</);
+assert.match(valued, /data-k="我方"[^>]*>120 股</);
+assert.doesNotMatch(valued, /q-amt">5,441\.15/);
+assert.doesNotMatch(valued, /q-amt">\$52\.80/);
+const ourValue = PM.leaderPositionBody({
+  open_positions: [{ token_id: "p", question: "Ours", outcome: "Yes", current_size: 80, unrealized_pnl: 1 }],
+  our_positions: [{ token_id: "p", outcome: "Yes", current_size: 12.5, market_value_usd: 6.4 }]
+});
+assert.match(ourValue, /q-usd q-amt">\$6\.40</);
+assert.match(ourValue, /q-shares">12\.5 股</);
 
 const pnl = PM.leaderPnlBody(detail);
 assert.match(pnl, /catsports20000/);

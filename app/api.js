@@ -1545,6 +1545,17 @@ function normPx(v){
 }
 function cent(p){ const n=normPx(p); return n==null?null:Math.round(n*100)+"¢"; }
 function shareCount(n){ const x=numOrNull(n); return x==null?null:x.toLocaleString("en-US",{maximumFractionDigits:2}); }
+function shareLabel(n){ const s=shareCount(n); return s==null?null:s+" 股"; }
+function posMarketValue(p){
+  if(!p) return null;
+  return numOrNull(pick(p,["current_value_usd","current_value","currentValue","market_value_usd","market_value","marketValue","position_value_usd","value_usd"]));
+}
+function cardAmount(usdText, shareText){
+  const br=`<span class="q-br" aria-hidden="true"></span>`;
+  const shares=shareText||NA;
+  if(usdText) return `<span class="q-usd q-amt">${usdText}</span>${br}<span class="q-shares">${shares}</span>`;
+  return `<span class="q-amt">${shares}</span>${br}`;
+}
 function atPrice(amount, price){ const u=usd(amount); if(u==null) return null; const c=cent(price); return u+(c?" @ "+c:""); }
 function tradeToken(t){ const v=pick(t,["token_id","tokenId","asset_id","asset","clob_token_id"]); return v==null?"":String(v); }
 function tradeOutcome(t){ const v=pick(t,["outcome","outcome_name"]); return v==null?"":String(v); }
@@ -1824,17 +1835,26 @@ function leaderPositionBody(detail){
     const px=(avg==null&&mark==null)?NA:`${avg==null?"—":cent(avg)} / ${mark==null?"—":cent(mark)}`;
     const mineKnown=mine!=null;
     const pnlKnown=pnl!=null;
-    const sizeAmt=size==null?`<span class="q-amt na">—</span>`:`<span class="q-amt">${shareCount(size)}</span>`;
-    const mineAmt=mineKnown?`<span class="q-amt">${shareCount(mine)} 股</span>`:"";
-    const br=`<span class="q-br" aria-hidden="true"></span>`;
-    const sizeTd=mineKnown
-      ? `<td class="r num hm k-hide">${size==null?NA:shareCount(size)}</td>`
-      : `<td class="r ${size==null?"na":"num"} hm k-amt">${sizeAmt}${br}</td>`;
+    const hisValue=his?posMarketValue(his):null;
+    const ourValue=hisValue==null&&our?posMarketValue(our):null;
+    const hisShare=shareLabel(size)||NA;
+    const ourShare=mineKnown?shareLabel(mine):null;
+    let sizeTd, mineTd;
+    if(hisValue!=null){
+      sizeTd=`<td class="r num hm k-amt">${cardAmount(usd(hisValue), hisShare)}</td>`;
+      mineTd=mineKnown?`<td class="r num k-sub" data-k="我方">${ourShare}</td>`:`<td class="r na k-hide">${NA}</td>`;
+    }else if(ourValue!=null&&mineKnown){
+      sizeTd=`<td class="r num hm k-hide">${size==null?NA:shareCount(size)}</td>`;
+      mineTd=`<td class="r num k-amt">${cardAmount(usd(ourValue), ourShare)}</td>`;
+    }else if(mineKnown){
+      sizeTd=`<td class="r num hm k-hide">${size==null?NA:shareCount(size)}</td>`;
+      mineTd=`<td class="r num k-amt">${cardAmount(null, ourShare)}</td>`;
+    }else{
+      sizeTd=`<td class="r ${size==null?"na":"num"} hm k-amt">${cardAmount(null, hisShare)}</td>`;
+      mineTd=`<td class="r na k-hide">${NA}</td>`;
+    }
     const pxTd=`<td class="r num ${pnlKnown?"hm k-hide":"k-sub"}" data-k="价格">${px}</td>`;
     const pnlTd=`<td class="r ${pnlKnown?"num "+cls(pnl)+" k-sub":"na k-hide"}" data-k="浮动">${pnlKnown?usd(pnl,true):LEADER_DASH}</td>`;
-    const mineTd=mineKnown
-      ? `<td class="r num k-amt">${mineAmt}${br}</td>`
-      : `<td class="r na k-hide">${NA}</td>`;
     return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td class="k-name">${leaderMarketCell(title, src, outcome)}</td>${sizeTd}${pxTd}${pnlTd}${mineTd}</tr>`;
   }).join("");
 }

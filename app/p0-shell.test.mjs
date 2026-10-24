@@ -167,6 +167,9 @@ for (const html of [ov, cfg, hl]) {
 assert.match(ov, /api\.js\?v=mcard/);
 assert.match(ov, /app\.css\?v=mcard/);
 assert.match(ov, /share\.js\?v=p0fe3/);
+const accountHtml = fs.readFileSync(new URL("./account.html", import.meta.url), "utf8");
+assert.match(accountHtml, /api\.js\?v=mcard/);
+assert.match(accountHtml, /app\.css\?v=mcard/);
 for (const html of [cfg, hl]) {
   assert.match(html, /api\.js\?v=p0fe3/);
   assert.match(html, /app\.css\?v=p0fe3/);
