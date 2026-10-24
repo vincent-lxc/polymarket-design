@@ -27,7 +27,9 @@ const plain = html("Fed 12 月降息？", { title: "Fed 12 月降息？" });
 assert.equal(plain, "Fed 12 月降息？");
 assert.equal(plain.includes("<a"), false);
 assert.equal(html("湖人 vs 勇士", {}).includes("polymarket.com"), false);
-assert.equal(html(null, {}), "未命名市场");
+assert.equal(html(null, {}), "市场");
+assert.match(html(null, { slug: "alabama-auburn" }), /Alabama Auburn/);
+assert.equal(html(null, { slug: "alabama-auburn" }).includes("未命名"), false);
 assert.equal(html("<img src=x onerror=alert(1)>", { market: "Fed" }), "&lt;img src=x onerror=alert(1)&gt;");
 
 const linked = html("Fed 12 月降息？", { event_slug: "fed-decision", slug: "other" });

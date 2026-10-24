@@ -104,6 +104,10 @@ assert.equal(PM.tokenFor(markets[0], "Yes"), "yes-tok");
 assert.equal(PM.tokenFor(markets[0], "No"), "no-tok");
 assert.equal(PM.leaderPriceQuery("yes-tok", "0xabc", "1d"), "/v1/markets/yes-tok/prices?range=1d&bucket=1h&leader=0xabc");
 assert.equal(PM.leaderPriceQuery("yes-tok", "0xabc", "1h"), "/v1/markets/yes-tok/prices?range=1h&bucket=1m&leader=0xabc");
+assert.equal(PM.leaderPriceQuery("yes-tok", "0xabc", "all"), "/v1/markets/yes-tok/prices?range=max&bucket=1d&leader=0xabc");
+assert.equal(PM.leaderPriceQuery("yes-tok", "0xabc", "全部"), "/v1/markets/yes-tok/prices?range=max&bucket=1d&leader=0xabc");
+assert.equal(PM.leaderPriceQuery("yes-tok", "0xabc", "1w"), "/v1/markets/yes-tok/prices?range=1w&bucket=1h&leader=0xabc");
+assert.doesNotMatch(PM.leaderPriceQuery("yes-tok", "0xabc", "all"), /range=all/);
 
 const book = PM.normalizePriceBook({
   history: [{ t: 1000, p: 0.4 }, { t: 2000, p: 0.42 }],
@@ -121,7 +125,31 @@ assert.equal(book.marks[1].notional, 969);
 
 const emptyPnl = PM.leaderPnlBody({});
 assert.match(emptyPnl, /合计/);
-assert.match(emptyPnl, /无数据|暂未汇总/);
+assert.match(emptyPnl, /暂无数据/);
+assert.match(emptyPnl, /—/);
+assert.doesNotMatch(emptyPnl, /暂未汇总|待新增只读接口|未命名市场|需后端按市场汇总/);
+
+const slugTrade = PM.leaderTradeBody({
+  trades: [{ id: "s", token_id: "slug-tok", market: "will-the-fed-cut-rates-in-december", slug: "will-the-fed-cut-rates-in-december", outcome: "Yes", side: "BUY", notional_usd: 15, price: 0.37, t: 1 }]
+});
+assert.match(slugTrade, /title="Will The Fed Cut Rates In December"/);
+assert.match(slugTrade, />Will The Fed Cut Rates In December</);
+assert.match(slugTrade, /class="mkt-ell"/);
+assert.doesNotMatch(slugTrade, />will-the-fed-cut-rates-in-december</);
+
+const slugPos = PM.leaderPositionBody({
+  open_positions: [{ token_id: "p", slug: "bitcoin-above-150k", question: "Bitcoin above $150,000?", outcome: "Yes", current_size: 2, avg_price: 0.4, last_mark: 0.42, unrealized_pnl: 1 }]
+});
+assert.match(slugPos, />Bitcoin above \$150,000\?</);
+assert.match(slugPos, /class="mkt-line"/);
+assert.doesNotMatch(slugPos, />bitcoin-above-150k</);
+
+const linkedTitle = PM.leaderTradeBody({
+  markets: [{ condition_id: "c-link", question: "Strait of Hormuz traffic returns to normal by October 31?" }],
+  trades: [{ id: "sl", token_id: "sl-tok", condition_id: "c-link", slug: "strait-of-hormuz-traffic", outcome: "Yes", side: "BUY", notional_usd: 8, price: 0.5, t: 2 }]
+});
+assert.match(linkedTitle, />Strait of Hormuz traffic returns to normal by October 31\?</);
+assert.doesNotMatch(linkedTitle, />strait-of-hormuz-traffic</);
 
 const api = fs.readFileSync(new URL("./api.js", import.meta.url), "utf8");
 assert.match(api, /if\(PAGE==="leader"\) return;/);
@@ -142,6 +170,13 @@ assert.match(html, /市场价格 · 买卖点/);
 const pc = html.slice(html.indexOf('id="pc"'), html.indexOf('id="pc"') + 2500);
 assert.match(pc, /\/v1\/markets\/\{token_id\}\/prices/);
 assert.doesNotMatch(pc, /待建/);
+assert.doesNotMatch(html, /待新增只读接口|暂未汇总|未命名市场|需后端按市场汇总|待后端计算/);
+const css = fs.readFileSync(new URL("./app.css", import.meta.url), "utf8");
+assert.match(css, /body\[data-page="leader"\] #pc \.pchart\{height:240px;min-height:200px\}/);
+assert.match(css, /@media\(max-width:480px\)\{[\s\S]*\.pc-pill\{flex:1 1 auto;max-width:none/);
+assert.match(api, /显示更多/);
+assert.match(css, /#ld-trades table,\n body\[data-page="leader"\] #ld-pos table/);
+assert.match(css, /\.inflow\{position:static/);
 assert.match(pc, /id="pc-sides"/);
 
 const cfbMarkets = PM.leaderMarkets({
@@ -152,7 +187,7 @@ const cfbMarkets = PM.leaderMarkets({
   markets: [{ condition_id: "cfb", slug: "alabama-auburn", question: "Alabama vs Auburn" }]
 });
 assert.equal(cfbMarkets[0].title, "Alabama vs Auburn");
-assert.notEqual(cfbMarkets[0].title, "未命名市场");
+assert.equal(cfbMarkets[0].title.includes("未命名"), false);
 assert.equal(PM.dominantSide(cfbMarkets[0]), "Alabama");
 assert.equal(PM.tokenFor(cfbMarkets[0], "Alabama"), "alb");
 assert.equal(PM.tokenFor(cfbMarkets[0], "Auburn"), "aub");
@@ -177,7 +212,130 @@ assert.equal(PM.tokenFor(sized[0], "Auburn"), "aub");
 const unnamed = PM.leaderMarkets({
   trades: [{ token_id: "z", outcome: "Yes", side: "BUY", notional_usd: 1 }]
 });
-assert.equal(unnamed[0].title, "未命名市场");
+assert.equal(unnamed[0].title, "市场 z");
+assert.equal(unnamed[0].title.includes("未命名"), false);
+
+const prefixed = PM.leaderMarkets({
+  trades: [{ token_id: "0x12ab89cdef0123456789", outcome: "Yes", side: "BUY", notional_usd: 3 }]
+});
+assert.equal(prefixed[0].title, "市场 0x12ab…");
+
+const fromSlug = PM.leaderMarkets({
+  trades: [{ token_id: "slug-tok", slug: "will-the-fed-cut-rates", outcome: "Yes", side: "BUY", notional_usd: 4 }]
+});
+assert.equal(fromSlug[0].title, "Will The Fed Cut Rates");
+
+const longTitles = [
+  "US x Iran ceasefire continues through October 22?",
+  "US x Iran ceasefire continues through November 8?",
+  "Will the Democratic Party control the Senate after the 2026 Midterm elections?",
+  "Will the Republican Party control the Senate after the 2026 Midterm elections?",
+  "US x Iran ceasefire continues through October 28?",
+  "US x Iran ceasefire continues through November 30?",
+  "US x Iran ceasefire continues through November 15?",
+  "US–Iran Hormuz Agreement by November 30?",
+  "Israel x Iran ceasefire continues through October 24?",
+  "Israel x Iran ceasefire continues through October 27?",
+  "Will Benjamin Netanyahu be the next Prime Minister of Israel?",
+  "Strait of Hormuz traffic returns to normal by October 31?",
+  "Any G20 leader out in 2026?",
+  "Will Iran's nuclear program be constrained through December 2026?",
+  "Will a US Navy vessel transit the Strait of Hormuz in November 2026?",
+  "Bitcoin above $150,000 on December 31, 2026?"
+];
+const many = PM.leaderMarkets({
+  trades: longTitles.map((question, i) => ({
+    token_id: "m" + i,
+    condition_id: "mc" + i,
+    question,
+    outcome: "Yes",
+    side: "BUY",
+    notional_usd: (longTitles.length - i) * 1000
+  })).concat([{ token_id: "0x12ab89cdef0123456789", outcome: "Yes", side: "BUY", notional_usd: 1 }])
+});
+assert.ok(many.length > 10);
+assert.equal(many[0].title, longTitles[0]);
+const switchHtml = PM.marketSwitcherHtml(many, 0);
+const pillZone = switchHtml.split('id="pc-pop"')[0];
+const pills = pillZone.match(/class="pc-pill/g) || [];
+assert.equal(pills.length, 4);
+assert.ok(pills.length < many.length);
+assert.match(switchHtml, /更多 /);
+assert.match(switchHtml, /搜索市场/);
+assert.equal((switchHtml.match(/data-k="mkt:/g) || []).length, 4);
+assert.doesNotMatch(pillZone, /class="seg"/);
+assert.match(pillZone, /title="US x Iran ceasefire continues through October 22\?"/);
+longTitles.slice(4).forEach((title) => assert.equal(pillZone.includes(title), false));
+assert.equal(switchHtml.includes("未命名"), false);
+assert.doesNotMatch(api, /seg\.id="pc-mkts"/);
+const morePlan = PM.marketSwitcherPlan(many, 0);
+const firstPage = PM.marketSwitcherSlice(morePlan.more, "", 0, 50);
+const secondPage = PM.marketSwitcherSlice(morePlan.more, "", 50, 50);
+assert.equal(firstPage.total, morePlan.moreCount);
+assert.equal(firstPage.rows.length, Math.min(50, morePlan.moreCount));
+assert.equal(secondPage.rows.length, Math.max(0, morePlan.moreCount - 50));
+assert.ok(firstPage.rows.some((row) => String(row.m.title).includes("0x12ab")));
+const big = Array.from({ length: 437 }, (_, i) => ({ title: "Long polymarket question " + i + " ".repeat(40) + "ceasefire elections senate", notional: 437 - i }));
+const bigPlan = PM.marketSwitcherPlan(big, 0);
+assert.equal(bigPlan.inline.length, 4);
+assert.equal(bigPlan.moreCount, 433);
+const bigPage = PM.marketSwitcherSlice(bigPlan.more, "", 0, 50);
+assert.equal(bigPage.rows.length, 50);
+assert.equal(bigPage.total, 433);
+const bigNext = PM.marketSwitcherSlice(bigPlan.more, "", 50, 50);
+assert.equal(bigNext.rows.length, 50);
+assert.equal(bigNext.rows[0].i, bigPlan.more[50].i);
+const found = PM.marketSwitcherSlice(bigPlan.more, "question 120", 0, 50);
+assert.ok(found.total >= 1);
+assert.ok(found.total < bigPlan.moreCount);
+assert.ok(found.rows.every((row) => /120/.test(row.m.title)));
+const bigHtml = PM.marketSwitcherHtml(big, 0);
+assert.equal((bigHtml.match(/class="pc-pill/g) || []).length, 4);
+assert.equal((bigHtml.match(/data-k="mkt:/g) || []).length, 4);
+assert.equal(bigHtml.includes("question 200"), false);
+const narrowPlan = PM.marketSwitcherPlan(many, 2, 1);
+assert.equal(narrowPlan.inline.length, 1);
+assert.equal(narrowPlan.inline[0].i, 2);
+assert.equal(narrowPlan.moreCount, many.length - 1);
+const narrowHtml = PM.marketSwitcherHtml(many, 2, 1);
+const narrowZone = narrowHtml.split('id="pc-pop"')[0];
+assert.equal((narrowZone.match(/class="pc-pill/g) || []).length, 1);
+assert.match(narrowZone, /data-k="mkt:2"/);
+assert.match(narrowHtml, new RegExp("更多 " + (many.length - 1)));
+const pagedTrades = PM.leaderTradeBody({
+  trades: Array.from({ length: 45 }, (_, i) => ({
+    id: "r" + i,
+    token_id: "tok" + i,
+    question: "Market " + i,
+    outcome: "Yes",
+    side: "BUY",
+    notional_usd: 10,
+    price: 0.4,
+    t: 1700000000000 + i * 1000
+  }))
+});
+assert.equal((pagedTrades.match(/<tr/g) || []).length, 45);
+assert.equal((pagedTrades.match(/class="more"/g) || []).length, 25);
+assert.match(pagedTrades, /显示更多|class="more"/);
+const step = PM.leaderRevealCount(45, 20);
+assert.equal(step.shown, 40);
+assert.equal(step.more, true);
+const done = PM.leaderRevealCount(45, 40);
+assert.equal(done.shown, 45);
+assert.equal(done.more, false);
+const pagedPos = PM.leaderPositionBody({
+  open_positions: Array.from({ length: 25 }, (_, i) => ({
+    token_id: "p" + i,
+    question: "Pos " + i,
+    outcome: "Yes",
+    current_size: 1,
+    avg_price: 0.4,
+    last_mark: 0.41,
+    unrealized_pnl: 1
+  }))
+});
+assert.equal((pagedPos.match(/<tr/g) || []).length, 25);
+assert.equal((pagedPos.match(/class="more"/g) || []).length, 5);
 
 for (const page of ["leader.html", "leader-5c1e.html", "leader-91d4.html", "leader-avalon.html", "leader-lunadegen.html"]) {
   const pageHtml = fs.readFileSync(new URL("./" + page, import.meta.url), "utf8");
