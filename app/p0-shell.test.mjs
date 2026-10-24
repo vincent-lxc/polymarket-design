@@ -253,7 +253,9 @@ assert.match(sa, /id="sa-newcap" type="number"/);
 assert.match(sa, /numeric \? ' type="number"'/);
 for (const page of ["account.html", "compare.html", "leaders.html", "markets.html", "strategies.html"]) {
   const html = fs.readFileSync(new URL("./" + page, import.meta.url), "utf8");
-  assert.match(html, /sa\.js\?v=p0fe4/);
+  assert.match(html, /sa\.js\?v=pnl1/);
 }
+const accountHtml = fs.readFileSync(new URL("./account.html", import.meta.url), "utf8");
+assert.match(accountHtml, /pnl-buckets\.js\?v=pnl1/);
 
 console.log("p0 shell tests ok");

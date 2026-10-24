@@ -858,6 +858,247 @@
 
   var detailState = null;
   var detailSeq = 0;
+  function pnlLib() { return window.PMPnl || null; }
+  function accountInception(a) {
+    if (!a) return "";
+    return a.inception_at || "";
+  }
+  function pnlAccountId() {
+    var a = detailState && detailState.account;
+    if (!a) return "";
+    return SA.presentText(a.id) || SA.presentText(a.account_id) || SA.presentText(a.strategy) || "";
+  }
+  function segListHtml() {
+    var a = detailState.account;
+    var schema = detailState.schema || [];
+    return (a.segments || []).map(function (seg) {
+      var diff = seg.params_diff_vs_prev ? SA.diffText(seg.params_diff_vs_prev, schema) : "";
+      return "<li>第 " + esc(seg.segment) + " 段" + (diff ? " · " + esc(diff) : "") + "</li>";
+    }).join("");
+  }
+  function legacyChartHtml() {
+    var a = detailState.account;
+    var emptyCurve = '<div class="ndbox sa-empty-curve" role="status"><span class="nd">暂无曲线数据</span></div>';
+    if (SA.engineOnboarding(a)) {
+      detailState.model = null;
+      return '<div class="ndbox sa-empty-curve" role="status" id="sa-onboard-curve"><span class="nd sa-onboard">' + esc(onboardPhrase()) + "</span></div>";
+    }
+    var series = detailSeries(a);
+    if (!(series && series.points && series.points.length)) {
+      detailState.model = null;
+      return emptyCurve;
+    }
+    var metric = series.metric === "equity_usd" ? "equity_usd" : "return_pct";
+    var model = SA.chartModel([series], { focusId: a.id, axis: "calendar", metric: metric, width: 720, height: 240 });
+    var drawn = (model.lines || []).some(function (l) { return l.points && l.points.length; });
+    if (!drawn) {
+      detailState.model = null;
+      return emptyCurve;
+    }
+    detailState.model = model;
+    return '<div class="sa-chart hero" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
+  }
+  function detailChartHtml() {
+    var pnl = detailState.pnl;
+    var P = pnlLib();
+    var usePnl = !!(P && pnl && pnl.controls && pnl.status !== "unsupported");
+    if (!usePnl) return legacyChartHtml();
+    detailState.model = null;
+    if (pnl.status === "loading") return '<div class="sa-chart hero sa-pnl-loading" id="sa-chart" aria-busy="true"></div>';
+    if (pnl.status === "error") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(P.ERROR_TEXT) + "</span></div>";
+    if (pnl.status === "blocked") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(pnl.notice || P.RANGE_TEXT) + "</span></div>";
+    if (pnl.status === "empty") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(P.EMPTY_TEXT) + "</span></div>";
+    if (pnl.status === "ready" && pnl.model && pnl.model.drawn) return '<div class="sa-chart hero" id="sa-chart">' + P.svg(pnl.model) + '<div class="sa-tip"></div></div>';
+    return legacyChartHtml();
+  }
+  function rangeControlsHtml() {
+    var pnl = detailState.pnl;
+    var P = pnlLib();
+    if (!P || !pnl || !pnl.controls) return { gran: "", dates: "" };
+    var gname = pnl.granularity || "day";
+    function btn(v, label) {
+      return '<button type="button" data-act="granularity" data-v="' + v + '"' + (gname === v ? ' class="on"' : "") + ">" + label + "</button>";
+    }
+    var win = pnl.window || { from: "", to: "", min: "", today: "" };
+    var minAttr = win.min ? ' min="' + esc(win.min) + '"' : "";
+    var maxAttr = win.today ? ' max="' + esc(win.today) + '"' : "";
+    return {
+      gran: '<div class="seg" role="tablist" aria-label="粒度">' + btn("day", "日") + btn("week", "周") + btn("month", "月") + btn("year", "年") + "</div>",
+      dates: '<div class="sa-dates"><input type="date" data-act="pnl-from" aria-label="开始日期" autocomplete="off" value="' + esc(win.from || "") + '"' + minAttr + maxAttr + '><span aria-hidden="true">–</span><input type="date" data-act="pnl-to" aria-label="结束日期" autocomplete="off" value="' + esc(win.to || "") + '"' + minAttr + maxAttr + "></div>"
+    };
+  }
+  function curveInnerHtml() {
+    var scope = detailState.scope;
+    var pnl = detailState.pnl;
+    var clip = pnl && pnl.status === "ready" && pnl.model && pnl.model.clip ? pnl.model.clip : "";
+    var segList = segListHtml();
+    var controls = rangeControlsHtml();
+    return '<div class="sa-chartbar"><div class="sa-scopes"><div class="seg" role="tablist"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div>" + controls.gran + "</div>" + controls.dates + "</div>" + (clip ? '<p class="sa-clip" role="status">' + esc(clip) + "</p>" : "") + detailChartHtml() + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "");
+  }
+  function bindPnl(host, model) {
+    var svg = host.querySelector("svg");
+    var tip = host.querySelector(".sa-tip");
+    var P = pnlLib();
+    if (!svg || !tip || !P || !model) return;
+    function slotAt(ev) {
+      var rect = svg.getBoundingClientRect();
+      if (!rect.width) return -1;
+      var x = ((ev.clientX - rect.left) / rect.width) * model.width;
+      var slots = model.slots || [];
+      var i;
+      for (i = 0; i < slots.length; i++) {
+        if (x >= slots[i].x0 && x < slots[i].x1) return i;
+      }
+      if (slots.length && x >= slots[slots.length - 1].x0 && x <= slots[slots.length - 1].x1 + 1) return slots.length - 1;
+      return -1;
+    }
+    function place(ev, i) {
+      if (i < 0 || !model.slots[i]) return;
+      tip.innerHTML = P.tooltipHtml(model.slots[i].tip);
+      var rect = svg.getBoundingClientRect();
+      var width = Math.min(240, Math.max(120, rect.width - 16));
+      var left = ev.clientX - rect.left + 12;
+      if (left + width > rect.width - 8) left = ev.clientX - rect.left - width - 12;
+      tip.style.left = Math.max(8, left) + "px";
+      tip.style.top = "12px";
+      tip.classList.add("on");
+    }
+    function hide() { tip.classList.remove("on"); }
+    svg.addEventListener("pointermove", function (ev) {
+      if (ev.pointerType === "touch") return;
+      place(ev, slotAt(ev));
+    });
+    svg.addEventListener("pointerleave", function (ev) {
+      if (ev.pointerType === "touch") return;
+      hide();
+    });
+    svg.addEventListener("pointerdown", function (ev) {
+      if (ev.pointerType !== "touch" && ev.pointerType !== "pen") return;
+      place(ev, slotAt(ev));
+    });
+    if (detailState._pnlDoc) document.removeEventListener("pointerdown", detailState._pnlDoc);
+    detailState._pnlDoc = function (ev) {
+      if (!host.isConnected) {
+        document.removeEventListener("pointerdown", detailState._pnlDoc);
+        return;
+      }
+      if (!host.contains(ev.target)) hide();
+    };
+    document.addEventListener("pointerdown", detailState._pnlDoc);
+  }
+  function bindDetailChart() {
+    var host = document.getElementById("sa-chart");
+    if (!host || !detailState) return;
+    var pnl = detailState.pnl;
+    if (pnl && pnl.status === "ready" && pnl.model && pnl.model.drawn) {
+      bindPnl(host, pnl.model);
+      return;
+    }
+    if (detailState.model) bindChart(host, detailState.model, function () {});
+  }
+  function paintCurve() {
+    var sec = document.getElementById("sa-curve");
+    if (!sec || !detailState) return;
+    sec.innerHTML = curveInnerHtml();
+    bindDetailChart();
+  }
+  function pnlNowOpts(pnl) {
+    var P = pnlLib();
+    return {
+      now: Date.now(),
+      tz: (pnl && pnl.tz) || "",
+      week_start: (pnl && pnl.weekStart) || "monday",
+      inception: (pnl && pnl.inception) || accountInception(detailState.account)
+    };
+  }
+  async function loadPnl() {
+    var P = pnlLib();
+    if (!detailState || !P) return;
+    var pnl = detailState.pnl;
+    if (!pnl) return;
+    if (mockMode()) {
+      pnl.status = "unsupported";
+      pnl.controls = false;
+      pnl.model = null;
+      return;
+    }
+    var id = pnlAccountId();
+    if (!id) {
+      pnl.status = "unsupported";
+      pnl.controls = false;
+      return;
+    }
+    var seq = ++pnl.seq;
+    var token = detailSeq;
+    var base = pnlNowOpts(pnl);
+    var win = pnl.custom ? P.clampWindow(pnl.from, pnl.to, Object.assign({ granularity: pnl.granularity }, base)) : P.clampWindow(P.defaultWindow(pnl.granularity, base).from, P.defaultWindow(pnl.granularity, base).to, Object.assign({ granularity: pnl.granularity }, base));
+    pnl.window = { from: win.from, to: win.to, min: win.min || "", today: win.today };
+    pnl.notice = win.warn || "";
+    if (win.warn) {
+      pnl.status = "blocked";
+      pnl.controls = pnl.hadSuccess || pnl.controls;
+      pnl.model = null;
+      if (seq === pnl.seq && token === detailSeq) paintCurve();
+      return;
+    }
+    var wasLoading = pnl.status === "loading";
+    pnl.status = "loading";
+    if (pnl.hadSuccess && !wasLoading && seq === pnl.seq && token === detailSeq) paintCurve();
+    try {
+      var data = await api(P.requestPath(id, { granularity: pnl.granularity, from: win.from, to: win.to, scope: detailState.scope }));
+      if (seq !== pnl.seq || token !== detailSeq || !detailState || detailState.pnl !== pnl) return;
+      if (data && data.tz) pnl.tz = data.tz;
+      if (data && data.week_start) pnl.weekStart = data.week_start;
+      if (data && data.inception_at) pnl.inception = data.inception_at;
+      var next = P.reconcileWindow({
+        granularity: pnl.granularity,
+        custom: pnl.custom,
+        from: win.from,
+        to: win.to,
+        tz: pnl.tz,
+        weekStart: pnl.weekStart,
+        inception: pnl.inception
+      }, data, Date.now());
+      if (next && !pnl.realigned) {
+        pnl.realigned = true;
+        pnl.inception = next.inception || pnl.inception;
+        pnl.tz = next.tz || pnl.tz;
+        pnl.weekStart = next.weekStart || pnl.weekStart;
+        return loadPnl();
+      }
+      var view = P.present({ payload: data, hadSuccess: true, granularity: pnl.granularity, tz: pnl.tz });
+      if (view.mode === "legacy") {
+        pnl.status = "unsupported";
+        pnl.controls = false;
+        pnl.model = null;
+        pnl.payload = null;
+        paintCurve();
+        return;
+      }
+      pnl.hadSuccess = true;
+      pnl.controls = true;
+      pnl.payload = data;
+      pnl.model = view.chart;
+      pnl.status = view.mode === "empty" ? "empty" : "ready";
+      var opts = pnlNowOpts(pnl);
+      pnl.window.min = opts.inception ? (P.civilDate(opts.inception, P.zoneOf(opts.tz)) || pnl.window.min) : pnl.window.min;
+      pnl.window.today = P.todayISO(Date.now(), P.zoneOf(opts.tz));
+      paintCurve();
+    } catch (e) {
+      if (seq !== pnl.seq || token !== detailSeq || !detailState || detailState.pnl !== pnl) return;
+      var fail = P.present({ error: { status: e && e.status, offline: !!(e && e.offline) }, hadSuccess: pnl.hadSuccess });
+      pnl.model = null;
+      pnl.payload = null;
+      if (fail.mode === "legacy") {
+        pnl.status = "unsupported";
+        pnl.controls = false;
+      } else {
+        pnl.status = "error";
+        pnl.controls = true;
+      }
+      paintCurve();
+    }
+  }
   function detailSkeletonHtml() {
     return '<div class="top"><h1>账户 <i class="sk m" aria-hidden="true"></i></h1></div><section class="card"><i class="sk xl"></i><i class="sk l" style="margin-top:12px"></i></section><section class="card"><i class="sk l"></i><i class="sk" style="margin-top:10px"></i></section>';
   }
@@ -873,40 +1114,18 @@
     var m = a.metrics || {};
     var act = SA.rowActions(a);
     var schema = detailState.schema || [];
-    var scope = detailState.scope;
     var flash = detailState.flash || [];
     detailState.flash = [];
-    var series = detailSeries(a);
     var on = SA.engineOnboarding(a);
-    var chart = "";
-    var emptyCurve = '<div class="ndbox sa-empty-curve" role="status"><span class="nd">暂无曲线数据</span></div>';
-    if (on) {
-      chart = '<div class="ndbox sa-empty-curve" role="status" id="sa-onboard-curve"><span class="nd sa-onboard">' + esc(onboardPhrase()) + "</span></div>";
-    } else if (series && series.points && series.points.length) {
-      var metric = series.metric === "equity_usd" ? "equity_usd" : "return_pct";
-      var model = SA.chartModel([series], { focusId: a.id, axis: "calendar", metric: metric, width: 720, height: 240 });
-      var drawn = (model.lines || []).some(function (l) { return l.points && l.points.length; });
-      if (drawn) {
-        chart = '<div class="sa-chart hero" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
-        detailState.model = model;
-      } else chart = emptyCurve;
-    } else {
-      chart = emptyCurve;
-    }
     var eqBlock = on
       ? '<section class="card" id="sa-eq"><div class="sa-big sa-onboard">' + esc(onboardPhrase()) + '</div><div class="sa-sub"><span class="sa-onboard">' + esc(onboardPhrase()) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>"
       : '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(SA.formatUsd(m.equity_usd, false)) + '</div><div class="sa-sub"><span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</span><span>净收益 ' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>";
-    var segList = (a.segments || []).map(function (seg) {
-      var diff = seg.params_diff_vs_prev ? SA.diffText(seg.params_diff_vs_prev, schema) : "";
-      return "<li>第 " + esc(seg.segment) + " 段" + (diff ? " · " + esc(diff) : "") + "</li>";
-    }).join("");
     var locked = !SA.paramsEditable(a);
     var fields = schema.map(function (p) { return fieldHtml(p, (a.params || {})[p.key]); }).join("");
     var legacyLine = act.legacy ? '<p class="sa-warn" id="sa-legacy" role="status">' + esc(act.note) + "</p>" : "";
-    mount.innerHTML = '<div class="top"><h1>' + esc(a.name) + '</h1>' + statusHtml(a) + '<a class="btn sm" href="' + esc(href("/account")) + '">全部账户</a></div>' + legacyLine + banner(flash, false) + '<div id="sa-err"></div>' + settleHtml(a) + rpcHtml(a) + eqBlock + '<section class="card" id="sa-curve"><div class="sa-chartbar"><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div></div>" + chart + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "") + "</section>" + '<section class="card" id="sa-params"><div class="hd"><h2>参数</h2>' + (locked ? '<span class="tag">只读</span>' : '<span class="tag or">可编辑</span>') + '</div>' + (act.lockHint && a.state === "running" ? '<div class="sa-warn">' + esc(act.lockHint) + "</div>" : "") + (act.note && !act.legacy ? '<div class="sa-warn">' + esc(act.note) + "</div>" : "") + '<form class="sa-form' + (locked ? " sa-lock" : "") + '" id="sa-edit">' + fields + "</form><div class='sa-ops' style='margin-top:12px'>" + opsHtml(a) + (locked ? "" : '<button type="button" class="btn pri" data-act="save-start">保存并启动</button>') + "</div></section>" + '<section class="card" id="sa-pos"><div class="hd"><h2>持仓</h2></div><div id="sa-pos-body"></div></section><section class="card" id="sa-trd"><div class="hd"><h2>成交</h2></div><div id="sa-trd-body"></div></section>';
+    mount.innerHTML = '<div class="top"><h1>' + esc(a.name) + '</h1>' + statusHtml(a) + '<a class="btn sm" href="' + esc(href("/account")) + '">全部账户</a></div>' + legacyLine + banner(flash, false) + '<div id="sa-err"></div>' + settleHtml(a) + rpcHtml(a) + eqBlock + '<section class="card" id="sa-curve">' + curveInnerHtml() + "</section>" + '<section class="card" id="sa-params"><div class="hd"><h2>参数</h2>' + (locked ? '<span class="tag">只读</span>' : '<span class="tag or">可编辑</span>') + '</div>' + (act.lockHint && a.state === "running" ? '<div class="sa-warn">' + esc(act.lockHint) + "</div>" : "") + (act.note && !act.legacy ? '<div class="sa-warn">' + esc(act.note) + "</div>" : "") + '<form class="sa-form' + (locked ? " sa-lock" : "") + '" id="sa-edit">' + fields + "</form><div class='sa-ops' style='margin-top:12px'>" + opsHtml(a) + (locked ? "" : '<button type="button" class="btn pri" data-act="save-start">保存并启动</button>') + "</div></section>" + '<section class="card" id="sa-pos"><div class="hd"><h2>持仓</h2></div><div id="sa-pos-body"></div></section><section class="card" id="sa-trd"><div class="hd"><h2>成交</h2></div><div id="sa-trd-body"></div></section>';
     if (locked) document.querySelectorAll("#sa-edit input,#sa-edit select").forEach(function (el) { el.disabled = true; });
-    var host = document.getElementById("sa-chart");
-    if (host && detailState.model) bindChart(host, detailState.model, function () {});
+    bindDetailChart();
     paintSide("positions");
     paintSide("trades");
   }
@@ -1268,8 +1487,36 @@
         }
         detailState.sides.positions.pager = SA.pagerInit(detailState.sides.positions.pager.limit);
         detailState.sides.trades.pager = SA.pagerInit(detailState.sides.trades.pager.limit);
+        if (detailState.pnl) {
+          detailState.pnl.realigned = false;
+          if (detailState.pnl.hadSuccess) {
+            detailState.pnl.status = "loading";
+            detailState.pnl.model = null;
+          }
+        }
         paintDetail();
+        loadPnl();
       }
+      return;
+    }
+    if (act === "granularity" && detailState && detailState.pnl && detailState.pnl.controls) {
+      var gran = t.getAttribute("data-v");
+      if (!gran) return;
+      detailState.pnl.granularity = gran;
+      detailState.pnl.custom = false;
+      detailState.pnl.realigned = false;
+      loadPnl();
+      return;
+    }
+    if ((act === "pnl-from" || act === "pnl-to") && detailState && detailState.pnl && detailState.pnl.controls) {
+      if (!ev || ev.type !== "change") return;
+      var fromEl = document.querySelector("#sa-curve [data-act=pnl-from]");
+      var toEl = document.querySelector("#sa-curve [data-act=pnl-to]");
+      detailState.pnl.custom = true;
+      detailState.pnl.realigned = false;
+      detailState.pnl.from = fromEl ? fromEl.value : detailState.pnl.from;
+      detailState.pnl.to = toEl ? toEl.value : detailState.pnl.to;
+      loadPnl();
       return;
     }
     if (act === "focus") { compareState.focus = id; compareState.hover = ""; focusId = id; paintCompare(); return; }
@@ -1487,13 +1734,16 @@
         schema: schema,
         scope: q().get("scope") === "current_segment" ? "current_segment" : "all",
         flash: flashTake(),
+        pnl: pnlLib() ? pnlLib().initialState() : null,
         sides: {
           positions: { pager: SA.pagerInit(20), mobile: [], next: null, total: 0 },
           trades: { pager: SA.pagerInit(20), mobile: [], next: null, total: 0 }
         }
       };
+      if (detailState.pnl) detailState.pnl.inception = accountInception(account);
       document.title = account.name + " · 账户 · Wakeloom";
       paintDetail();
+      loadPnl();
     } catch (e) {
       if (seq !== detailSeq) return;
       mount.innerHTML = isMissingAccount(e) ? accountMissingHtml() : (banner([explain(e)], true) + '<a class="btn" href="' + esc(href("/account")) + '">返回账户列表</a>');
@@ -1634,7 +1884,7 @@
     var mount = document.getElementById("sa-mount");
     if (!mount || !mount.contains(ev.target)) return;
     var act = ev.target.getAttribute && ev.target.getAttribute("data-act");
-    if (act === "state" || act === "sort" || act === "limit" || act === "pick") onAct(ev);
+    if (act === "state" || act === "sort" || act === "limit" || act === "pick" || act === "pnl-from" || act === "pnl-to") onAct(ev);
   });
 
   window.PMSA_UI = {
