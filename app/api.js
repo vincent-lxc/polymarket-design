@@ -169,9 +169,10 @@ function fillLeadCard(ml,R){
 function todayMissList(t){ return ((t&&t.missing_accounts)||[]).filter(m=>(m.fields||[]).includes("today_pnl_usd")).map(m=>m.strategy); }
 function todayMiss(t){ const m=todayMissList(t); return m.length&&t.today_pnl_usd!=null?`<span class="mu">（不含 ${m.length} 个实例）</span>`:""; }
 function todayTitle(t){ const m=todayMissList(t); return m.length?` title="缺日初基线：${esc(m.join("、"))}"`:""; }
-/* 实时模式下，接口没覆盖到的静态示例块（无 id 的卡片、右栏示例）换成「无数据」，不再把示例当实时数据展示。 */
+/* 实时模式下，接口没覆盖到的静态示例块（无 id 的卡片、右栏示例）换成「无数据」，不再把示例当实时数据展示。
+   Leader 详情除外：visual-v4 的 #pc 和未命名卡片要留在页面上，由 renderLeader 用 BFF 填充。 */
 function stripDemo(){
-  /* #pc 是 chart.js 随机生成的示意价格图，没有接口，实时模式一并撤掉。 */
+  if(PAGE==="leader") return;
   document.querySelectorAll("main section.card:not([id]), main section#pc").forEach(sec=>{
     if(sec.id!=="pc"&&sec.querySelector("form,input,select,textarea,[id]"))return;
     const hd=sec.querySelector(".hd"); const h=hd?hd.outerHTML:"";
@@ -1015,6 +1016,7 @@ window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,mirrorMarketName
   accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
   heartbeatLabel,normalizeOverviewRange,overviewRangeEcho,sliceOverviewCurve,shareCardFromTotals,loadOverview,
   leadersReadPath,leadersWritePath,leadersRequestKey,leadersCurrentKey,renderLeaders,writeLeader,
+  leaderPriceQuery,leaderMarkets,leaderTradeBody,leaderPositionBody,leaderPnlBody,leaderPnlBag,normalizePriceBook,dominantSide,tokenFor,
   saveDraft:(id,params,name)=>api("/v1/me/strategies/"+encodeURIComponent(id),{method:"PATCH",body:{params,mode:"paper"},confirm:name}),
   createDraft:(name,template_id,params)=>api("/v1/me/strategies",{method:"POST",body:{name,template_id,params,mode:"paper"},confirm:name})};
 
@@ -1069,52 +1071,612 @@ function paintLeaderPerfCurve(curve, reason){
   const yHi=usd(mx)||"", yLo=usd(mn)||"";
   host.innerHTML=`<div class="spark-wrap"><svg viewBox="0 0 600 120" width="100%" height="120" preserveAspectRatio="none" aria-label="他的累计盈亏曲线" data-series='${JSON.stringify({kind:"usd",label:"累计盈亏（已实现+浮动）",t0,dt,v:v.map(x=>+x.toFixed(2))})}'><polyline points="${P}" fill="none" stroke="${up?"#2fd47a":"#ff5a5f"}" stroke-width="2"/></svg><div class="sp-y num mu"><span>${esc(yHi)}</span><span>${esc(yLo)}</span></div></div>`;
 }
-function fillPerf(m,prof){ const kv=$("#ld-perf .kv"); if(!kv)return; const R=m.reasons||{};
-  const c=(l,f,v)=>`<div><span class="lbl fi" tabindex="0" title="字段：${f}" data-f="${f}">${l}</span><b>${v}</b></div>`;
-  kv.innerHTML=c("胜率","win_rate",M(m.win_rate,x=>pct(x,false,0),R.win_rate))+c("已结算市场","resolved_markets",M(m.resolved_markets,x=>x.toLocaleString()))+c("收益率","roi",`<span class="${cls(m.roi)}">${M(m.roi,x=>pct(x,true,1))}</span>`)+c("最大回撤","max_drawdown",`<span class="dn">${M(m.max_drawdown,x=>pct(-Math.abs(x),true,1))}</span>`)
-   +c("组合市值","portfolio_value_usd",V(prof.portfolio_value_usd,usd))+c("综合评分 · 门槛","smart_score · gate_pass",`${M(m.smart_score,x=>Math.round(x))} · ${m.gate_pass==null?"—":m.gate_pass?"通过":"未通过"}`)+c("单笔中位数","median_trade_usd",V(m.median_trade_usd,usd))+c("持仓时长中位数","median_hold_minutes",M(m.median_hold_minutes,x=>x>=1440?(x/1440).toFixed(1)+" 天":x>=60?(x/60).toFixed(1)+" 小时":Math.round(x)+" 分钟"));
+function numOrNull(x){
+  if(x==null||x==="") return null;
+  const n=typeof x==="number"?x:Number(x);
+  return isFinite(n)?n:null;
 }
-async function renderLeader(){
+function pick(obj, keys){
+  if(!obj||typeof obj!=="object") return undefined;
+  for(const k of keys){
+    if(Object.prototype.hasOwnProperty.call(obj,k)&&obj[k]!=null&&obj[k]!=="") return obj[k];
+  }
+  return undefined;
+}
+function bagList(v){
+  if(Array.isArray(v)) return v;
+  if(v&&typeof v==="object"){
+    if(Array.isArray(v.items)) return v.items;
+    if(Array.isArray(v.rows)) return v.rows;
+    const keys=Object.keys(v).filter(k=>v[k]&&typeof v[k]==="object"&&!Array.isArray(v[k]));
+    if(keys.length&&keys.length===Object.keys(v).length) return keys.map(k=>Object.assign({strategy:k}, v[k]));
+  }
+  return [];
+}
+function epochMs(v){
+  if(v==null||v==="") return null;
+  if(typeof v==="number") return v<1e12?v*1000:v;
+  const s=String(v).trim();
+  if(/^\d+(\.\d+)?$/.test(s)){ const n=Number(s); return n<1e12?n*1000:n; }
+  const d=parseUtc(s);
+  return d?d.getTime():null;
+}
+function normPx(v){
+  const n=numOrNull(v);
+  if(n==null) return null;
+  if(n>1&&n<=100) return n/100;
+  if(n<0||n>1.0001) return null;
+  return n;
+}
+function cent(p){ const n=normPx(p); return n==null?null:Math.round(n*100)+"¢"; }
+function shareCount(n){ const x=numOrNull(n); return x==null?null:x.toLocaleString("en-US",{maximumFractionDigits:2}); }
+function atPrice(amount, price){ const u=usd(amount); if(u==null) return null; const c=cent(price); return u+(c?" @ "+c:""); }
+function tradeToken(t){ const v=pick(t,["token_id","tokenId","asset_id","asset","clob_token_id"]); return v==null?"":String(v); }
+function tradeOutcome(t){ const v=pick(t,["outcome","outcome_name"]); return v==null?"":String(v); }
+function tradeTime(t){ return pick(t,["t","ts","timestamp","time","decided_at","created_at","traded_at","matched_at"]); }
+function tradeSide(t){
+  const s=String(pick(t,["side","action"])||"").toUpperCase();
+  if(s==="BUY"||s==="B") return "BUY";
+  if(s==="SELL"||s==="S") return "SELL";
+  return "";
+}
+function tradeNotional(t){ return numOrNull(pick(t,["notional_usd","notional","amount_usd","leader_notional_usd","usd"])); }
+function tradePrice(t){ return normPx(pick(t,["price","leader_price","avg_price","fill_price"])); }
+function leaderPriceQuery(tokenId, addr, range){
+  const r=range||"1d";
+  const bucket={"1h":"1m","1d":"1h","1w":"1h","all":"1d"}[r]||"1h";
+  return `/v1/markets/${encodeURIComponent(tokenId)}/prices?range=${encodeURIComponent(r)}&bucket=${encodeURIComponent(bucket)}&leader=${encodeURIComponent(addr)}`;
+}
+function leaderMarkets(detail){
+  const d=detail&&typeof detail==="object"?detail:{};
+  const src=bagList(d.trades).concat(bagList(d.mirrors), bagList(d.open_positions));
+  const map=new Map();
+  src.forEach(t=>{
+    const token=tradeToken(t); if(!token) return;
+    const title=mirrorMarketName(t)||pick(t,["title","question","name"])||"未命名市场";
+    const group=String(pick(t,["condition_id","market_id","conditionId"])||title);
+    const outcome=tradeOutcome(t)||"Yes";
+    if(!map.has(group)) map.set(group,{key:group,title:String(title),notional:0,outcomes:{}});
+    const m=map.get(group);
+    const n=Math.abs(tradeNotional(t)||0);
+    m.notional+=n;
+    if(!m.outcomes[outcome]) m.outcomes[outcome]={token_id:token,notional:0};
+    m.outcomes[outcome].notional+=n;
+    m.outcomes[outcome].token_id=token;
+  });
+  return [...map.values()].sort((a,b)=>b.notional-a.notional);
+}
+function dominantSide(market){
+  const outs=market&&market.outcomes||{};
+  let best="Yes", bestN=-1;
+  Object.keys(outs).forEach(k=>{ const n=outs[k].notional||0; if(n>bestN){ bestN=n; best=k; } });
+  if(/^no$/i.test(best)) return "No";
+  if(/^yes$/i.test(best)) return "Yes";
+  return "Yes";
+}
+function tokenFor(market, side){
+  if(!market||!market.outcomes) return "";
+  const keys=Object.keys(market.outcomes);
+  const hit=keys.find(k=>k.toLowerCase()===String(side||"").toLowerCase());
+  if(hit) return market.outcomes[hit].token_id;
+  if(keys.length===1) return market.outcomes[keys[0]].token_id;
+  return "";
+}
+function pricePoints(history){
+  const pts=[];
+  bagList(history).forEach(row=>{
+    if(Array.isArray(row)){ const t=epochMs(row[0]), p=normPx(row[1]); if(t!=null&&p!=null) pts.push({t,p}); return; }
+    if(!row||typeof row!=="object") return;
+    const t=epochMs(pick(row,["t","ts","time","timestamp"]));
+    const p=normPx(pick(row,["p","price","c","close"]));
+    if(t!=null&&p!=null) pts.push({t,p});
+  });
+  pts.sort((a,b)=>a.t-b.t);
+  return pts;
+}
+function ohlcBars(ohlc){
+  const bars=[];
+  bagList(ohlc).forEach(row=>{
+    if(!row||typeof row!=="object"||Array.isArray(row)) return;
+    const t=epochMs(pick(row,["t","ts","time","timestamp"]));
+    const c=normPx(pick(row,["c","close","p","price"]));
+    if(t==null||c==null) return;
+    const o=normPx(pick(row,["o","open"]));
+    const h=normPx(pick(row,["h","high"]));
+    const l=normPx(pick(row,["l","low"]));
+    bars.push({t,o:o==null?c:o,h:h==null?Math.max(o==null?c:o,c):h,l:l==null?Math.min(o==null?c:o,c):l,c});
+  });
+  bars.sort((a,b)=>a.t-b.t);
+  return bars;
+}
+function markOf(t, who){
+  return {
+    t:epochMs(tradeTime(t)),
+    who,
+    side:tradeSide(t)||"BUY",
+    outcome:tradeOutcome(t),
+    price:normPx(pick(t,["price","leader_price","fill_price","avg_price"])),
+    notional:numOrNull(pick(t,["notional_usd","notional","usd","fill_usd","amount_usd","leader_notional_usd"]))
+  };
+}
+function normalizePriceBook(raw){
+  const book=raw&&typeof raw==="object"?raw:{};
+  const marks=bagList(book.leader_trades).map(t=>markOf(t,"L")).concat(bagList(book.our_fills).map(t=>markOf(t,"M"))).filter(m=>m.t!=null);
+  return {history:pricePoints(book.history||book.prices||book.series), ohlc:ohlcBars(book.ohlc), marks};
+}
+function mirrorResult(m, side){
+  if(!m) return NA;
+  const decision=m.decision||m.status;
+  const sideU=String(side||m.side||"").toUpperCase();
+  if(decision==="copied"||decision==="filled"||m.status==="filled"||m.copied===true){
+    return sideU==="SELL"?'<span class="tag live">跟卖</span>':'<span class="tag live">已跟</span>';
+  }
+  if(decision==="resting"||m.status==="resting"||m.status==="maker_resting") return '<span class="tag" title="maker_resting">等待中</span>';
+  if(m.reason||m.reason_zh) return rejectTag(m.reason, m.reason_zh, m.reason_known);
+  if(decision) return rejectTag(String(decision), m.reason_zh, false);
+  return NA;
+}
+function leaderTradePairs(detail){
+  const d=detail&&typeof detail==="object"?detail:{};
+  const trades=bagList(d.trades);
+  const mirrors=bagList(d.mirrors);
+  const byId=new Map(), byLoose=new Map();
+  mirrors.forEach(m=>{
+    const id=pick(m,["leader_trade_id","trade_id","signal_id","source_trade_id"]);
+    if(id!=null) byId.set(String(id), m);
+    const loose=[tradeToken(m), String(tradeTime(m)||""), tradeSide(m)].join("|");
+    if(!byLoose.has(loose)) byLoose.set(loose, m);
+  });
+  const pairs=trades.length?trades.map(t=>{
+    const id=pick(t,["id","trade_id"]);
+    let m=id!=null?byId.get(String(id)):null;
+    if(!m) m=byLoose.get([tradeToken(t), String(tradeTime(t)||""), tradeSide(t)].join("|"))||null;
+    return {trade:t, mirror:m};
+  }):mirrors.map(m=>({trade:m, mirror:m}));
+  pairs.sort((a,b)=>(epochMs(tradeTime(b.trade))||0)-(epochMs(tradeTime(a.trade))||0));
+  return pairs;
+}
+const TRADE_HEAD='<tr><th class="hm">时间</th><th>市场 · outcome</th><th class="hm">方向</th><th class="r" title="trades.notional @ price">他 金额 @ 价格</th><th class="r" title="copy_fills.usd @ price">我方 金额 @ 价格</th><th>结果</th></tr>';
+function leaderTradeBody(detail){
+  const pairs=leaderTradePairs(detail);
+  if(!pairs.length) return `<tr><td colspan="6">${nd("no_trades")}</td></tr>`;
+  return pairs.map(({trade,mirror})=>{
+    const same=trade===mirror;
+    const side=tradeSide(trade)||tradeSide(mirror);
+    const hisAmt=same?numOrNull(pick(trade,["leader_notional_usd","notional_usd","notional","amount_usd"])): (tradeNotional(trade)!=null?tradeNotional(trade):numOrNull(mirror&&pick(mirror,["leader_notional_usd","leader_usd"])));
+    const hisPx=same?normPx(pick(trade,["leader_price","price"])): (tradePrice(trade)!=null?tradePrice(trade):normPx(mirror&&pick(mirror,["leader_price"])));
+    const ourAmt=mirror?numOrNull(pick(mirror,["fill_usd","our_notional_usd","copied_usd","our_usd"])):null;
+    const ourPx=mirror?normPx(pick(mirror,["fill_price","our_price"])):null;
+    const name=mirrorMarketName(trade)||mirrorMarketName(mirror);
+    const outcome=tradeOutcome(trade)||tradeOutcome(mirror);
+    const his=atPrice(hisAmt, hisPx);
+    const ours=atPrice(ourAmt, ourPx);
+    const when=bj(tradeTime(trade)||tradeTime(mirror))||"—";
+    return `<tr><td class="num mu hm">${esc(when)}</td><td>${marketHtml(name, trade||mirror)}${outcome?` <span class="fk" style="display:inline">${esc(outcome)}</span>`:""}</td><td class="hm">${side==="SELL"?"卖出":side==="BUY"?"买入":NA}</td><td class="r ${his?"num":"na"}">${his||NA}</td><td class="r ${ours?"num":"na"}">${ours||NA}</td><td>${mirrorResult(mirror, side)}</td></tr>`;
+  }).join("");
+}
+const POS_HEAD='<tr><th>市场 · outcome</th><th class="r hm" title="current_size">股数</th><th class="r hm">均价 / 现价</th><th class="r" title="unrealized_pnl">他的浮动</th><th class="r">我方镜像持仓</th></tr>';
+function posKey(p){ const tok=tradeToken(p); if(tok) return "t:"+tok; return "n:"+(mirrorMarketName(p)||pick(p,["title","question","name"])||"")+"|"+tradeOutcome(p); }
+function posSize(p){ return numOrNull(pick(p,["current_size","shares","size","qty"])); }
+function leaderPositionBody(detail){
+  const d=detail&&typeof detail==="object"?detail:{};
+  const ours=new Map();
+  bagList(d.our_positions).forEach(p=>{ const k=posKey(p); if(!ours.has(k)) ours.set(k,p); });
+  const rows=bagList(d.open_positions).map(p=>({his:p, our:ours.get(posKey(p))||null, key:posKey(p)}));
+  const seen=new Set(rows.map(r=>r.key));
+  bagList(d.our_positions).forEach(p=>{ const k=posKey(p); if(seen.has(k)) return; seen.add(k); rows.push({his:null, our:p, key:k}); });
+  if(!rows.length) return `<tr><td colspan="5">${nd("no_positions")}</td></tr>`;
+  return rows.map(({his,our})=>{
+    const src=his||our||{};
+    const name=mirrorMarketName(src)||pick(src,["title","question","name"]);
+    const outcome=tradeOutcome(his||{})||tradeOutcome(our||{});
+    const size=his?posSize(his):null;
+    const avg=his?normPx(pick(his,["avg_price","avgPrice","average_price"])):null;
+    const mark=his?normPx(pick(his,["last_mark","cur_price","current_price","mark","price"])):null;
+    const pnl=his?numOrNull(pick(his,["unrealized_pnl","unrealized_usd","cash_pnl"])):null;
+    const mine=our?posSize(our):null;
+    const px=(avg==null&&mark==null)?NA:`${avg==null?"—":cent(avg)} / ${mark==null?"—":cent(mark)}`;
+    const mineHtml=mine==null?NA:`${shareCount(mine)} 股`;
+    return `<tr><td>${marketHtml(name, src)}${outcome?` <span class="fk" style="display:inline">${esc(outcome)}</span>`:""}</td><td class="r num hm">${size==null?NA:shareCount(size)}</td><td class="r num hm">${px}</td><td class="r ${pnl==null?"na":"num "+cls(pnl)}">${pnl==null?nd(his&&his.reasons&&his.reasons.unrealized_pnl):usd(pnl,true)}</td><td class="r ${mine==null?"na":"num"}">${mineHtml}</td></tr>`;
+  }).join("");
+}
+function leaderPnlBag(detail){
+  const d=detail&&typeof detail==="object"?detail:{};
+  const pnl=d.pnl&&typeof d.pnl==="object"&&!Array.isArray(d.pnl)?d.pnl:{};
+  return {
+    by:bagList(pnl.by_strategy!=null?pnl.by_strategy:d.by_strategy),
+    copy_rate:pnl.copy_rate!=null?pnl.copy_rate:d.copy_rate,
+    share:pnl.our_share!=null?pnl.our_share:(pnl.share!=null?pnl.share:d.our_share),
+    recent:pnl.recent_closed!=null?pnl.recent_closed:d.recent_closed,
+    n:pnl.recent_n!=null?pnl.recent_n:(d.recent_n!=null?d.recent_n:null),
+    reason:(d.reasons&&d.reasons.pnl)||pnl.reason||null
+  };
+}
+function moneyTd(x, reason){
+  if(x==null||!isFinite(x)) return `<td class="r">${nd(reason||"not_yet_aggregated")}</td>`;
+  return `<td class="r num ${cls(x)}">${usd(x,true)}</td>`;
+}
+function leaderPnlBody(detail){
+  const bag=leaderPnlBag(detail);
+  const rows=bag.by.map(row=>{
+    const name=String(pick(row,["strategy","name","account"])||"—");
+    const realized=numOrNull(pick(row,["realized_usd","realized","realized_pnl"]));
+    const unrealized=numOrNull(pick(row,["unrealized_usd","unrealized","unrealized_pnl","floating_usd"]));
+    let total=numOrNull(pick(row,["total_usd","total","net_usd","net_pnl_usd"]));
+    if(total==null&&realized!=null&&unrealized!=null) total=realized+unrealized;
+    return {name, realized, unrealized, total, reason:row.reasons&&(row.reasons.realized_usd||row.reasons.total)};
+  });
+  const sum=key=>rows.length&&rows.every(r=>r[key]!=null)?rows.reduce((s,r)=>s+r[key],0):null;
+  const foot=`<tr><td><b>合计</b></td>${moneyTd(sum("realized"), bag.reason)}${moneyTd(sum("unrealized"), bag.reason)}${moneyTd(sum("total"), bag.reason)}</tr>`;
+  if(!rows.length) return `<tr><td colspan="4">${nd(bag.reason||"not_yet_aggregated")}</td></tr>`+foot;
+  return rows.map(r=>`<tr><td>${esc(r.name)}</td>${moneyTd(r.realized,r.reason)}${moneyTd(r.unrealized,r.reason)}${moneyTd(r.total,r.reason)}</tr>`).join("")+foot;
+}
+function copyRateText(v){
+  if(v==null) return null;
+  if(typeof v==="number") return pct(v,false,0);
+  if(typeof v==="object"){
+    const c=numOrNull(pick(v,["copied","filled","followed"]));
+    const s=numOrNull(pick(v,["signals","total","count"]));
+    if(c!=null&&s!=null) return `${Math.round(c)} / ${Math.round(s)}`;
+    if(v.rate!=null) return pct(Number(v.rate),false,0);
+  }
+  return null;
+}
+function recentText(v){
+  if(v==null) return null;
+  if(typeof v==="string"||typeof v==="number") return String(v);
+  const w=numOrNull(pick(v,["wins","win"]));
+  const l=numOrNull(pick(v,["losses","loss"]));
+  if(w==null&&l==null) return null;
+  return `${w==null?"—":Math.round(w)} / ${l==null?"—":Math.round(l)}`;
+}
+function categoryRows(src){
+  let list=[];
+  if(Array.isArray(src)) list=src;
+  else if(src&&typeof src==="object") list=Object.keys(src).map(k=>Object.assign({category:k}, src[k]&&typeof src[k]==="object"?src[k]:{}));
+  return list.map(c=>({
+    name:String(pick(c,["category","name","label"])||""),
+    wins:numOrNull(c.wins),
+    settled:numOrNull(c.settled!=null?c.settled:(c.resolved!=null?c.resolved:c.count)),
+    pnl:numOrNull(pick(c,["realized_pnl","realized_usd","pnl"]))
+  })).filter(c=>c.name&&c.name!=="unknown");
+}
+function marketDistRows(src){
+  return bagList(src).map(m=>({
+    name:typeof m==="string"?m:String(pick(m,["market","title","name","question"])||"未命名市场"),
+    share:numOrNull(pick(m,["share","weight","pct"])),
+    pnl:numOrNull(pick(m,["realized_pnl","realized_usd","pnl"]))
+  })).filter(m=>m.name);
+}
+function winLabel(win){
+  if(win==="all"||win==="全部") return "全部";
+  const m=String(win||"90d").match(/^(\d+)d$/);
+  return m?m[1]+" 天":"90 天";
+}
+function holdLabel(x){ return x>=1440?(x/1440).toFixed(1)+" 天":x>=60?(x/60).toFixed(1)+" 小时":Math.round(x)+" 分钟"; }
+const PNL_HEAD='<tr><th>策略</th><th class="r">已实现</th><th class="r">浮动</th><th class="r">合计</th></tr>';
+let leaderWin="90d", leaderN=20, leaderAddr="", leaderDetail=null, pcMarket=0, pcBook=null;
+function perfBag(d){
+  const m=d&&d.metrics||{};
+  return {
+    window:leaderWin,
+    settled:d&&d.settled,
+    categories:d&&(d.categories!=null?d.categories:m.categories),
+    markets:d&&d.markets,
+    category_hhi:m.category_hhi!=null?m.category_hhi:d&&d.category_hhi,
+    top_event_share:m.top_event_share!=null?m.top_event_share:d&&d.top_event_share
+  };
+}
+function fillPerf(m,prof,bag){
+  const kv=$("#ld-perf .kv"); if(!kv)return;
+  const R=m.reasons||{};
+  const extra=bag||{};
+  const wz=winLabel(extra.window||leaderWin);
+  const c=(l,f,v)=>`<div><span class="lbl fi" tabindex="0" title="字段：${esc(f)}" data-f="${esc(f)}">${l}</span><b>${v}</b></div>`;
+  const settled=extra.settled&&typeof extra.settled==="object"?extra.settled:{};
+  const wins=numOrNull(settled.wins), losses=numOrNull(settled.losses), life=numOrNull(pick(settled,["realized_pnl","realized_usd"]));
+  const wl=wins==null&&losses==null?nd(settled.reason||"no_settled"):`${wins==null?"—":Math.round(wins).toLocaleString("en-US")} / ${losses==null?"—":Math.round(losses).toLocaleString("en-US")}`;
+  kv.innerHTML=c(`胜率（${wz}）`,"wallet_metrics.win_rate",M(m.win_rate,x=>pct(x,false,0),R.win_rate))
+    +c(`已结算市场（${wz}）`,"wallet_metrics.resolved_markets",M(m.resolved_markets,x=>x.toLocaleString(),R.resolved_markets))
+    +c("全期 胜 / 负","wallet_settled_stats.wins / losses",wl)
+    +c("全期已实现","wallet_settled_stats.realized_pnl", life==null?nd(settled.reason||"no_settled"):`<span class="${cls(life)}">${usd(life,true)}</span>`)
+    +c("组合市值","wallets.portfolio_value",V(prof&&prof.portfolio_value_usd,usd,R.portfolio_value_usd))
+    +c("综合评分 · 门槛","wallet_metrics.smart_score · gate_pass",`${M(m.smart_score,x=>Math.round(x))} · ${m.gate_pass==null?"—":m.gate_pass?"通过":"未通过"}`)
+    +c("单笔中位数","metrics.median_trade_usd",V(m.median_trade_usd,usd,R.median_trade_usd))
+    +c("持仓时长中位数","metrics.median_hold_minutes",M(m.median_hold_minutes,holdLabel,R.median_hold_minutes));
+  paintLeaderBreakdown(m, extra);
+}
+function paintLeaderBreakdown(m, extra){
+  let lg=$("#ld-perf .lgrid");
+  const perf=$("#ld-perf"); if(!perf) return;
+  if(!lg){ lg=document.createElement("div"); lg.className="lgrid"; lg.style.marginTop="12px"; perf.appendChild(lg); }
+  lg.style.gridTemplateColumns="1.4fr 1fr";
+  const cats=categoryRows(extra.categories);
+  const mkts=marketDistRows(extra.markets);
+  const maxC=Math.max(1,...cats.map(c=>Math.abs(c.pnl!=null?c.pnl:(c.settled||0))));
+  const catHtml=cats.length?cats.slice(0,5).map(c=>{
+    const wl=`${c.wins==null?"—":Math.round(c.wins)}/${c.settled==null?"—":Math.round(c.settled)}`;
+    const pnl=c.pnl==null?nd("not_yet_aggregated"):`<span class="${cls(c.pnl)}">${usd(c.pnl,true)}</span>`;
+    const w=Math.max(4, Math.round(Math.abs(c.pnl!=null?c.pnl:(c.settled||0))/maxC*100));
+    return `<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(c.name)}</span><span class="num">${wl} · ${pnl}</span></div><div class="meter"><i style="width:${w}%"></i></div></div>`;
+  }).join(""):`<div style="margin-top:8px">${nd("no_categories")}</div>`;
+  const hhi=numOrNull(extra.category_hhi), top=numOrNull(extra.top_event_share);
+  const conc=hhi==null&&top==null?`<div class="note" style="margin-top:6px">${nd("not_yet_aggregated")}</div>`:`<div class="note fi" tabindex="0" style="margin-top:6px" title="字段：category_hhi · top_event_share" data-f="category_hhi · top_event_share">集中度 ${hhi==null?"—":Number(hhi).toFixed(2)} · 最大事件占比 ${top==null?"—":pct(top,false,0)}</div>`;
+  const maxM=Math.max(1,...mkts.map(x=>Math.abs(x.share!=null?x.share:(x.pnl||0))));
+  const mktHtml=mkts.length?mkts.slice(0,5).map(row=>{
+    const right=row.share!=null?pct(row.share,false,0):(row.pnl==null?"—":`<span class="${cls(row.pnl)}">${usd(row.pnl,true)}</span>`);
+    const basis=Math.abs(row.share!=null?row.share:(row.pnl||0));
+    const w=Math.max(4, Math.round(basis/maxM*100));
+    return `<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(row.name)}</span><span class="num">${right}</span></div><div class="meter"><i style="width:${w}%"></i></div></div>`;
+  }).join(""):`<div style="margin-top:8px"><span class="nd">无数据</span></div><div class="note fi" tabindex="0" style="margin-top:6px" title="需按 condition_id 汇总 trades / positions" data-f="按 condition_id 汇总 trades / positions">需后端按市场汇总</div>`;
+  const wz=winLabel(extra.window||leaderWin);
+  const roi=M(m.roi,x=>pct(x,true,1), m.reasons&&m.reasons.roi);
+  const dd=M(m.max_drawdown,x=>pct(-Math.abs(x),true,1), m.reasons&&m.reasons.max_drawdown);
+  lg.innerHTML=`<div class="cell"><div class="lbl fi" tabindex="0" title="字段：wallet_category_settled" data-f="wallet_category_settled（wins / settled · realized_pnl）">按品类 · 胜/结算 · 已实现</div>${catHtml}${conc}</div><div class="cell"><div class="lbl">按市场分布</div>${mktHtml}<div class="lbl fi" tabindex="0" style="margin-top:12px" title="wallet_metrics.roi / max_drawdown" data-f="wallet_metrics.roi / max_drawdown">收益率 / 最大回撤（${wz}）</div><div class="num" style="margin-top:6px;font-size:16px"><span class="${cls(m.roi)}">${roi}</span> / <span class="dn">${dd}</span></div></div>`;
+}
+function dropExpander(sec){
+  if(!sec) return;
+  const tw=sec.querySelector(".tw"); if(!tw) return;
+  tw.classList.remove("open");
+  const n=tw.nextElementSibling;
+  if(n&&n.classList&&n.classList.contains("xp")) n.remove();
+}
+function paintLeaderTable(sel, head, body){
+  const sec=$(sel); if(!sec) return;
+  const t=sec.querySelector("table"); if(!t) return;
+  t.innerHTML=head+body;
+  dropExpander(sec);
+}
+function paintLeaderPnl(detail){
+  paintLeaderTable("#ld-pnl", PNL_HEAD, leaderPnlBody(detail));
+  const box=$("#ld-pnl"); if(!box) return;
+  const bag=leaderPnlBag(detail||{});
+  const bs=box.querySelectorAll(".kv > div > b");
+  if(bs[0]) bs[0].innerHTML=recentText(bag.recent)||nd(bag.reason||"no_recent_closed");
+  if(bs[1]) bs[1].innerHTML=bag.share==null?nd(bag.reason||"no_share"):(pct(Number(bag.share),false,0)||nd("no_share"));
+  if(bs[2]) bs[2].innerHTML=copyRateText(bag.copy_rate)||nd(bag.reason||"no_copy_rate");
+}
+function paintLeaderTrades(detail){ paintLeaderTable("#ld-trades", TRADE_HEAD, leaderTradeBody(detail)); }
+function paintLeaderPositions(detail){ paintLeaderTable("#ld-pos", POS_HEAD, leaderPositionBody(detail)); }
+function leaderRailNodes(){
+  return [...document.querySelectorAll(".rail > .rc")].filter(rc=>!rc.classList.contains("note"));
+}
+/* lang.js 会把静态标题译成 Heads up / Position usage。按标题或栏位顺序认卡，避免示例数字留在实时页。 */
+function railRole(rc, index){
+  const title=(rc.querySelector("h2")&&rc.querySelector("h2").textContent)||"";
+  if(/需要注意|Heads up/.test(title)) return "flags";
+  if(/持仓占用|Position usage/.test(title)) return "usage";
+  if(index===0) return "flags";
+  if(index===1) return "usage";
+  return "";
+}
+function paintLeaderRail(detail, health){
+  const d=detail&&typeof detail==="object"?detail:{};
+  const copy=health&&health.services&&health.services.copy;
+  const ks=copy&&Object.prototype.hasOwnProperty.call(copy,"kill_switch")?copy.kill_switch:(health&&Object.prototype.hasOwnProperty.call(health,"kill_switch")?health.kill_switch:null);
+  const pill=`<span class="r pill"><span class="dot"></span>全局停止${ks==null?"":ks?" 开":" 关"}</span>`;
+  leaderRailNodes().forEach((rc, index)=>{
+    const role=railRole(rc, index);
+    if(role==="flags"){
+      const labels=bagList(d.flag_labels);
+      const notes=bagList(d.flag_notes);
+      const flags=bagList(d.flags);
+      const items=labels.length?labels:notes.length?notes:flags;
+      const lis=items.length?items.map(x=>{
+        const text=typeof x==="string"?x:(x&&(x.zh||x.label||x.code))||"";
+        return text?`<li>${esc(text)}</li>`:"";
+      }).join(""):`<li>${nd("not_yet_aggregated")}</li>`;
+      rc.innerHTML=`<div class="hd" style="margin:0"><h2>需要注意</h2>${pill}</div><ul>${lis}</ul>`;
+    }else if(role==="usage"){
+      const raw=bagList(d.position_usage||d.occupancy||(d.pnl&&d.pnl.position_usage)||d.accounts);
+      const rows=raw.map(a=>({
+        name:String(pick(a,["strategy","name"])||""),
+        open:numOrNull(a.open_positions!=null?a.open_positions:a.open),
+        max:numOrNull(a.max_open_positions!=null?a.max_open_positions:a.max)
+      })).filter(a=>a.name&&(a.open!=null||a.max!=null));
+      if(!rows.length){
+        rc.innerHTML=`<h2>持仓占用 Top</h2><div class="mr"><div class="ndbox" style="margin-top:8px"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>持仓数接口还没聚合。</span></div></div>`;
+        return;
+      }
+      rows.sort((a,b)=>((b.max?b.open/b.max:0)-(a.max?a.open/a.max:0)));
+      rc.innerHTML=`<h2>持仓占用 Top</h2><div class="mr">${rows.slice(0,3).map(a=>{
+        const open=a.open==null?"—":Math.round(a.open);
+        const max=a.max==null?"—":Math.round(a.max);
+        const w=a.open!=null&&a.max?Math.max(0,Math.min(100,a.open/a.max*100)):0;
+        return `<div><div style="display:flex;justify-content:space-between"><span>${esc(a.name)}</span><span class="num">${open}/${max}</span></div><div class="meter"><i style="width:${w}%"></i></div></div>`;
+      }).join("")}</div>`;
+    }
+  });
+}
+function loginNote(addr){
+  const href="/login?next="+encodeURIComponent("/leader?addr="+addr);
+  return `<div class="ndbox"><span class="nd">需登录</span><span>这些块读跟单账本，公开接口不提供。<a href="${href}">登录后查看 →</a></span></div>`;
+}
+function lockPrivateBlocks(addr){
+  paintLeaderTable("#ld-pnl", PNL_HEAD, `<tr><td colspan="4">${loginNote(addr)}</td></tr>`);
+  const bs=$("#ld-pnl")&&$("#ld-pnl").querySelectorAll(".kv > div > b");
+  if(bs) bs.forEach(b=>{ b.innerHTML=`<a href="/login?next=${encodeURIComponent("/leader?addr="+addr)}">登录后查看 →</a>`; });
+  paintLeaderTable("#ld-trades", TRADE_HEAD, `<tr><td colspan="6">${loginNote(addr)}</td></tr>`);
+  paintLeaderTable("#ld-pos", POS_HEAD, `<tr><td colspan="5">${loginNote(addr)}</td></tr>`);
+  const pc=$("#pc");
+  if(pc){
+    const lbl=pc.querySelector(".hd .lbl"); if(lbl) lbl.textContent="登录后查看";
+    if(window.PMChart){ PMChart.setLive(true); PMChart.drawEmpty(); }
+  }
+  leaderRailNodes().forEach((rc, index)=>{
+    const role=railRole(rc, index);
+    if(role==="flags") rc.innerHTML=`<div class="hd" style="margin:0"><h2>需要注意</h2><span class="r pill"><span class="dot"></span>全局停止</span></div><ul><li>${loginNote(addr)}</li></ul>`;
+    else if(role==="usage") rc.innerHTML=`<h2>持仓占用 Top</h2><div class="mr">${loginNote(addr)}</div>`;
+  });
+}
+function blankLeaderLive(reason){
+  const why=reason||"leader_unavailable";
+  paintLeaderTable("#ld-pnl", PNL_HEAD, `<tr><td colspan="4">${nd(why)}</td></tr>`);
+  paintLeaderTable("#ld-trades", TRADE_HEAD, `<tr><td colspan="6">${nd(why)}</td></tr>`);
+  paintLeaderTable("#ld-pos", POS_HEAD, `<tr><td colspan="5">${nd(why)}</td></tr>`);
+  if(window.PMChart) PMChart.drawEmpty();
+}
+function paintMarketSwitcher(markets){
+  const el=$("#pc"); if(!el) return;
+  const lbl=el.querySelector(".hd .lbl");
+  const cur=markets[pcMarket]||markets[0];
+  if(lbl) lbl.textContent=cur?cur.title:"无数据";
+  const ctl=el.querySelector(".ctl");
+  let seg=el.querySelector("#pc-mkts");
+  if(!markets || markets.length<2){ if(seg) seg.remove(); return; }
+  if(!seg && ctl){ seg=document.createElement("div"); seg.className="seg"; seg.id="pc-mkts"; ctl.prepend(seg); }
+  if(!seg) return;
+  seg.innerHTML=markets.map((m,i)=>`<span data-k="mkt:${i}" class="${i===pcMarket?"on":""}">${esc(m.title)}</span>`).join("");
+}
+async function paintLeaderPrices(detail, addr){
+  leaderDetail=detail;
+  const markets=leaderMarkets(detail||{});
+  const el=$("#pc");
+  if(window.PMChart) PMChart.setLive(true);
+  if(!markets.length){
+    paintMarketSwitcher([]);
+    if(window.PMChart) PMChart.drawEmpty();
+    return;
+  }
+  if(pcMarket>=markets.length) pcMarket=0;
+  const market=markets[pcMarket];
+  const side=dominantSide(market);
+  const range=(window.PMChart&&PMChart.state().range)||"1d";
+  const mode=(window.PMChart&&PMChart.state().mode)||"line";
+  if(window.PMChart) PMChart.set({live:true, side, range, mode, mkt:String(pcMarket)});
+  if(el) el.dataset.def=side;
+  paintMarketSwitcher(markets);
+  await loadLeaderPrices(addr, market, side, range);
+}
+async function loadLeaderPrices(addr, market, side, range){
+  const tokenId=tokenFor(market, side);
+  if(!tokenId){ pcBook=null; if(window.PMChart) PMChart.drawEmpty(); return; }
+  const q=leaderPriceQuery(tokenId, addr, range);
+  try{
+    const raw=await api(q);
+    pcBook=normalizePriceBook(raw);
+    if(window.PMChart){ PMChart.set({live:true, side, range, mkt:String(pcMarket)}); PMChart.paint(pcBook); }
+  }catch(e){
+    console.warn(e);
+    pcBook=null;
+    if(window.PMChart) PMChart.drawEmpty();
+  }
+}
+function bindLeaderChrome(){
+  const seg=$("#ld-perf .seg");
+  if(seg&&!seg.dataset.bound){
+    seg.dataset.bound="1";
+    seg.addEventListener("click", ev=>{
+      const s=ev.target.closest&&ev.target.closest("span"); if(!s||!seg.contains(s)) return;
+      const map={"7d":"7d","30d":"30d","90d":"90d","全部":"all"};
+      const w=map[(s.textContent||"").trim()]; if(!w||w===leaderWin) return;
+      leaderWin=w;
+      seg.querySelectorAll("span").forEach(x=>x.classList.toggle("on", x===s));
+      refreshLeader();
+    });
+  }
+  const pnl=$("#ld-pnl");
+  if(pnl&&!pnl.dataset.nbound){
+    pnl.dataset.nbound="1";
+    pnl.addEventListener("click", ev=>{
+      const s=ev.target.closest&&ev.target.closest(".seg span"); if(!s) return;
+      const t=(s.textContent||"").trim();
+      const n=t==="50"?50:(t==="N=20"?20:0);
+      if(!n||n===leaderN) return;
+      leaderN=n;
+      pnl.querySelectorAll(".seg span").forEach(x=>x.classList.toggle("on", x===s));
+      refreshLeader();
+    });
+  }
+  const pc=$("#pc");
+  if(pc&&!pc.dataset.bound){
+    pc.dataset.bound="1";
+    pc.addEventListener("pm:pc", ev=>{ onPcEvent((ev&&ev.detail)||{}); });
+  }
+}
+async function onPcEvent(d){
+  if(!leaderAddr||!token.get()) return;
+  const markets=leaderMarkets(leaderDetail||{});
+  if(d.key==="mkt"){ pcMarket=Number(d.value)||0; if(pcMarket>=markets.length) pcMarket=0; }
+  const market=markets[pcMarket]||markets[0];
+  const st=window.PMChart?PMChart.state():{side:d.key==="side"?d.value:"Yes", range:d.key==="range"?d.value:"1d", mode:"line"};
+  if(d.key==="mode"){
+    if(window.PMChart){ PMChart.set({mode:d.value, live:true}); if(pcBook) PMChart.paint(pcBook); else PMChart.drawEmpty(); }
+    return;
+  }
+  if(!market){ if(window.PMChart) PMChart.drawEmpty(); return; }
+  let side=st.side||"Yes";
+  if(d.key==="mkt") side=dominantSide(market);
+  if(window.PMChart) PMChart.set({live:true, side, range:st.range||"1d", mkt:String(pcMarket)});
+  paintMarketSwitcher(markets);
+  await loadLeaderPrices(leaderAddr, market, side, (window.PMChart&&PMChart.state().range)||"1d");
+}
+function leaderProf(d, addr){
+  const profile=d&&d.profile&&typeof d.profile==="object"?d.profile:{};
+  const portfolio=profile.portfolio_value_usd!=null?profile.portfolio_value_usd:(d&&d.portfolio_value_usd);
+  return Object.assign({}, profile, {portfolio_value_usd:portfolio, user_name:profile.user_name!=null?profile.user_name:d&&d.user_name, x_username:Object.prototype.hasOwnProperty.call(profile,"x_username")?profile.x_username:d&&d.x_username, address:d&&d.address||addr});
+}
+async function hydrateLeader(addr, opts){
+  const [d, health]=await Promise.all([
+    api(`/v1/leaders/${encodeURIComponent(addr)}?window=${encodeURIComponent(leaderWin)}&n=${encodeURIComponent(leaderN)}`),
+    api("/v1/health").catch(()=>null)
+  ]);
+  leaderDetail=d||{};
+  const detail=Object.assign({}, leaderDetail, {address: typeof leaderDetail.address==="string"&&leaderDetail.address.trim()?leaderDetail.address:addr, profile:leaderDetail.profile||{}});
+  applyLeaderIdentity(detail);
+  const metrics=Object.assign({}, detail.metrics, {reasons:detail.metric_reasons, smart_score:detail.metrics&&detail.metrics.smart_score!=null?detail.metrics.smart_score:detail.smart_score, gate_pass:detail.metrics&&detail.metrics.gate_pass!=null?detail.metrics.gate_pass:detail.gate_pass});
+  fillPerf(metrics, leaderProf(detail, addr), perfBag(detail));
+  paintLeaderPerfCurve(detail.equity_curve||(detail.metrics&&detail.metrics.equity_curve), (detail.reasons&&detail.reasons.equity_curve)||(detail.metric_reasons&&detail.metric_reasons.equity_curve));
+  const asof=$("#ld-perf .hd .r"); if(asof){ const t=detail.as_of||(detail.metrics&&detail.metrics.as_of); asof.textContent=t?`截至 ${bj(t)}`:""; }
+  paintLeaderPnl(detail);
+  paintLeaderTrades(detail);
+  paintLeaderPositions(detail);
+  paintLeaderRail(detail, health);
+  if(!(opts&&opts.keepChart)) await paintLeaderPrices(detail, addr);
+}
+async function renderLeader(opts){
   const addr=Q.get("addr"); if(!addr) return "static";
+  leaderAddr=addr;
   document.title="Leader · Wakeloom 织迹";
   const h0=document.querySelector(".top h1");
   if(h0){ const av=h0.querySelector(".av"); if(av) av.textContent=""; [...h0.childNodes].forEach(n=>{ if(n.nodeType===3) n.textContent=""; }); }
   const idl0=$("#ld-idl"); if(idl0) idl0.innerHTML=`<a href="/leaders" class="dim">Leaders</a> / <span class="nd">…</span>`;
-  const shellGrid=$("#ld-perf .lgrid"); if(shellGrid) shellGrid.remove();
-  const shellAsOf=$("#ld-perf .hd .r"); if(shellAsOf) shellAsOf.textContent="";
+  const shellAsOf=$("#ld-perf .hd .r"); if(shellAsOf&&!(opts&&opts.keepChart)) shellAsOf.textContent="";
+  bindLeaderChrome();
   if(token.get()){
-    const d=await api(`/v1/leaders/${addr}?window=90d&n=20`);
-    const detail=Object.assign({}, d, {address: typeof d.address==="string"&&d.address.trim()?d.address:addr, profile:d.profile||{}});
-    applyLeaderIdentity(detail);
-    const p=detail.profile;
-    fillPerf(Object.assign({},d.metrics,{reasons:d.metric_reasons}),p);
-    const lg=$("#ld-perf .lgrid"); if(lg) lg.remove();
-    paintLeaderPerfCurve(d.equity_curve||(d.metrics&&d.metrics.equity_curve), (d.reasons&&d.reasons.equity_curve)||(d.metric_reasons&&d.metric_reasons.equity_curve));
-    const asof=$("#ld-perf .hd .r"); if(asof){ const t=d.as_of||(d.metrics&&d.metrics.as_of); asof.textContent=t?`截至 ${bj(t)}`:""; }
+    try{ await hydrateLeader(addr, opts); }
+    catch(e){
+      if(e&&e.status===401) throw e;
+      console.warn(e);
+      blankLeaderLive(e&&e.offline?"offline":(e&&e.message)||"leader_unavailable");
+    }
     return;
   }
-  const w=await api(`/v1/public/wallets/${addr}?window=90d`,{auth:false});
-  const pub=Object.assign({}, w, {address: typeof w.address==="string"&&w.address.trim()?w.address:addr, profile:{user_name:w.user_name, x_username:w.x_username}});
-  applyLeaderIdentity(pub);
-  const xPub=cleanLeaderToken(pub.profile.x_username);
-  const idl=$("#ld-idl"); if(idl) idl.innerHTML=`<a href="/markets?tab=board" class="dim">市场</a> / <span title="${esc(pub.address)}">${esc(short(pub.address))}</span>${xPub?` · X @${esc(xPub)}`:""} · 截至 ${bj(w.as_of)||"—"} · 公开数据，未登录不显示我方镜像`;
-  fillPerf(Object.assign({},w.metrics,{smart_score:w.smart_score,gate_pass:w.gate_pass,reasons:w.metric_reasons}),w);
-  publicOnly(w);
+  const win=leaderWin==="all"?"all":leaderWin;
+  try{
+    const w=await api(`/v1/public/wallets/${encodeURIComponent(addr)}?window=${encodeURIComponent(win)}`,{auth:false});
+    const pub=Object.assign({}, w, {address: typeof w.address==="string"&&w.address.trim()?w.address:addr, profile:{user_name:w.user_name, x_username:w.x_username}});
+    applyLeaderIdentity(pub);
+    const xPub=cleanLeaderToken(pub.profile.x_username);
+    const idl=$("#ld-idl"); if(idl) idl.innerHTML=`<a href="/markets?tab=board" class="dim">市场</a> / <span title="${esc(pub.address)}">${esc(short(pub.address))}</span>${xPub?` · X @${esc(xPub)}`:""} · 截至 ${bj(w.as_of)||"—"} · 公开数据，未登录不显示我方镜像`;
+    fillPerf(Object.assign({},w.metrics,{smart_score:w.smart_score,gate_pass:w.gate_pass,reasons:w.metric_reasons}), leaderProf(w, addr), perfBag(w));
+    publicOnly(w);
+  }catch(e){
+    console.warn(e);
+    blankLeaderLive(e&&e.offline?"offline":(e&&e.message)||"leader_unavailable");
+  }
 }
-/* 公开模式：只留公开接口给得出的块，样例块全部撤掉 */
+function refreshLeader(){ return renderLeader({keepChart:true}).catch(e=>{ console.warn(e); if(e&&e.status===401) return; }); }
+/* 公开模式：表现用公开接口；跟单块留着 visual-v4 结构，标成需登录，不再整段删掉。 */
 function publicOnly(w){
-  const top=document.querySelector(".top"); top.querySelectorAll(".tag,.r").forEach(e=>e.remove());
-  const av=top.querySelector(".av"); if(av){av.textContent=(w.user_name||(w.address||"").slice(2)||"?").slice(0,2).toUpperCase();av.classList.remove("or");}
+  const top=document.querySelector(".top"); if(top){ top.querySelectorAll(".tag,.r").forEach(e=>e.remove());
+    const av=top.querySelector(".av"); if(av){av.textContent=(w.user_name||(w.address||"").slice(2)||"?").slice(0,2).toUpperCase();av.classList.remove("or");} }
   const asof=$("#ld-perf .hd .r"); if(asof) asof.textContent=w.as_of?`截至 ${bj(w.as_of)}`:"";
-  const seg=$("#ld-perf .seg"); if(seg) seg.remove();
   paintLeaderPerfCurve(w.equity_curve, w.reasons&&w.reasons.equity_curve);
-  const idlEl=$("#ld-idl"); if(idlEl&&!/统计窗口/.test(idlEl.textContent||"")) idlEl.insertAdjacentHTML("beforeend"," · 统计窗口：近 90 天");
-  const cats=(w.categories||(w.metrics&&w.metrics.categories)||[]).map(x=>typeof x==="object"?x.category:x).filter(c=>c&&c!=="unknown").slice(0,5);
-  if(cats.length){ const facts=document.createElement("p"); facts.className="mu sm"; facts.style.marginTop="8px"; facts.textContent="主要市场类别："+cats.join("、"); const perf=$("#ld-perf"); if(perf) perf.appendChild(facts); }
-  const lg=$("#ld-perf .lgrid"); if(lg) lg.remove();
-  const secs=[...document.querySelectorAll("main section.card")].filter(s=>s.id!=="ld-perf"); secs.forEach(s=>s.remove());
-  const n=document.createElement("section"); n.className="card"; n.id="ld-login"; n.innerHTML=`<div class="hd"><h2>我方镜像 · 价格买卖点 · 他的成交与持仓</h2></div><div class="ndbox"><span class="nd">需登录</span><span>这些块读跟单账本，公开接口不提供。<a href="/login?next=${encodeURIComponent("/leader?addr="+w.address)}">登录后查看 →</a></span></div>`;
-  $("#ld-perf").after(n);
+  const idlEl=$("#ld-idl");
+  const winTxt=leaderWin==="all"?"全部":("近 "+String(leaderWin).replace(/d$/,"")+" 天");
+  if(idlEl&&!/统计窗口/.test(idlEl.textContent||"")) idlEl.insertAdjacentHTML("beforeend"," · 统计窗口："+esc(winTxt));
+  lockPrivateBlocks(w.address||leaderAddr);
 }
 
 /* ---------- 公开排行（骨架屏） ---------- */

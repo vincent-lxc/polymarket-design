@@ -68,9 +68,10 @@
 | 按品类 | `categories` | ⚠ 结构文档没写 |
 | 按市场分布 | `markets[]`（前 20 加「其他」） | ✅（以前是「待后端」） |
 | 近 N 笔输赢 | `recent_closed`、`recent_n` | ✅ |
-| 我方累计（按策略加合计） | 同 `/pnl`：`by_strategy[]`、`copy_rate` | ✅ |
+| 我方累计（按策略加合计） | `pnl.by_strategy[]`、`pnl.copy_rate`；利润占比用 `pnl.our_share` 或 `pnl.share` | ✅ 按策略已有。`our_share` / `recent_closed` 不在 Blake 最新字段清单里，缺了显示无数据 |
 | 风险标记 | `flags`、`flag_labels`、`flag_notes` | ✅ |
-| 价格买卖点 | `/v1/markets/{token_id}/prices` | ⚠ 详情里要先拿到 token_id；leader 成交点要传 `leader=` |
+| 持仓占用 Top | 详情上的 `position_usage` / `occupancy` / `accounts` | ⚠ 没有单独接口。没有这些字段时显示「暂未汇总」，不留示例数字 |
+| 价格买卖点 | `GET /v1/markets/{token_id}/prices?range=&bucket=&leader=` → `history` / `ohlc` / `leader_trades` / `our_fills` | ✅ 已上线。`token_id` 从详情 `trades` 取。缺 `ohlc` 时用 `history` 采样，并标出高低点为采样 |
 | 公开页（未登录） | 公开接口只有画像、指标和收益曲线 | ✅ 前端已接；我方镜像相关块显示「需登录」 |
 | 页面寻址 | 前端用 `leader.html?addr=0x…` | ⚠ 旧的 `leader-<slug>.html` 示例页保留，不接接口 |
 
