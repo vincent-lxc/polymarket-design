@@ -1113,31 +1113,69 @@ function shareCount(n){ const x=numOrNull(n); return x==null?null:x.toLocaleStri
 function atPrice(amount, price){ const u=usd(amount); if(u==null) return null; const c=cent(price); return u+(c?" @ "+c:""); }
 function tradeToken(t){ const v=pick(t,["token_id","tokenId","asset_id","asset","clob_token_id"]); return v==null?"":String(v); }
 function tradeOutcome(t){ const v=pick(t,["outcome","outcome_name"]); return v==null?"":String(v); }
-function tradeTime(t){ return pick(t,["t","ts","timestamp","time","decided_at","created_at","traded_at","matched_at"]); }
+function tradeTime(t){ return pick(t,["t","ts","timestamp","time","decided_at","created_at","traded_at","matched_at","match_time","tradedAt","createdAt","matchedAt"]); }
 function tradeSide(t){
   const s=String(pick(t,["side","action"])||"").toUpperCase();
   if(s==="BUY"||s==="B") return "BUY";
   if(s==="SELL"||s==="S") return "SELL";
   return "";
 }
-function tradeNotional(t){ return numOrNull(pick(t,["notional_usd","notional","amount_usd","leader_notional_usd","usd"])); }
+function tradeNotional(t){ return numOrNull(pick(t,["notional_usd","notional","amount_usd","leader_notional_usd","usd","usdcSize","usdc_size"])); }
 function tradePrice(t){ return normPx(pick(t,["price","leader_price","avg_price","fill_price"])); }
 function leaderPriceQuery(tokenId, addr, range){
   const r=range||"1d";
   const bucket={"1h":"1m","1d":"1h","1w":"1h","all":"1d"}[r]||"1h";
   return `/v1/markets/${encodeURIComponent(tokenId)}/prices?range=${encodeURIComponent(r)}&bucket=${encodeURIComponent(bucket)}&leader=${encodeURIComponent(addr)}`;
 }
+function textField(v){
+  if(typeof v!=="string") return "";
+  const s=v.trim();
+  return s&&s!=="[object Object]"?s:"";
+}
+/* 成交行经常没有 title。question / slug 可能在同一条的 market 对象里，或在 leaders 详情的 markets / 持仓上。 */
+function rowMarketTitle(row){
+  if(!row||typeof row!=="object") return "";
+  if(textField(row.market)) return textField(row.market);
+  const nested=row.market&&typeof row.market==="object"&&!Array.isArray(row.market)?row.market:null;
+  const fromNested=nested&&(textField(pick(nested,["question","title","name"]))||textField(pick(nested,["slug","event_slug","eventSlug"])));
+  if(fromNested) return fromNested;
+  const named=textField(pick(row,["question","title","name","market_title","event_title"]));
+  if(named) return named;
+  return textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row))||"";
+}
+function rowCond(row){
+  const cond=pick(row,["condition_id","market_id","conditionId"]);
+  return cond==null||String(cond).trim()===""?"":String(cond);
+}
+function nameIndex(rows){
+  const byToken=new Map(), byCond=new Map(), condByToken=new Map();
+  rows.forEach(row=>{
+    if(!row||typeof row!=="object") return;
+    const title=rowMarketTitle(row);
+    const token=tradeToken(row);
+    const cond=rowCond(row);
+    if(title){
+      if(token&&!byToken.has(token)) byToken.set(token, title);
+      if(cond&&!byCond.has(cond)) byCond.set(cond, title);
+    }
+    if(token&&cond&&!condByToken.has(token)) condByToken.set(token, cond);
+  });
+  return {byToken, byCond, condByToken};
+}
 function leaderMarkets(detail){
   const d=detail&&typeof detail==="object"?detail:{};
-  const src=bagList(d.trades).concat(bagList(d.mirrors), bagList(d.open_positions));
+  const src=bagList(d.trades).concat(bagList(d.mirrors), bagList(d.open_positions), bagList(d.positions));
+  const idx=nameIndex(src.concat(bagList(d.markets)));
   const map=new Map();
   src.forEach(t=>{
     const token=tradeToken(t); if(!token) return;
-    const title=mirrorMarketName(t)||pick(t,["title","question","name"])||"未命名市场";
-    const group=String(pick(t,["condition_id","market_id","conditionId"])||title);
+    const cond=rowCond(t)||idx.condByToken.get(token)||"";
+    const title=rowMarketTitle(t)||(cond&&idx.byCond.get(cond))||idx.byToken.get(token)||"";
+    const group=cond?("c:"+cond):(title?("n:"+title):("t:"+token));
     const outcome=tradeOutcome(t)||"Yes";
-    if(!map.has(group)) map.set(group,{key:group,title:String(title),notional:0,outcomes:{}});
+    if(!map.has(group)) map.set(group,{key:group,title:title||"未命名市场",notional:0,outcomes:{}});
     const m=map.get(group);
+    if((!m.title||m.title==="未命名市场")&&title) m.title=title;
     const n=Math.abs(tradeNotional(t)||0);
     m.notional+=n;
     if(!m.outcomes[outcome]) m.outcomes[outcome]={token_id:token,notional:0};
@@ -1148,11 +1186,23 @@ function leaderMarkets(detail){
 }
 function dominantSide(market){
   const outs=market&&market.outcomes||{};
-  let best="Yes", bestN=-1;
-  Object.keys(outs).forEach(k=>{ const n=outs[k].notional||0; if(n>bestN){ bestN=n; best=k; } });
+  const keys=Object.keys(outs);
+  if(!keys.length) return "Yes";
+  let best=keys[0], bestN=-1;
+  keys.forEach(k=>{ const n=outs[k].notional||0; if(n>bestN){ bestN=n; best=k; } });
   if(/^no$/i.test(best)) return "No";
   if(/^yes$/i.test(best)) return "Yes";
-  return "Yes";
+  return best;
+}
+function sideChoices(market){
+  const outs=market&&market.outcomes||{};
+  const keys=Object.keys(outs);
+  const yes=keys.find(k=>/^yes$/i.test(k));
+  const no=keys.find(k=>/^no$/i.test(k));
+  if(yes&&no) return ["Yes","No"];
+  const ranked=keys.slice().sort((a,b)=>(outs[b].notional||0)-(outs[a].notional||0));
+  if(ranked.length) return ranked.slice(0,2);
+  return ["Yes","No"];
 }
 function tokenFor(market, side){
   if(!market||!market.outcomes) return "";
@@ -1189,19 +1239,33 @@ function ohlcBars(ohlc){
   bars.sort((a,b)=>a.t-b.t);
   return bars;
 }
+function markSource(t){
+  if(t&&typeof t==="object"&&!tradeTime(t)&&t.trade&&typeof t.trade==="object") return Object.assign({}, t.trade, t);
+  return t;
+}
 function markOf(t, who){
+  const src=markSource(t);
   return {
-    t:epochMs(tradeTime(t)),
+    t:epochMs(tradeTime(src)),
     who,
-    side:tradeSide(t)||"BUY",
-    outcome:tradeOutcome(t),
-    price:normPx(pick(t,["price","leader_price","fill_price","avg_price"])),
-    notional:numOrNull(pick(t,["notional_usd","notional","usd","fill_usd","amount_usd","leader_notional_usd"]))
+    side:tradeSide(src)||"BUY",
+    outcome:tradeOutcome(src),
+    price:normPx(pick(src,["price","leader_price","fill_price","avg_price"])),
+    notional:numOrNull(pick(src,["notional_usd","notional","usd","fill_usd","amount_usd","leader_notional_usd","usdcSize","usdc_size"]))
   };
+}
+function markRows(v){
+  if(Array.isArray(v)) return v;
+  if(v&&typeof v==="object"){
+    for(const k of ["items","rows","trades","fills","list"]){
+      if(Array.isArray(v[k])) return v[k];
+    }
+  }
+  return bagList(v);
 }
 function normalizePriceBook(raw){
   const book=raw&&typeof raw==="object"?raw:{};
-  const marks=bagList(book.leader_trades).map(t=>markOf(t,"L")).concat(bagList(book.our_fills).map(t=>markOf(t,"M"))).filter(m=>m.t!=null);
+  const marks=markRows(book.leader_trades).map(t=>markOf(t,"L")).concat(markRows(book.our_fills).map(t=>markOf(t,"M"))).filter(m=>m.t!=null);
   return {history:pricePoints(book.history||book.prices||book.series), ohlc:ohlcBars(book.ohlc), marks};
 }
 function mirrorResult(m, side){
@@ -1516,6 +1580,13 @@ function blankLeaderLive(reason){
   paintLeaderTable("#ld-pos", POS_HEAD, `<tr><td colspan="5">${nd(why)}</td></tr>`);
   if(window.PMChart) PMChart.drawEmpty();
 }
+function paintSideToggle(market, side){
+  const el=$("#pc"); if(!el) return;
+  const seg=el.querySelector("#pc-sides"); if(!seg) return;
+  const choices=sideChoices(market);
+  const cur=choices.find(s=>s.toLowerCase()===String(side||"").toLowerCase())||choices[0];
+  seg.innerHTML=choices.map(s=>`<span data-k="side:${esc(s)}" class="${s===cur?"on":""}">${esc(s)}</span>`).join("");
+}
 function paintMarketSwitcher(markets){
   const el=$("#pc"); if(!el) return;
   const lbl=el.querySelector(".hd .lbl");
@@ -1543,6 +1614,7 @@ async function paintLeaderPrices(detail, addr){
   const side=dominantSide(market);
   const range=(window.PMChart&&PMChart.state().range)||"1d";
   const mode=(window.PMChart&&PMChart.state().mode)||"line";
+  paintSideToggle(market, side);
   if(window.PMChart) PMChart.set({live:true, side, range, mode, mkt:String(pcMarket)});
   if(el) el.dataset.def=side;
   paintMarketSwitcher(markets);
@@ -1607,6 +1679,7 @@ async function onPcEvent(d){
   if(!market){ if(window.PMChart) PMChart.drawEmpty(); return; }
   let side=st.side||"Yes";
   if(d.key==="mkt") side=dominantSide(market);
+  paintSideToggle(market, side);
   if(window.PMChart) PMChart.set({live:true, side, range:st.range||"1d", mkt:String(pcMarket)});
   paintMarketSwitcher(markets);
   await loadLeaderPrices(leaderAddr, market, side, (window.PMChart&&PMChart.state().range)||"1d");
