@@ -1,8 +1,6 @@
 /* 总览动效（仅 visual-v4 暗色 overview）
-   1. 迷你净值曲线：沿用 SVG data-series 与现有涨跌色描边。拖动探针（竖虚线+圆点+浮层），
-      拖动时同步 #ov-eq；松手弹性回到最后一个点。
-   2. 利润归属：演示三段（合计恒为窗口利润）。TAP TO REMIX / 点条切换预设，
-      每帧归一，宽度与标签合计不变。后端 attribution[] 到达后可替换预设。
+   迷你净值曲线：沿用 SVG data-series 与现有涨跌色描边。拖动探针（竖虚线+圆点+浮层），
+   拖动时同步 #ov-eq；松手弹性回到最后一个点。
    缓动 【建议值】easeOutBack，近似 cubic-bezier(.34, 1.56, .64, 1)（与 --ease 同族）。 */
 (function () {
   var reduce = document.documentElement.classList.contains("nomo") ||
@@ -30,23 +28,6 @@
     var c1 = 1.70158, c3 = c1 + 1;
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
   }
-  /* 最大余数法：展示用整数之和恒为 total */
-  function splitInt(vals, total) {
-    var sum = 0, i;
-    for (i = 0; i < vals.length; i++) sum += vals[i];
-    if (!(sum > 0)) return vals.map(function () { return 0; });
-    var raw = vals.map(function (v) { return (v / sum) * total; });
-    var floors = raw.map(function (v) { return Math.floor(v + 1e-8); });
-    var used = 0;
-    for (i = 0; i < floors.length; i++) used += floors[i];
-    var rem = Math.round(total - used);
-    var order = raw.map(function (v, idx) { return { i: idx, f: v - Math.floor(v + 1e-8) }; });
-    order.sort(function (a, b) { return b.f - a.f || a.i - b.i; });
-    var k = 0;
-    while (rem > 0 && order.length) { floors[order[k % order.length].i]++; rem--; k++; }
-    return floors;
-  }
-
   /* ---------- 迷你净值曲线 · 探针 ---------- */
   var chart = document.getElementById("ov-chart");
   var svg = chart && chart.querySelector("svg[data-series]");
@@ -251,97 +232,5 @@
     render(initIdx === last);
     chart.classList.add("is-ready");
     addEventListener("resize", function () { render(atRest); });
-  }
-
-  /* ---------- 利润归属 · 守恒 remix（演示数据） ---------- */
-  var bar = document.getElementById("attr-bar");
-  var remixBtn = document.getElementById("attr-remix");
-  if (bar && remixBtn) {
-    var TOTAL = 1753;
-    var PRESETS = [
-      [21, 448, 1284],
-      [520, 180, 1053],
-      [95, 980, 678]
-    ];
-    var NAMES = ["AV", "MX", "LD"];
-    var STATUS = ["已移出", "已移出", "在跟"];
-    var preset = 0;
-    var cur = PRESETS[0].slice();
-    var anim = 0;
-    var segs = [].slice.call(bar.querySelectorAll(".attr-seg"));
-    var legend = document.getElementById("attr-legend");
-
-    function applyAmounts(arr) {
-      var totalEl = document.getElementById("attr-total");
-      if (document.documentElement.classList.contains("pending-metrics")) return;
-      if ((totalEl && totalEl.querySelector(".sk")) || bar.querySelector(".sk")) return;
-      var sum = arr[0] + arr[1] + arr[2];
-      if (!(sum > 0)) return;
-      var norm = [arr[0] / sum * TOTAL, arr[1] / sum * TOTAL, arr[2] / sum * TOTAL];
-      norm[2] += TOTAL - (norm[0] + norm[1] + norm[2]);
-      var maxI = 0, i;
-      for (i = 1; i < 3; i++) if (norm[i] > norm[maxI]) maxI = i;
-      var dollars = splitInt(norm, TOTAL);
-      var pcts = splitInt(norm, 100);
-      for (i = 0; i < segs.length; i++) {
-        var el = segs[i];
-        var pct = norm[i] / TOTAL * 100;
-        el.style.flexGrow = String(Math.max(norm[i], 0));
-        el.style.flexBasis = "0";
-        el.classList.toggle("is-lead", i === maxI);
-        el.classList.toggle("is-narrow", pct < 10);
-        var lab = el.querySelector(".attr-seg-lab");
-        var txt = (dollars[i] < 0 ? "−" : "+") + "$" + Math.abs(dollars[i]).toLocaleString("en-US");
-        if (lab) lab.textContent = txt;
-        el.title = NAMES[i] + " · " + STATUS[i] + " · " + txt;
-      }
-      if (legend) {
-        legend.innerHTML = [0, 1, 2].map(function (i) {
-          var txt = (dollars[i] < 0 ? "−" : "+") + "$" + Math.abs(dollars[i]).toLocaleString("en-US");
-          return '<span class="' + (i === maxI ? "is-lead" : "") + '">' + NAMES[i] + " " + txt + " · " + pcts[i] + "%</span>";
-        }).join('<span aria-hidden="true"> · </span>');
-      }
-      bar.dataset.sum = String(dollars[0] + dollars[1] + dollars[2]);
-      bar.dataset.flex = (norm[0] + norm[1] + norm[2]).toFixed(4);
-      cur = norm.slice();
-    }
-
-    function remixTo(nextIdx) {
-      var from = cur.slice();
-      var toRaw = PRESETS[nextIdx];
-      var toSum = toRaw[0] + toRaw[1] + toRaw[2];
-      var to = toRaw.map(function (v) { return v / toSum * TOTAL; });
-      to[2] += TOTAL - (to[0] + to[1] + to[2]);
-      preset = nextIdx;
-      if (reduce) { applyAmounts(to); return; }
-      if (anim) cancelAnimationFrame(anim);
-      var t0 = performance.now();
-      var DUR = 480; /* 【建议值】ms */
-      function frame(now) {
-        var u = Math.min(1, (now - t0) / DUR);
-        var e = easeOutBack(u);
-        var mid = [
-          from[0] + (to[0] - from[0]) * e,
-          from[1] + (to[1] - from[1]) * e,
-          from[2] + (to[2] - from[2]) * e
-        ];
-        for (var i = 0; i < 3; i++) if (mid[i] < 0) mid[i] = 0;
-        applyAmounts(mid);
-        if (u < 1) anim = requestAnimationFrame(frame);
-        else { cur = to; anim = 0; }
-      }
-      anim = requestAnimationFrame(frame);
-    }
-
-    applyAmounts(PRESETS[0]);
-    function doRemix(e) {
-      if (e) e.preventDefault();
-      remixTo((preset + 1) % PRESETS.length);
-    }
-    remixBtn.addEventListener("click", doRemix);
-    bar.addEventListener("click", doRemix);
-    bar.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); doRemix(); }
-    });
   }
 })();

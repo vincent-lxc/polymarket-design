@@ -9,22 +9,22 @@ const PUBLIC_PAGES=new Set(["board","markets","login"]);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 /* 市场名：有 event_slug / slug 才链到 polymarket.com/event/，否则纯文本。 */
-/* 没有标题时：slug 读成句子，再不行用「市场」加短 id。不要把内部占位写到界面上。 */
+/* 没有标题时：slug 读成句子，再不行用短 id。不要把单独的「市场」写到界面上。 */
 function humanizeSlug(slug){
   const raw=String(slug||"").trim();
   if(!raw||raw==="[object Object]") return "";
   const spaced=raw.replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
-  if(!spaced) return "";
+  if(!spaced||spaced==="市场") return "";
   if(/[A-Z\u4e00-\u9fff]/.test(spaced)) return spaced;
   return spaced.replace(/\b[a-z]/g,c=>c.toUpperCase());
 }
 function shortMarketId(id){
   const s=String(id||"").trim();
-  if(!s) return "市场";
-  return "市场 "+(s.length>10?s.slice(0,6)+"…":s);
+  if(!s||s==="市场") return "";
+  return s.length>10?s.slice(0,6)+"…"+s.slice(-4):s;
 }
 function fallbackMarketTitle(row){
-  if(!row||typeof row!=="object") return "市场";
+  if(!row||typeof row!=="object") return "";
   const slug=textField(pick(row,["event_slug","slug","eventSlug","market_slug"]));
   const human=humanizeSlug(slug);
   if(human) return human;
@@ -33,19 +33,39 @@ function fallbackMarketTitle(row){
 }
 function marketLabel(name, row){
   const named=name==null?"":String(name).trim();
-  if(named&&named!=="[object Object]") return named;
+  if(named&&named!=="[object Object]"&&named!=="市场") return named;
   return fallbackMarketTitle(row);
 }
-function marketHtml(name, row){ const text=marketLabel(name, row); return window.PMMarket?PMMarket.html(text, row):esc(text); }
-/* 总览镜像名在 recent_mirrors[].market，没有 title。market 为 null 时才用 slug。 */
-function mirrorMarketName(row){
+function marketHtml(name, row){
+  const text=marketLabel(name, row);
+  const shown=text||"未命名市场";
+  return window.PMMarket?PMMarket.html(shown, row):esc(shown);
+}
+/* 镜像单市场名：market 名 → title → 可读 slug（连字符改空格）→ 短 id。绝不返回单独的「市场」。 */
+function labelText(v){
+  if(typeof v!=="string") return "";
+  const s=v.trim();
+  if(!s||s==="[object Object]"||s==="市场") return "";
+  return s;
+}
+function readableSlug(v){
+  const s=labelText(v);
+  if(!s) return "";
+  return s.replace(/-/g," ").replace(/\s+/g," ").trim();
+}
+function mirrorMarketName(row, withId){
   if(!row||typeof row!=="object") return null;
-  if(typeof row.market==="string"&&row.market.trim()) return row.market.trim();
-  if(row.market!=null&&typeof row.market!=="string"){ const text=String(row.market).trim(); if(text&&text!=="[object Object]") return text; }
-  if(row.market==null||(typeof row.market==="string"&&!row.market.trim())){
-    const slug=[row.slug,row.event_slug].find(s=>typeof s==="string"&&s.trim());
-    if(slug) return String(slug).trim();
-  }
+  const nested=row.market&&typeof row.market==="object"&&!Array.isArray(row.market)?row.market:null;
+  const marketName=labelText(typeof row.market==="string"?row.market:"")||labelText(nested&&(nested.name||nested.question));
+  if(marketName) return marketName;
+  const title=labelText(row.title)||labelText(row.question)||labelText(row.market_title)||labelText(nested&&nested.title);
+  if(title) return title;
+  const slug=[row.slug,row.event_slug,row.market_slug,nested&&nested.slug,nested&&nested.event_slug].map(readableSlug).find(Boolean);
+  if(slug&&slug!=="市场") return slug;
+  if(withId===false) return null;
+  const id=[row.condition_id,row.market_id,row.token_id,row.id,nested&&nested.condition_id,nested&&nested.id].find(v=>v!=null&&String(v).trim());
+  const brief=id==null?"":short(String(id).trim());
+  if(brief&&brief!=="市场") return brief;
   return null;
 }
 function formatShares(x){
@@ -231,26 +251,20 @@ function fillCell(m){
   const px=m.fill_price!=null?` @ ${Math.round(m.fill_price*100)}¢`:"";
   return `${usd(m.fill_usd)}${px}`;
 }
+function mirrorFill(m){
+  if(!m||m.fill_usd==null) return NA;
+  const px=m.fill_price!=null?` @ ${Math.round(m.fill_price*100)}¢`:"";
+  return `${usd(m.fill_usd)}${px}`;
+}
 function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*100)+"¢":null;
   const L=m.leader_notional_usd!=null?`${usd(m.leader_notional_usd)}${lp?" @ "+lp:""}`:null;
-  const me=fillCell(m);
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已跟</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
-  return `<tr><td title="${esc(bj(m.decided_at)||"")}">${marketHtml(mirrorMarketName(m), m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r">${me}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":"—"}</td><td>${res}</td></tr>`; }
+  const name=mirrorMarketName(m);
+  return `<tr><td title="${esc(bj(m.decided_at)||"")}">${marketHtml(name, m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r">${mirrorFill(m)}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":NA}</td><td>${res}</td></tr>`; }
 function activityRow(m){
   const side=m.side==="SELL"?"卖出":m.side==="BUY"?"买入":(m.purpose_zh||m.purpose||"—");
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已成交</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
   return `<tr><td class="num mu hm" title="${esc(bj(m.decided_at)||"")}">${bj(m.decided_at,false)||"—"}</td><td>${marketHtml(mirrorMarketName(m), m)}</td><td class="hm">${esc(side)}</td><td class="r">${fillCell(m)}</td><td>${res}</td></tr>`; }
-function fillAttr(d){
-  const box=$("#ov-attr"); if(!box)return;
-  const R=(d&&d.reasons)||{};
-  const attr=d&&d.attribution;
-  if(attr==null||(Array.isArray(attr)&&!attr.length)){
-    const hd=box.querySelector(".hd"); const h=hd?hd.outerHTML:"";
-    box.innerHTML=h+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>按 leader 的利润归属尚未聚合。</span></div>';
-    box.querySelectorAll(".hd .r,.hd .attr-actions,.hd .btn").forEach(e=>e.remove());
-    return;
-  }
-}
 /* 账户详情只用接口给出的 id / account_id。策略名不能拿去拼 /v1/accounts/{name}/positions。 */
 function presentAccountId(v){
   if(v==null)return "";
@@ -562,7 +576,6 @@ async function renderOverview(d, still){
       acc.map((a,i)=>`<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
   }
   if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
-  fillAttr(d);
   const ml=d.main_leader, lead=$("#ov-lead .h");
   if(lead) lead.innerHTML=ml?`${who(ml.user_name,ml.address)} <span class="tag live">${esc(ml.status_zh)}</span>`:nd(R.main_leader||"no_main_leader");
   fillLeadCard(ml,R);
@@ -1213,16 +1226,16 @@ function rowMarketTitle(row){
   const fromNested=nested&&textField(pick(nested,["question","title","name"]));
   if(fromNested) return presentMarketTitle(fromNested);
   const named=textField(pick(row,["question","title","name","market_title","event_title"]));
-  if(named) return presentMarketTitle(named);
-  if(textField(row.market)) return presentMarketTitle(textField(row.market));
+  if(named&&named!=="市场") return presentMarketTitle(named);
+  if(textField(row.market)&&textField(row.market)!=="市场") return presentMarketTitle(textField(row.market));
   const nestedSlug=nested&&textField(pick(nested,["slug","event_slug","eventSlug"]));
-  const slug=nestedSlug||textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row))||"";
+  const slug=nestedSlug||textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row, false))||"";
   return humanizeSlug(slug);
 }
 /* 接口有时把 slug 塞进 market 字符串。有空格或中文的当标题，纯连字符的读成句子。 */
 function presentMarketTitle(s){
   const t=String(s||"").trim();
-  if(!t||t==="[object Object]") return "";
+  if(!t||t==="[object Object]"||t==="市场") return "";
   if(/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(t)) return humanizeSlug(t);
   return t;
 }
@@ -1239,7 +1252,7 @@ function explicitTitle(row){
     textField(row.market)
   ];
   for(const c of candidates){
-    if(c&&!/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(c)) return c;
+    if(c&&c!=="市场"&&!/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(c)) return c;
   }
   return "";
 }
@@ -1437,7 +1450,7 @@ function leaderTradeBody(detail){
   }).join("");
 }
 const POS_HEAD='<tr><th>市场 · outcome</th><th class="r hm" title="current_size">股数</th><th class="r hm">均价 / 现价</th><th class="r" title="unrealized_pnl">他的浮动</th><th class="r">我方镜像持仓</th></tr>';
-function posKey(p){ const tok=tradeToken(p); if(tok) return "t:"+tok; return "n:"+(mirrorMarketName(p)||pick(p,["title","question","name"])||"")+"|"+tradeOutcome(p); }
+function posKey(p){ const tok=tradeToken(p); if(tok) return "t:"+tok; return "n:"+(mirrorMarketName(p, false)||pick(p,["title","question","name"])||"")+"|"+tradeOutcome(p); }
 function posSize(p){ return numOrNull(pick(p,["current_size","shares","size","qty"])); }
 function leaderPositionBody(detail){
   const d=detail&&typeof detail==="object"?detail:{};
