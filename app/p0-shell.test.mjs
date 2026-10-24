@@ -163,6 +163,14 @@ const headers = fs.readFileSync(new URL("./_headers", import.meta.url), "utf8");
 for (const html of [ov, cfg, hl]) {
   assert.equal(html.includes("心跳 10-21 12:40"), false);
   assert.match(html, /pending-metrics/);
+}
+assert.match(ov, /api\.js\?v=mcard/);
+assert.match(ov, /app\.css\?v=mcard/);
+assert.match(ov, /share\.js\?v=p0fe3/);
+const accountHtml = fs.readFileSync(new URL("./account.html", import.meta.url), "utf8");
+assert.match(accountHtml, /api\.js\?v=mcard/);
+assert.match(accountHtml, /app\.css\?v=mcard/);
+for (const html of [cfg, hl]) {
   assert.match(html, /api\.js\?v=p0fe3/);
   assert.match(html, /app\.css\?v=p0fe3/);
 }
@@ -194,8 +202,8 @@ assert.equal(PM.marketHtml("Ipswich O/U", { market: "Ipswich O/U" }).includes("I
 await PM.renderOverview(Object.assign({}, overview, {
   recent_mirrors: [
     { market: "市场", title: "Fed decision", slug: "fed-decision", side: "BUY", leader_notional_usd: 12, leader_price: 0.42, fill_usd: null, slippage_bps: null, decision: "copied" },
-    { market: null, title: "市场", slug: "ipswich-ou", side: "SELL", fill_usd: null },
-    { market: "市场", title: "", condition_id: "0xabc123def4567890abcd", side: "BUY", fill_usd: null }
+    { market: null, title: "市场", slug: "ipswich-ou", side: "SELL", fill_usd: null, decision: "copied" },
+    { market: "市场", title: "", condition_id: "0xabc123def4567890abcd", side: "BUY", fill_usd: null, decision: "copied" }
   ]
 }));
 const mirrorHtml = pm.store["#ov-mirrors"]._table.innerHTML;
@@ -204,6 +212,9 @@ assert.match(mirrorHtml, /Fed decision/);
 assert.match(mirrorHtml, /ipswich ou/);
 assert.match(mirrorHtml, /0xabc1…abcd/);
 assert.equal(mirrorHtml.includes("TAP TO REMIX"), false);
+assert.match(mirrorHtml, /class="k-name"[^>]*>[\s\S]*Fed decision/);
+assert.match(mirrorHtml, /k-primary">[\s\S]*\$12\.00<\/span><span class="q-at"> @ <\/span>[\s\S]*42¢/);
+assert.match(mirrorHtml, /k-quote k-hide">[\s\S]*q-amt na">—/);
 const nameCells = [...mirrorHtml.matchAll(/<tr><td[^>]*>([\s\S]*?)<\/td>/g)].map((m) => m[1].replace(/<[^>]+>/g, "").trim());
 assert.equal(nameCells.length, 3);
 for (const text of nameCells) assert.notEqual(text, "市场");

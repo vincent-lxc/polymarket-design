@@ -1,0 +1,96 @@
+{
+  "address": "0x3333333333333333333333333333333333333333",
+  "user_name": "null-reasons",
+  "mark": {
+    "pnl": {
+      "by_strategy": [
+        {
+          "strategy": "paper",
+          "realized_usd": 1.25,
+          "unrealized_usd": null,
+          "total_usd": null,
+          "fill_usd": 40,
+          "our_total_usd": 40,
+          "net_usd": 40,
+          "reasons": { "unrealized_usd": "no_mark", "total_usd": "no_mark" }
+        }
+      ],
+      "total": {
+        "realized_usd": 1.25,
+        "unrealized_usd": null,
+        "total_usd": null,
+        "fill_usd": 40,
+        "our_total_usd": 40
+      },
+      "reasons": { "unrealized_usd": "no_mark", "total_usd": "no_mark" }
+    }
+  },
+  "loss": {
+    "pnl": {
+      "by_strategy": [
+        { "strategy": "paper", "realized_usd": -2.5, "unrealized_usd": 0, "total_usd": -2.5 }
+      ],
+      "total": { "realized_usd": -2.5, "unrealized_usd": 0, "total_usd": -2.5 },
+      "profit_share": null,
+      "loss_usd": -2.5,
+      "reasons": { "profit_share": "loss" }
+    }
+  },
+  "not_followed": {
+    "pnl": {
+      "by_strategy": null,
+      "profit_share": null,
+      "reasons": { "by_strategy": "no_fills", "total": "no_fills", "profit_share": "not_followed" }
+    }
+  },
+  "no_closed": {
+    "address": "0x3333333333333333333333333333333333333333",
+    "recent_n": 20,
+    "pnl": {
+      "by_strategy": [
+        { "strategy": "paper", "realized_usd": 2, "unrealized_usd": 0, "total_usd": 2 }
+      ],
+      "total": { "total_usd": 2 },
+      "recent_closed": null,
+      "recent_n": 20,
+      "reasons": { "recent_closed": "no_closed" }
+    }
+  },
+  "no_signals": {
+    "pnl": {
+      "by_strategy": [
+        { "strategy": "paper", "realized_usd": 2, "unrealized_usd": 0, "total_usd": 2 }
+      ],
+      "total": { "total_usd": 2 },
+      "copy_rate": null,
+      "copy_rate_detail": null,
+      "reasons": { "copy_rate": "no_signals" }
+    }
+  },
+  "no_profitable": {
+    "pnl": {
+      "by_strategy": [
+        { "strategy": "paper", "realized_usd": 1, "unrealized_usd": 0, "total_usd": 1 }
+      ],
+      "total": { "total_usd": 1 },
+      "profit_share": null,
+      "loss_usd": null,
+      "reasons": { "profit_share": "no_profitable_leaders" }
+    }
+  },
+  "fills_only": {
+    "pnl": {
+      "by_strategy": [
+        {
+          "strategy": "paper",
+          "realized_usd": null,
+          "unrealized_usd": null,
+          "total_usd": null,
+          "fill_usd": 80,
+          "our_total_usd": 80,
+          "net_usd": 80
+        }
+      ]
+    }
+  }
+}

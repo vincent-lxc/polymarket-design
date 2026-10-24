@@ -1,0 +1,13 @@
+{
+  "address": "0x2222222222222222222222222222222222222222",
+  "user_name": "old-api",
+  "recent_n": 20,
+  "pnl": {
+    "by_strategy": [
+      { "strategy": "paper", "realized_usd": 10, "unrealized_usd": 1, "total_usd": 11 },
+      { "strategy": "sim", "realized_usd": -3, "unrealized_usd": 2, "total_usd": -1 }
+    ],
+    "copy_rate": 0.25,
+    "our_share": 0.35
+  }
+}
