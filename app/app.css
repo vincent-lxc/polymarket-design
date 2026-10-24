@@ -47,6 +47,11 @@ html.pending-leader .top h1 .av{background:#26262b;color:transparent}
 body[data-page="leader"] .ld-curve{position:relative;min-height:120px}
 body[data-page="leader"] .ld-curve-skel{display:block;width:100%;height:120px;border-radius:8px}
 body[data-page="leader"] svg[data-empty="1"]{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none}
+/* 接口失败：收起头部 / 表现格 / 累计曲线的加载条，不再假装还在加载。 */
+html.leader-failed .sk{animation:none!important}
+html.leader-failed .top h1,html.leader-failed #ld-idl{background:transparent!important;color:inherit!important}
+html.leader-failed .top h1 .sk,html.leader-failed .top h1 .av,html.leader-failed #ld-idl .sk,html.leader-failed #ld-perf .kv .sk,html.leader-failed #ld-perf .lgrid .sk,html.leader-failed .ld-curve,html.leader-failed .ld-curve-skel{display:none!important}
+#ld-fail{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
 /* 账户列表默认只露灰骨架。?id= / ?s= 才露出详情壳。hidden 挡住样式表还没到时的详情闪现。 */
 html:not(.account-detail) #ac-legacy{display:none!important}
 html.account-detail #ac-legacy{display:block!important}

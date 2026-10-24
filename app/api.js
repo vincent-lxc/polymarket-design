@@ -706,7 +706,7 @@ function paintAccountListWait(err){
   /* 旧测试替身也会造出一个同 id 的空节点。只有真列表壳（class=sa）才接管错误态。 */
   if(!skel||!skel.classList||typeof skel.classList.contains!=="function"||!skel.classList.contains("sa")) return false;
   const missing=err&&err.status===404;
-  const msg=missing?"无数据":((err&&err.offline)?"连不上接口":((err&&err.message)||"没有完成"));
+  const msg=missing?"无数据":"连不上接口";
   skel.removeAttribute("aria-busy");
   skel.innerHTML='<div class="top"><h1>账户</h1></div><div class="ndbox"><span class="nd">'+esc(msg)+'</span></div>'+(missing?"":'<p style="margin-top:12px"><button type="button" class="btn sm" id="ac-list-retry">重试</button></p>');
   const btn=document.getElementById("ac-list-retry");
@@ -1905,6 +1905,40 @@ function blankLeaderLive(reason){
   const host=$("#pc-mkts"); if(host) host.remove();
   if(window.PMChart) PMChart.drawEmpty();
 }
+function leaderFailCopy(err){
+  if(err&&(err.offline||err.status>=500||err.status===0)) return "暂时连不上，稍后再试";
+  return "暂时没有这份数据";
+}
+function clearLeaderFailure(){
+  const root=document.documentElement;
+  if(root&&root.classList&&root.classList.remove) root.classList.remove("leader-failed");
+  const bar=document.getElementById("ld-fail");
+  if(bar&&bar.remove) bar.remove();
+}
+/* 500 / 断网：顶部一行说明 + 重试。收起加载骨架，不亮「数据更新中」。 */
+function paintLeaderFailure(err){
+  const root=document.documentElement;
+  if(root&&root.classList){
+    if(root.classList.remove) root.classList.remove("pending-leader");
+    if(root.classList.add) root.classList.add("leader-failed");
+  }
+  document.querySelectorAll(".live-badge,.demo-badge,.demo-banner").forEach(e=>{ if(e&&e.remove) e.remove(); });
+  const main=document.querySelector("main.main")||document.querySelector(".main");
+  if(main){
+    let bar=document.getElementById("ld-fail");
+    if(!bar){
+      bar=document.createElement("div");
+      bar.id="ld-fail";
+      bar.className="ndbox";
+      bar.setAttribute("role","status");
+      if(main.prepend) main.prepend(bar);
+    }
+    bar.innerHTML='<span class="nd">'+esc(leaderFailCopy(err))+'</span><button type="button" class="btn sm" id="ld-retry">重试</button>';
+    const btn=document.getElementById("ld-retry");
+    if(btn&&btn.addEventListener) btn.addEventListener("click",()=>{ renderLeader(); });
+  }
+  blankLeaderLive(err&&err.offline?"offline":"error");
+}
 function paintSideToggle(market, side){
   const el=$("#pc"); if(!el) return;
   const seg=el.querySelector("#pc-sides"); if(!seg) return;
@@ -2305,6 +2339,10 @@ function clearLeaderDemoTags(){
 }
 async function renderLeader(opts){
   const addr=Q.get("addr"); if(!addr) return "static";
+  const root=document.documentElement;
+  const retrying=!!(root&&root.classList&&root.classList.contains&&root.classList.contains("leader-failed"));
+  clearLeaderFailure();
+  if(retrying&&root&&root.classList&&root.classList.add&&Q.get("mock")!=="1") root.classList.add("pending-leader");
   leaderAddr=addr;
   clearLeaderDemoTags();
   document.title="Leader · Wakeloom 织迹";
@@ -2316,7 +2354,7 @@ async function renderLeader(opts){
   if(Q.get("fixture")==="1"){
     leaderFixture=true;
     try{ await hydrateLeaderFixture(addr); }
-    catch(e){ console.warn(e); blankLeaderLive("error"); }
+    catch(e){ console.warn(e); paintLeaderFailure(e); return "error"; }
     return "fixture";
   }
   if(token.get()){
@@ -2324,7 +2362,8 @@ async function renderLeader(opts){
     catch(e){
       if(e&&e.status===401){ lockPrivateBlocks(addr); return "locked"; }
       console.warn(e);
-      blankLeaderLive(e&&e.offline?"offline":"error");
+      paintLeaderFailure(e);
+      return "error";
     }
     return;
   }
@@ -2339,7 +2378,8 @@ async function renderLeader(opts){
     publicOnly(w);
   }catch(e){
     console.warn(e);
-    blankLeaderLive(e&&e.offline?"offline":"error");
+    paintLeaderFailure(e);
+    return "error";
   }
 }
 function refreshLeader(){ return renderLeader({keepChart:true}).catch(e=>{ console.warn(e); if(e&&e.status===401) return; }); }
@@ -2547,6 +2587,7 @@ async function boot(){
       stripDemo();
       if(r==="fixture") return badge("demo","本地 fixture（?fixture=1），形状对齐 0x12d6…f2a8，未请求 BFF");
       if(r==="locked"){ revealMetrics(); return; }
+      if(r==="error") return;
       return badge("live");
     }
     if(!R[PAGE])return;
