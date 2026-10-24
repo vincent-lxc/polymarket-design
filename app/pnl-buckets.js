@@ -145,14 +145,16 @@
     var now = opts.now != null ? opts.now : Date.now();
     var today = todayISO(now, zone);
     var min = civilDate(opts.inception, zone);
-    var f = parseISODate(from) ? from : today;
+    var requested = parseISODate(from) ? from : today;
+    var f = requested;
     var t = parseISODate(to) ? to : today;
-    if (opts.custom && min && f < min) f = min;
+    var clippedToInception = !!(opts.custom && min && requested < min);
+    if (clippedToInception) f = min;
     if (t > today) t = today;
     if (f > t) f = t;
     var granularity = normalizeGranularity(opts.granularity);
     var warn = granularity === "day" && inclusiveDays(f, t) > DAY_CAP ? RANGE_TEXT : "";
-    return { granularity: granularity, from: f, to: t, warn: warn, today: today, min: min || "" };
+    return { granularity: granularity, from: f, to: t, warn: warn, today: today, min: min || "", clippedToInception: clippedToInception };
   }
 
   function reconcileWindow(state, payload, nowMs) {
@@ -294,7 +296,30 @@
     }
     var inc = civilDate(payload.inception_at, zone);
     if (!inc) return "";
+    if (opts.clippedToInception) return "账户 " + mmdd(inc) + " 开始运行，已从这天开始";
     return "账户 " + mmdd(inc) + " 开始运行";
+  }
+
+  function slotIndex(ev, svg, slots) {
+    var node = ev && ev.target;
+    var hit = node && typeof node.closest === "function" ? node.closest("rect.sa-hit") : null;
+    if (hit && hit.dataset && hit.dataset.i != null && hit.dataset.i !== "" && isFinite(Number(hit.dataset.i))) return Number(hit.dataset.i);
+    if (!svg || typeof svg.getScreenCTM !== "function") return -1;
+    var ctm = svg.getScreenCTM();
+    if (!ctm || typeof ctm.inverse !== "function") return -1;
+    var inv = ctm.inverse();
+    var pt = typeof svg.createSVGPoint === "function" ? svg.createSVGPoint() : { x: 0, y: 0 };
+    pt.x = ev.clientX;
+    pt.y = ev.clientY;
+    var p = typeof pt.matrixTransform === "function" ? pt.matrixTransform(inv) : null;
+    if (!p || !isFinite(p.x)) return -1;
+    slots = slots || [];
+    var i;
+    for (i = 0; i < slots.length; i++) {
+      if (p.x >= slots[i].x0 && p.x < slots[i].x1) return i;
+    }
+    if (slots.length && p.x >= slots[slots.length - 1].x0 && p.x <= slots[slots.length - 1].x1 + 0.01) return slots.length - 1;
+    return -1;
   }
 
   function unchargedFees(payload) {
@@ -382,7 +407,7 @@
     var zone = zoneOf(opts.tz || (payload && payload.tz));
     var granularity = normalizeGranularity(opts.granularity || (payload && payload.granularity));
     var rawRows = bucketRows(payload) || [];
-    var rows = withReturns(rawRows.map(normalizeRow).filter(function (r) { return r.start || r.end || r.has; }));
+    var rows = rawRows.map(normalizeRow).filter(function (r) { return r.start || r.end || r.has; });
     rows.sort(function (a, b) {
       var as = civilDate(a.start, zone) || "";
       var bs = civilDate(b.start, zone) || "";
@@ -390,6 +415,7 @@
       if (as > bs) return 1;
       return 0;
     });
+    rows = withReturns(rows);
     var width = opts.width || 720;
     var height = opts.height || 292;
     var padL = 8;
@@ -513,7 +539,8 @@
       slots: slots,
       yLabels: yLabels,
       drawn: drawn,
-      clip: clipText(payload, { tz: zone, scope: opts.scope, from: opts.from }),
+      clip: clipText(payload, { tz: zone, scope: opts.scope, from: opts.from, clippedToInception: !!opts.clippedToInception }),
+      fontSize: 11,
       feesUncharged: unchargedFees(payload),
       feesNote: feesNote(payload),
       granularity: granularity,
@@ -530,6 +557,7 @@
     model = model || { width: 720, height: 292, slots: [], d: "", yLabels: [] };
     var w = model.width;
     var h = model.height;
+    var fontSize = Math.max(11, Number(model.fontSize) || 11);
     var s = "";
     if (isFinite(model.zeroY)) {
       s += '<line class="sa-zero" x1="' + model.padL + '" x2="' + (w - model.padR) + '" y1="' + model.zeroY.toFixed(1) + '" y2="' + model.zeroY.toFixed(1) + '"></line>';
@@ -545,10 +573,10 @@
     });
     (model.yLabels || []).forEach(function (lb) {
       if (!lb.text) return;
-      s += '<text x="' + (w - 6) + '" y="' + (lb.y - 4).toFixed(1) + '" fill="' + MUTED + '" font-size="11" text-anchor="end">' + esc(lb.text) + "</text>";
+      s += '<text x="' + (w - 6) + '" y="' + (lb.y - 4).toFixed(1) + '" fill="' + MUTED + '" font-size="' + fontSize + '" text-anchor="end">' + esc(lb.text) + "</text>";
     });
-    if (model.startLabel) s += '<text x="' + model.padL + '" y="' + (h - 8) + '" fill="' + MUTED + '" font-size="11">' + esc(model.startLabel) + "</text>";
-    if (model.endLabel) s += '<text x="' + (w - model.padR) + '" y="' + (h - 8) + '" fill="' + MUTED + '" font-size="11" text-anchor="end">' + esc(model.endLabel) + "</text>";
+    if (model.startLabel) s += '<text x="' + model.padL + '" y="' + (h - 8) + '" fill="' + MUTED + '" font-size="' + fontSize + '">' + esc(model.startLabel) + "</text>";
+    if (model.endLabel) s += '<text x="' + (w - model.padR) + '" y="' + (h - 8) + '" fill="' + MUTED + '" font-size="' + fontSize + '" text-anchor="end">' + esc(model.endLabel) + "</text>";
     (model.slots || []).forEach(function (slot) {
       s += '<rect class="sa-hit" data-i="' + slot.i + '" x="' + slot.x0.toFixed(1) + '" y="0" width="' + Math.max(0, slot.x1 - slot.x0).toFixed(1) + '" height="' + h + '" fill="none" pointer-events="all"></rect>';
     });
@@ -561,8 +589,7 @@
       var code = errorCode(input.error);
       if (code === "too_many_buckets") return { mode: "blocked", controls: true, message: RANGE_TEXT, chart: null };
       if (code === "invalid_range") return { mode: "blocked", controls: true, message: INVALID_TEXT, chart: null };
-      var status = input.error.status;
-      if (!input.hadSuccess || status === 404) return { mode: "legacy", controls: false, message: "", chart: null };
+      if (input.error.status === 404) return { mode: "legacy", controls: false, message: "", chart: null };
       return { mode: "error", controls: true, message: ERROR_TEXT, chart: null };
     }
     if (!looksLikePayload(input.payload)) return { mode: "legacy", controls: false, message: "", chart: null };
@@ -572,6 +599,7 @@
       tz: input.tz || input.payload.tz,
       scope: input.scope || input.payload.scope,
       from: input.from,
+      clippedToInception: !!input.clippedToInception,
       width: input.width,
       height: input.height
     });
@@ -629,6 +657,7 @@
     present: present,
     initialState: initialState,
     clipText: clipText,
+    slotIndex: slotIndex,
     unchargedFees: unchargedFees
   };
 })(typeof window !== "undefined" ? window : globalThis);

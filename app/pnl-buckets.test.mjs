@@ -52,8 +52,10 @@ assert.equal(custom.warn, "");
 const tooEarly = P.clampWindow("2026-10-01", "2026-10-24", { now: NOW, tz: "Asia/Shanghai", granularity: "day", custom: true, inception: "2026-10-14T00:00:00+08:00" });
 assert.equal(tooEarly.from, "2026-10-14");
 assert.equal(tooEarly.min, "2026-10-14");
+assert.equal(tooEarly.clippedToInception, true);
 const preset = P.clampWindow("2026-09-25", "2026-10-24", { now: NOW, tz: "Asia/Shanghai", granularity: "day", inception: "2026-10-14T00:00:00+08:00" });
 assert.equal(preset.from, "2026-09-25");
+assert.equal(preset.clippedToInception, false);
 
 const longOk = P.clampWindow("2025-10-24", "2026-10-24", { now: NOW, tz: "Asia/Shanghai", granularity: "day" });
 assert.equal(P.inclusiveDays(longOk.from, longOk.to), 366);
@@ -215,6 +217,19 @@ assert.equal(P.clipText({ scope: "all", clipped_from: null, segment_start_at: nu
 assert.equal(P.clipText({ scope: "all", clipped_from: null, inception_at: "2026-10-14T09:42:55.578Z" }, { scope: "all", tz: "Asia/Shanghai" }), "账户 10-14 开始运行");
 assert.equal(P.clipText({ scope: "all", clipped_from: "2026-09-25", inception_at: "2026-10-14T09:42:55.578Z" }, { scope: "all", tz: "Asia/Shanghai" }), "账户 10-14 开始运行");
 assert.equal(P.clipText({ scope: "all", clipped_from: "2026-09-25", inception_at: null }, { scope: "all", tz: "Asia/Shanghai" }), "");
+assert.equal(P.clipText({ scope: "all", inception_at: "2026-10-14T09:42:55.578Z", tz: "Asia/Shanghai" }, { scope: "all", tz: "Asia/Shanghai", clippedToInception: true }), "账户 10-14 开始运行，已从这天开始");
+const clippedStart = P.present({
+  scope: "all",
+  from: "2026-10-14",
+  clippedToInception: true,
+  payload: {
+    tz: "Asia/Shanghai",
+    inception_at: "2026-10-14T09:42:55.578Z",
+    fees_estimated: false,
+    buckets: [row("2026-10-14T00:00:00+08:00", "2026-10-15T00:00:00+08:00", { label: "10-14", cum_return_pct: 0.01 })]
+  }
+});
+assert.equal(clippedStart.chart.clip, "账户 10-14 开始运行，已从这天开始");
 
 const opened = P.present({
   scope: "all",
@@ -307,8 +322,15 @@ assert.equal(missing.controls, false);
 assert.equal(missing.chart, null);
 assert.equal(missing.message, "");
 const offline = P.present({ error: { status: 0, offline: true }, hadSuccess: false });
-assert.equal(offline.mode, "legacy");
+assert.equal(offline.mode, "error");
+assert.equal(offline.controls, true);
+assert.equal(offline.message, P.ERROR_TEXT);
 assert.equal(offline.chart, null);
+const first500 = P.present({ error: { status: 500 }, hadSuccess: false });
+assert.equal(first500.mode, "error");
+assert.equal(first500.controls, true);
+assert.equal(first500.message, "图表暂时加载不了，稍后刷新");
+assert.equal(first500.chart, null);
 const later = P.present({ error: { status: 500 }, hadSuccess: true });
 assert.equal(later.mode, "error");
 assert.equal(later.controls, true);
@@ -344,8 +366,43 @@ assert.equal(gapSvg.includes("undefined"), false);
 const right = gap.slots[gap.slots.length - 1];
 assert.ok(Math.abs(right.x1 - (gap.width - gap.padR)) < 0.2);
 
+const orderedLate = P.bucketChart({
+  tz: "Asia/Shanghai",
+  buckets: [
+    row("2026-10-24T00:00:00+08:00", "2026-10-25T00:00:00+08:00", { label: "10-24", cum_return_pct: 0.21, period_return_pct: 0.01 }),
+    row("2026-10-22T00:00:00+08:00", "2026-10-23T00:00:00+08:00", { label: "10-22", cum_return_pct: 0.2, period_return_pct: 0.2 })
+  ]
+}, { granularity: "day" });
+assert.equal(orderedLate.slots[0].label, "10-22");
+assert.equal(orderedLate.slots[0].cumBefore, 0);
+assert.equal(orderedLate.slots[1].label, "10-24");
+assert.equal(orderedLate.slots[1].cumBefore, 0.2);
+
+const hitSlots = [];
+for (let i = 0; i < 30; i++) hitSlots.push({ x0: i * 24, x1: (i + 1) * 24 });
+const letterboxed = {
+  getScreenCTM() {
+    return { inverse: () => ({ a: 720 / 200, b: 0, c: 0, d: 1, e: -100 * 720 / 200, f: 0 }) };
+  },
+  createSVGPoint() {
+    return { x: 0, y: 0, matrixTransform(m) { return { x: m.a * this.x + m.c * this.y + m.e, y: m.b * this.x + m.d * this.y + m.f }; } };
+  }
+};
+assert.equal(P.slotIndex({ clientX: 250, clientY: 20, target: { closest: () => null } }, letterboxed, hitSlots), 22);
+assert.equal(P.slotIndex({
+  clientX: 10,
+  clientY: 10,
+  target: { closest: (sel) => (sel === "rect.sa-hit" ? { dataset: { i: "3" } } : null) }
+}, letterboxed, hitSlots), 3);
+const sized = P.svg(P.bucketChart({
+  tz: "Asia/Shanghai",
+  buckets: [row("2026-10-24T00:00:00+08:00", "2026-10-25T00:00:00+08:00", { label: "10-24" })]
+}, { width: 286, granularity: "day" }));
+assert.match(sized, /viewBox="0 0 286 /);
+for (const size of sized.matchAll(/font-size="([0-9.]+)"/g)) assert.ok(Number(size[1]) >= 11);
+
 function loadFx(name) {
-  return JSON.parse(fs.readFileSync(new URL("./fixtures/pnl/" + name + ".json", import.meta.url), "utf8"));
+  return JSON.parse(fs.readFileSync(new URL("../test/fixtures/pnl/" + name + ".json", import.meta.url), "utf8"));
 }
 const TOP_KEYS = ["account_id", "granularity", "scope", "tz", "week_start", "from", "to", "clipped_from", "inception_at", "segment_start_at", "fee_basis", "fees_estimated", "currency", "buckets", "totals", "reasons"];
 const BUCKET_KEYS = ["period_start", "period_end", "label", "has_data", "nav_start", "nav_end", "flow_usd", "pnl_net", "fees", "fees_uncharged", "fees_estimated", "period_return_pct", "cum_return_pct", "segment", "partial"];
@@ -425,8 +482,18 @@ function sumNet(payload) {
 const netSum = sumNet(fxAll);
 assert.ok(Math.abs(netSum - fxCard.metrics.net_pnl_usd) <= 1);
 assert.equal((Math.round(netSum * 100) / 100).toFixed(2), "5873.08");
-assert.equal(fxCard.id, "7cd31570-39a5-47ea-aa0d-1b49d90acad4");
+assert.equal(fxCard.id, "11111111-1111-4111-8111-111111111111");
 assert.equal(fxCard.name, "paper20000");
 assert.equal(fxCard.inception_at, undefined);
+assert.equal(fxCard.equity_curve, undefined);
+assert.deepEqual(Object.keys(fxCard).sort(), ["id", "metrics", "name"]);
+assert.deepEqual(Object.keys(fxCard.metrics), ["net_pnl_usd"]);
+const REAL_ID = "7cd31570-39a5-47ea-aa0d-1b49d90acad4";
+for (const fx of [fxDay, fxWeek, fxMonth, fxYear, fxSeg, fxAll, fxCard]) {
+  const raw = JSON.stringify(fx);
+  assert.equal(raw.includes(REAL_ID), false);
+  assert.equal(/0x[0-9a-fA-F]{6,}/.test(raw), false);
+}
+assert.equal(fxDay.account_id, fxCard.id);
 
 console.log("pnl-buckets tests ok");

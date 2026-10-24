@@ -896,7 +896,7 @@
       return emptyCurve;
     }
     detailState.model = model;
-    return '<div class="sa-chart hero" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
+    return '<div class="sa-chart" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
   }
   function detailChartHtml() {
     var pnl = detailState.pnl;
@@ -904,11 +904,11 @@
     var usePnl = !!(P && pnl && pnl.controls && pnl.status !== "unsupported");
     if (!usePnl) return legacyChartHtml();
     detailState.model = null;
-    if (pnl.status === "loading") return '<div class="sa-chart hero sa-pnl-loading" id="sa-chart" aria-busy="true"></div>';
+    if (pnl.status === "loading") return '<div class="sa-chart sa-pnl-loading" id="sa-chart" aria-busy="true"></div>';
     if (pnl.status === "error") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(pnl.notice || P.ERROR_TEXT) + "</span></div>";
     if (pnl.status === "blocked") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(pnl.notice || P.RANGE_TEXT) + "</span></div>";
     if (pnl.status === "empty") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(P.EMPTY_TEXT) + "</span></div>";
-    if (pnl.status === "ready" && pnl.model && pnl.model.drawn) return '<div class="sa-chart hero" id="sa-chart">' + P.svg(pnl.model) + '<div class="sa-tip"></div></div>';
+    if (pnl.status === "ready" && pnl.model && pnl.model.drawn) return '<div class="sa-chart" id="sa-chart">' + P.svg(pnl.model) + '<div class="sa-tip"></div></div>';
     return legacyChartHtml();
   }
   function rangeControlsHtml() {
@@ -944,16 +944,7 @@
     var P = pnlLib();
     if (!svg || !tip || !P || !model) return;
     function slotAt(ev) {
-      var rect = svg.getBoundingClientRect();
-      if (!rect.width) return -1;
-      var x = ((ev.clientX - rect.left) / rect.width) * model.width;
-      var slots = model.slots || [];
-      var i;
-      for (i = 0; i < slots.length; i++) {
-        if (x >= slots[i].x0 && x < slots[i].x1) return i;
-      }
-      if (slots.length && x >= slots[slots.length - 1].x0 && x <= slots[slots.length - 1].x1 + 1) return slots.length - 1;
-      return -1;
+      return P.slotIndex(ev, svg, model.slots);
     }
     function place(ev, i) {
       if (i < 0 || !model.slots[i]) return;
@@ -999,11 +990,66 @@
     }
     if (detailState.model) bindChart(host, detailState.model, function () {});
   }
+  function chartContentWidth(host) {
+    if (!host) return 0;
+    var cs = window.getComputedStyle(host);
+    var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    return Math.round(host.clientWidth - pad);
+  }
+  function pnlDrawWidth() {
+    var host = document.getElementById("sa-chart");
+    var w = chartContentWidth(host);
+    if (w > 0) return w;
+    var sec = document.getElementById("sa-curve");
+    if (!sec) return 0;
+    var cs = window.getComputedStyle(sec);
+    var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    return Math.max(0, Math.round(sec.clientWidth - pad - 28));
+  }
+  function pnlPresentInput(pnl, extra) {
+    var w = pnlDrawWidth();
+    return Object.assign({
+      payload: pnl.payload,
+      hadSuccess: true,
+      granularity: pnl.granularity,
+      tz: pnl.tz,
+      scope: detailState.scope,
+      from: pnl.window && pnl.window.from,
+      clippedToInception: !!(pnl.window && pnl.window.clippedToInception),
+      width: w || undefined
+    }, extra || {});
+  }
+  function fitPnlChart() {
+    var host = document.getElementById("sa-chart");
+    var P = pnlLib();
+    var pnl = detailState && detailState.pnl;
+    if (!host || !P || !pnl || pnl.status !== "ready" || !pnl.payload || !pnl.model) return;
+    var w = chartContentWidth(host);
+    if (!w || Math.abs(pnl.model.width - w) < 2) return;
+    var view = P.present(pnlPresentInput(pnl, { width: w }));
+    if (!view.chart || !view.chart.drawn) return;
+    pnl.model = view.chart;
+    host.innerHTML = P.svg(pnl.model) + '<div class="sa-tip"></div>';
+    bindPnl(host, pnl.model);
+  }
+  function bindPnlResize() {
+    if (!detailState || detailState._pnlResize) return;
+    detailState._pnlResize = function () {
+      if (detailState._pnlResizeTimer) clearTimeout(detailState._pnlResizeTimer);
+      detailState._pnlResizeTimer = setTimeout(function () {
+        if (!detailState || !detailState.pnl || detailState.pnl.status !== "ready") return;
+        fitPnlChart();
+      }, 60);
+    };
+    window.addEventListener("resize", detailState._pnlResize);
+  }
   function paintCurve() {
     var sec = document.getElementById("sa-curve");
     if (!sec || !detailState) return;
     sec.innerHTML = curveInnerHtml();
     bindDetailChart();
+    fitPnlChart();
+    bindPnlResize();
   }
   function pnlNowOpts(pnl) {
     var P = pnlLib();
@@ -1035,7 +1081,7 @@
     var token = detailSeq;
     var base = pnlNowOpts(pnl);
     var win = pnl.custom ? P.clampWindow(pnl.from, pnl.to, Object.assign({ granularity: pnl.granularity, custom: true }, base)) : P.clampWindow(P.defaultWindow(pnl.granularity, base).from, P.defaultWindow(pnl.granularity, base).to, Object.assign({ granularity: pnl.granularity, custom: false }, base));
-    pnl.window = { from: win.from, to: win.to, min: win.min || "", today: win.today };
+    pnl.window = { from: win.from, to: win.to, min: win.min || "", today: win.today, clippedToInception: !!win.clippedToInception };
     pnl.notice = win.warn || "";
     if (win.warn) {
       pnl.status = "blocked";
@@ -1069,7 +1115,8 @@
         pnl.weekStart = next.weekStart || pnl.weekStart;
         return loadPnl();
       }
-      var view = P.present({ payload: data, hadSuccess: true, granularity: pnl.granularity, tz: pnl.tz, scope: detailState.scope, from: win.from });
+      pnl.payload = data;
+      var view = P.present(pnlPresentInput(pnl));
       if (view.mode === "legacy") {
         pnl.status = "unsupported";
         pnl.controls = false;
