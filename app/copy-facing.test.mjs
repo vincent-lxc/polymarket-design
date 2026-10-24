@@ -40,7 +40,6 @@ function load(page, fetchImpl) {
     return node;
   }
   nest("#ov-mirrors", ["table", ".hd", ".hd .r"]);
-  nest("#ov-attr", [".hd"]);
   nest("#ac-main", [".big", ".sub", ".kv", ".hd"]);
   nest("#ac-pos", ["table", ".hd", ".hd .lbl"]);
   nest("#ac-act", ["table", ".hd"]);
@@ -201,10 +200,9 @@ assert.equal(mirrorHtml.includes("无数据"), false);
 assert.equal(mirrorHtml.includes("Skip me"), false);
 assert.equal(mirrorHtml.includes("未命名"), false);
 assert.equal(mirrorHtml.includes("盘口太薄"), false);
-assert.equal(pm.store["#ov-attr"].hidden, true);
-assert.equal(pm.store["#ov-attr"].innerHTML.includes("接入 attribution"), false);
 assert.equal(mirrorHtml.includes("暂无数据"), false);
-assert.equal((pm.store["#ov-attr"].innerHTML || "").includes("暂无数据"), false);
+assert.equal(pm.store["#ov-attr"], undefined);
+assert.equal(mirrorHtml.includes("利润归属"), false);
 
 await PM.renderOverview({
   totals: { cash_usd: 1, positions_value_usd: 1, unrealized_usd: null, realized_usd: null, today_pnl_usd: null, fills: null, open_positions: null },
@@ -218,7 +216,7 @@ await PM.renderOverview({
 assert.equal(pm.store["#ov-mirrors"].hidden, true);
 assert.equal(pm.store["#ov-mirrors"].innerHTML.includes("暂无数据"), false);
 assert.equal(pm.store["#ov-mirrors"].innerHTML.includes("Only skip"), false);
-assert.equal(pm.store["#ov-attr"].hidden, true);
+assert.equal(pm.store["#ov-attr"], undefined);
 
 const skipped = Array.from({ length: 7 }, (_, i) => ({ title: "Skip " + i, decision: "skipped", side: "BUY" }));
 await PM.renderOverview({
@@ -237,51 +235,30 @@ assert.equal(paged.includes("Second skip"), false);
 assert.equal(paged.includes("Skip 0"), false);
 assert.ok(calls.some((u) => u.includes("cursor=more")));
 assert.equal(calls.some((u) => /[?&]status=/.test(u) || /[?&]decision=/.test(u)), false);
-assert.match(pm.store["#ov-attr"].innerHTML, /跟单稳健/);
-assert.equal(pm.store["#ov-attr"].innerHTML.includes("接入 attribution"), false);
-assert.equal(pm.store["#ov-attr"].hidden, false);
+assert.equal(pm.store["#ov-attr"], undefined);
+assert.equal(paged.includes("利润归属"), false);
+assert.equal(paged.includes("跟单稳健"), false);
 
-const stamp = "-1710000000000";
-const amounts = [30, -30, 20, -20, 10, 4, 0];
-const attrRows = amounts.map((realized_usd, i) => ({
-  address: "0x" + "ab".repeat(16) + String(i).padStart(4, "0") + stamp,
-  realized_usd,
-  pnl_usd: null
-}));
-attrRows.push({ name: "空的", address: "0xempty" + stamp, pnl_usd: 99 });
-attrRows.push({ name: "份额回退", share_of_fill_usd: 8 });
 await PM.renderOverview({
   totals: { cash_usd: 1, positions_value_usd: 1, unrealized_usd: 1, realized_usd: 1, today_pnl_usd: 1, fills: 1, open_positions: 1 },
   reasons: {},
   accounts: [],
   equity_curve: [],
   recent_mirrors: [{ title: "Keep", decision: "copied", side: "BUY", fill_usd: 1, leader_notional_usd: 2 }],
-  attribution: attrRows,
+  attribution: [
+    { name: "跟单稳健", realized_usd: 30 },
+    { address: "0x" + "ab".repeat(20) + "-1710000000000", realized_usd: 12 }
+  ],
   main_leader: null
 });
-const attrHtml = pm.store["#ov-attr"].innerHTML;
-assert.equal(pm.store["#ov-attr"].hidden, false);
-assert.match(attrHtml, /其余 3 位/);
-assert.equal(attrHtml.includes("空的"), false);
-assert.equal(attrHtml.includes("份额回退"), false);
-assert.equal(attrHtml.includes(stamp), false);
-assert.equal(/-\d{13}/.test(attrHtml), false);
-assert.match(attrHtml, /0xabab/);
-assert.match(attrHtml, /\$30\.00/);
-assert.equal((attrHtml.match(/attr-row/g) || []).length, 6);
-
-await PM.renderOverview({
-  totals: { cash_usd: 1, positions_value_usd: 1, unrealized_usd: 1, realized_usd: 1, today_pnl_usd: 1, fills: 1, open_positions: 1 },
-  reasons: {},
-  accounts: [],
-  equity_curve: [],
-  recent_mirrors: [{ title: "Keep", decision: "copied", side: "BUY", fill_usd: 1 }],
-  attribution: [{ name: "没数", address: "0xabc" + stamp, pnl_usd: 12 }],
-  main_leader: null
-});
-assert.equal(pm.store["#ov-attr"].hidden, true);
-assert.equal((pm.store["#ov-attr"].innerHTML || "").includes("没数"), false);
-assert.equal((pm.store["#ov-attr"].innerHTML || "").includes("暂无数据"), false);
+assert.equal(pm.store["#ov-attr"], undefined);
+const apiSrc = fs.readFileSync(new URL("./api.js", import.meta.url), "utf8");
+const cssSrc = fs.readFileSync(new URL("./app.css", import.meta.url), "utf8");
+assert.equal(apiSrc.includes("fillAttr"), false);
+assert.equal(apiSrc.includes("ov-attr"), false);
+assert.equal(apiSrc.includes("利润归属"), false);
+assert.equal(cssSrc.includes(".attr-row"), false);
+assert.equal(cssSrc.includes(".attr-list"), false);
 
 await PM.renderAccount();
 const accountBits = [

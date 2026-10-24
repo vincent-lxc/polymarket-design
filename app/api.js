@@ -439,63 +439,6 @@ function activityRow(m){
   const side=m.side==="SELL"?"卖出":m.side==="BUY"?"买入":(m.purpose_zh||m.purpose||"—");
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已成交</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
   return `<tr><td class="num mu hm" title="${esc(bj(m.decided_at)||"")}">${bj(m.decided_at,false)||"—"}</td><td>${marketHtml(mirrorMarketName(m), m)}</td><td class="hm">${esc(side)}</td><td class="r">${fillCell(m)}</td><td>${res}</td></tr>`; }
-function stripAddrStamp(s){ return String(s||"").replace(/-\d{13}$/,"").trim(); }
-function attrAddress(row){
-  const keys=["address","addr","leader_address","wallet"];
-  let addr=stripAddrStamp(textField(pick(row,keys)));
-  if(!addr){
-    const named=stripAddrStamp(textField(pick(row,["name","label","user_name","leader"])));
-    if(/^0x/i.test(named)) addr=named;
-  }
-  return addr?short(addr):"";
-}
-function attrName(row){
-  const named=stripAddrStamp(textField(pick(row,["name","label","user_name","leader","strategy_name"])));
-  if(named&&!/^0x/i.test(named)) return named;
-  return attrAddress(row)||named;
-}
-function attributionItems(d){
-  const attr=d&&d.attribution;
-  if(!Array.isArray(attr)||!attr.length) return null;
-  const items=[];
-  attr.forEach((row,i)=>{
-    if(!row||typeof row!=="object") return;
-    const pnl=numOrNull(row.realized_usd!=null?row.realized_usd:row.share_of_fill_usd);
-    if(pnl==null) return;
-    items.push({name:attrName(row)||"当前策略", pnl, i});
-  });
-  if(!items.length) return null;
-  items.sort((a,b)=>Math.abs(b.pnl)-Math.abs(a.pnl)||a.i-b.i);
-  const top=items.slice(0,5).map(({name,pnl})=>({name,pnl}));
-  const rest=items.length-top.length;
-  if(rest>0) top.push({name:"其余 "+rest+" 位", rest:true});
-  return top;
-}
-function hideAttr(box){
-  if(!box) return;
-  box.hidden=true;
-  box.innerHTML="";
-  if(box.remove) box.remove();
-}
-/* 没有真实 attribution 条目时整张卡不出现。有条目才画出名称和金额。 */
-function fillAttr(d){
-  const items=attributionItems(d);
-  let box=$("#ov-attr");
-  if(!items){ hideAttr(box); return; }
-  if(!box){
-    box=document.createElement("section");
-    box.className="card";
-    box.id="ov-attr";
-    const anchor=$("#ov-mirrors");
-    const parent=anchor&&anchor.parentNode?anchor.parentNode:(document.querySelector("main.main")||document.querySelector("main"));
-    if(!parent) return;
-    if(anchor&&anchor.parentNode) anchor.parentNode.insertBefore(box, anchor.nextSibling);
-    else parent.appendChild(box);
-  }
-  box.hidden=false;
-  const rowsHtml=items.map(it=>it.rest?`<div class="attr-row"><span>${esc(it.name)}</span></div>`:`<div class="attr-row"><span>${esc(it.name)}</span><b class="num ${cls(it.pnl)}">${usd(it.pnl,true)}</b></div>`).join("");
-  box.innerHTML=`<div class="hd"><h2>利润归属</h2></div><div class="attr-list">${rowsHtml}</div>`;
-}
 /* 账户详情只用接口给出的 id / account_id。策略名不能拿去拼 /v1/accounts/{name}/positions。 */
 function presentAccountId(v){
   if(v==null)return "";
@@ -823,7 +766,6 @@ async function renderOverview(d, still){
     const mirrorNote=mirrorBox&&mirrorBox.querySelector(".hd .r");
     if(mirrorNote) mirrorNote.textContent="最近 "+mirrors.length+" 条";
   }
-  fillAttr(d);
   const ml=d.main_leader, lead=$("#ov-lead .h");
   if(lead) lead.innerHTML=ml?`${who(ml.user_name,ml.address)} <span class="tag live">${esc(ml.status_zh)}</span>`:nd(R.main_leader||"no_main_leader");
   fillLeadCard(ml,R);
