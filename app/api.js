@@ -9,12 +9,12 @@ const PUBLIC_PAGES=new Set(["board","markets","login"]);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 /* 市场名：有 event_slug / slug 才链到 polymarket.com/event/，否则纯文本。 */
-/* 没有标题时：slug 读成句子，再不行用「市场」加短 id。不要把内部占位写到界面上。 */
+/* 没有标题时：slug 读成句子，再不行用短 id。不要把单独的「市场」写到界面上。 */
 function humanizeSlug(slug){
   const raw=String(slug||"").trim();
   if(!raw||raw==="[object Object]") return "";
   const spaced=raw.replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
-  if(!spaced) return "";
+  if(!spaced||spaced==="市场") return "";
   if(/[A-Z\u4e00-\u9fff]/.test(spaced)) return spaced;
   return spaced.replace(/\b[a-z]/g,c=>c.toUpperCase());
 }
@@ -33,19 +33,39 @@ function fallbackMarketTitle(row){
 }
 function marketLabel(name, row){
   const named=name==null?"":String(name).trim();
-  if(named&&named!=="[object Object]") return named;
+  if(named&&named!=="[object Object]"&&named!=="市场") return named;
   return fallbackMarketTitle(row);
 }
-function marketHtml(name, row){ const text=marketLabel(name, row); return window.PMMarket?PMMarket.html(text, row):esc(text); }
-/* 总览镜像名在 recent_mirrors[].market，没有 title。market 为 null 时才用 slug。 */
-function mirrorMarketName(row){
+function marketHtml(name, row){
+  const text=marketLabel(name, row);
+  const shown=text||"未命名市场";
+  return window.PMMarket?PMMarket.html(shown, row):esc(shown);
+}
+/* 镜像单市场名：market 名 → title → 可读 slug（连字符改空格）→ 短 id。绝不返回单独的「市场」。 */
+function labelText(v){
+  if(typeof v!=="string") return "";
+  const s=v.trim();
+  if(!s||s==="[object Object]"||s==="市场") return "";
+  return s;
+}
+function readableSlug(v){
+  const s=labelText(v);
+  if(!s) return "";
+  return s.replace(/-/g," ").replace(/\s+/g," ").trim();
+}
+function mirrorMarketName(row, withId){
   if(!row||typeof row!=="object") return null;
-  if(typeof row.market==="string"&&row.market.trim()) return row.market.trim();
-  if(row.market!=null&&typeof row.market!=="string"){ const text=String(row.market).trim(); if(text&&text!=="[object Object]") return text; }
-  if(row.market==null||(typeof row.market==="string"&&!row.market.trim())){
-    const slug=[row.slug,row.event_slug].find(s=>typeof s==="string"&&s.trim());
-    if(slug) return String(slug).trim();
-  }
+  const nested=row.market&&typeof row.market==="object"&&!Array.isArray(row.market)?row.market:null;
+  const marketName=labelText(typeof row.market==="string"?row.market:"")||labelText(nested&&(nested.name||nested.question));
+  if(marketName) return marketName;
+  const title=labelText(row.title)||labelText(row.question)||labelText(row.market_title)||labelText(nested&&nested.title);
+  if(title) return title;
+  const slug=[row.slug,row.event_slug,row.market_slug,nested&&nested.slug,nested&&nested.event_slug].map(readableSlug).find(Boolean);
+  if(slug&&slug!=="市场") return slug;
+  if(withId===false) return null;
+  const id=[row.condition_id,row.market_id,row.token_id,row.id,nested&&nested.condition_id,nested&&nested.id].find(v=>v!=null&&String(v).trim());
+  const brief=id==null?"":short(String(id).trim());
+  if(brief&&brief!=="市场") return brief;
   return null;
 }
 function formatShares(x){
@@ -231,26 +251,20 @@ function fillCell(m){
   const px=m.fill_price!=null?` @ ${Math.round(m.fill_price*100)}¢`:"";
   return `${usd(m.fill_usd)}${px}`;
 }
+function mirrorFill(m){
+  if(!m||m.fill_usd==null) return NA;
+  const px=m.fill_price!=null?` @ ${Math.round(m.fill_price*100)}¢`:"";
+  return `${usd(m.fill_usd)}${px}`;
+}
 function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*100)+"¢":null;
   const L=m.leader_notional_usd!=null?`${usd(m.leader_notional_usd)}${lp?" @ "+lp:""}`:null;
-  const me=fillCell(m);
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已跟</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
-  return `<tr><td title="${esc(bj(m.decided_at)||"")}">${marketHtml(mirrorMarketName(m), m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r">${me}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":"—"}</td><td>${res}</td></tr>`; }
+  const name=mirrorMarketName(m);
+  return `<tr><td title="${esc(bj(m.decided_at)||"")}">${marketHtml(name, m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r">${mirrorFill(m)}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":NA}</td><td>${res}</td></tr>`; }
 function activityRow(m){
   const side=m.side==="SELL"?"卖出":m.side==="BUY"?"买入":(m.purpose_zh||m.purpose||"—");
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已成交</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
   return `<tr><td class="num mu hm" title="${esc(bj(m.decided_at)||"")}">${bj(m.decided_at,false)||"—"}</td><td>${marketHtml(mirrorMarketName(m), m)}</td><td class="hm">${esc(side)}</td><td class="r">${fillCell(m)}</td><td>${res}</td></tr>`; }
-function fillAttr(d){
-  const box=$("#ov-attr"); if(!box)return;
-  const R=(d&&d.reasons)||{};
-  const attr=d&&d.attribution;
-  if(attr==null||(Array.isArray(attr)&&!attr.length)){
-    const hd=box.querySelector(".hd"); const h=hd?hd.outerHTML:"";
-    box.innerHTML=h+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>按 leader 的利润归属尚未聚合。</span></div>';
-    box.querySelectorAll(".hd .r,.hd .attr-actions,.hd .btn").forEach(e=>e.remove());
-    return;
-  }
-}
 /* 账户详情只用接口给出的 id / account_id。策略名不能拿去拼 /v1/accounts/{name}/positions。 */
 function presentAccountId(v){
   if(v==null)return "";
@@ -562,7 +576,6 @@ async function renderOverview(d, still){
       acc.map((a,i)=>`<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
   }
   if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
-  fillAttr(d);
   const ml=d.main_leader, lead=$("#ov-lead .h");
   if(lead) lead.innerHTML=ml?`${who(ml.user_name,ml.address)} <span class="tag live">${esc(ml.status_zh)}</span>`:nd(R.main_leader||"no_main_leader");
   fillLeadCard(ml,R);
@@ -570,29 +583,171 @@ async function renderOverview(d, still){
 }
 
 /* ---------- 账户 / Leaders / 健康 / 配置 / 策略 ---------- */
+function blankAccountShell(){
+  const h=document.querySelector(".top h1");
+  if(h) h.innerHTML='账户 <i class="sk m" aria-hidden="true"></i>';
+  const steps=document.querySelector(".steps");
+  if(steps) steps.innerHTML='<i class="sk m"></i>';
+  const big=document.querySelector("#ac-main .big");
+  if(big) big.innerHTML='<i class="sk xl"></i>';
+  const sub=document.querySelector("#ac-main .sub");
+  if(sub) sub.innerHTML='<i class="sk l"></i>';
+  const kv=document.querySelector("#ac-main .kv");
+  if(kv) kv.innerHTML='<div><i class="sk"></i></div>';
+  ["#ac-pos","#ac-act"].forEach(sel=>{
+    const t=$(sel+" table");
+    if(t) t.innerHTML='<tr><td><i class="sk l"></i></td><td><i class="sk"></i></td></tr>';
+  });
+}
+function stripSkMarkup(el){
+  if(!el||typeof el.innerHTML!=="string") return;
+  el.innerHTML=el.innerHTML
+    .replace(/<i\b[^>]*class="sk[^"]*"[^>]*>\s*<\/i>/g,"")
+    .replace(/<div class="meter">[\s\S]*?<\/div>/g,"");
+}
+function dropLiveSkeletons(root){
+  const scope=root||document;
+  if(scope.querySelectorAll){
+    const list=scope.querySelectorAll(".sk");
+    if(list&&list.forEach) list.forEach(el=>{ if(el&&el.remove) el.remove(); });
+  }
+  if(scope.querySelectorAll){
+    const meters=scope.querySelectorAll("#ac-loss .meter, #ac-main .meter");
+    if(meters&&meters.forEach) meters.forEach(el=>{ if(el&&el.remove) el.remove(); });
+  }
+}
+/* 找不到账户时主卡、持仓、成交和策略备注一起换掉，不留灰条。 */
+function paintAccountMissing(){
+  const h=document.querySelector(".top h1");
+  if(h) h.textContent="账户";
+  const main=$("#ac-main");
+  if(main) main.innerHTML='<div class="ndbox"><span class="nd">找不到这个账户</span></div><p style="margin-top:12px"><a class="btn" href="/account">返回账户列表</a></p>';
+  const steps=document.querySelector(".steps");
+  if(steps) steps.innerHTML='<a href="/account">返回账户列表</a>';
+  ["#ac-pos","#ac-act","#ac-params","#ac-loss"].forEach(sel=>{
+    const root=$(sel);
+    if(!root) return;
+    const table=root.querySelector&&root.querySelector("table");
+    if(table) table.innerHTML="";
+    const lab=root.querySelector&&root.querySelector(".hd .lbl");
+    if(lab) lab.innerHTML="";
+    root.innerHTML="";
+    stripSkMarkup(root);
+  });
+  dropLiveSkeletons(document);
+}
+/* 旧列表没有 uuid。退出骨架时标题、副文、指标、日亏条和两张表一起清，避免灰条一直留着。 */
+function clearAccountSkeleton(){
+  const h=document.querySelector(".top h1");
+  if(h) h.textContent="账户";
+  const sub=$("#ac-main .sub");
+  if(sub) sub.innerHTML="";
+  const kv=$("#ac-main .kv");
+  if(kv) kv.innerHTML="";
+  const loss=$("#ac-loss");
+  if(loss) stripSkMarkup(loss);
+  ["#ac-pos","#ac-act"].forEach(sel=>{
+    const root=$(sel);
+    if(!root) return;
+    const table=root.querySelector&&root.querySelector("table");
+    if(table){
+      const html=String(table.innerHTML||"");
+      const head=html.match(/<tr>\s*<th[\s\S]*?<\/tr>/);
+      table.innerHTML=head?head[0]:"";
+    }
+    const lab=root.querySelector&&root.querySelector(".hd .lbl");
+    if(lab) lab.innerHTML="";
+    stripSkMarkup(root);
+    if(root.querySelectorAll) root.querySelectorAll(".sk").forEach(el=>{ if(el&&el.remove) el.remove(); });
+  });
+  const params=$("#ac-params");
+  if(params) stripSkMarkup(params);
+  dropLiveSkeletons(document);
+}
+function paintAccountEmpty(){
+  clearAccountSkeleton();
+  const big=$("#ac-main .big");
+  if(big) big.innerHTML=nd("no_accounts");
+}
+function paintAccountError(err){
+  clearAccountSkeleton();
+  const big=$("#ac-main .big");
+  const msg=(err&&err.offline)?"连不上接口":((err&&err.message)||"没有完成");
+  if(big) big.innerHTML='<span class="nd">'+esc(msg)+'</span>';
+  const sub=$("#ac-main .sub");
+  if(sub) sub.innerHTML='<button type="button" class="btn sm" id="ac-retry">重试</button>';
+  const btn=$("#ac-retry");
+  if(btn&&btn.addEventListener) btn.addEventListener("click",()=>{ blankAccountShell(); renderAccount(); });
+}
+/* 真实 /v1/accounts 仍是旧列表：有 uuid 用 uuid，否则用策略名请求 /v1/accounts/{strategy}。 */
+function legacyAccountKey(a){
+  if(!a) return "";
+  return accountRecordUuid(a)||presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordId(a);
+}
+function accountByLabel(label, accs){
+  const key=presentAccountId(label);
+  if(!key) return null;
+  const hits=(accs||[]).filter(a=>a&&(sameAccountLabel(a.strategy,key)||sameAccountLabel(a.name,key)||sameAccountLabel(accountRecordId(a),key)||sameAccountLabel(accountRecordUuid(a),key)));
+  return hits.length===1?hits[0]:null;
+}
+function accountStepHref(a){
+  const uuid=accountRecordUuid(a);
+  if(uuid) return accountDetailHref(uuid);
+  const name=presentAccountId(a&&a.strategy)||presentAccountId(a&&a.name)||accountRecordId(a);
+  return name?appHref("/account",{id:name}):appHref("/account");
+}
 async function renderAccount(){
-  const list=await api("/v1/accounts");
-  paintHeartbeat(list);
-  if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
-  const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordUuid(a)));
   const wantId=presentAccountId(Q.get("id"));
   const wantName=presentAccountId(Q.get("s"));
+  if(wantId||wantName) blankAccountShell();
+  let list;
+  try{ list=await api("/v1/accounts"); }
+  catch(e){
+    if(e&&e.status===404){ paintAccountEmpty(); return; }
+    paintAccountError(e);
+    return;
+  }
+  paintHeartbeat(list);
+  if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
+  const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordId(a)||accountRecordUuid(a)));
   let id="";
-  if(looksLikeAccountUuid(wantId)) id=wantId;
-  else if(wantName) id=matchAccountUuid(wantName, accs);
-  else id=accountRecordUuid(accs.find(x=>accountRecordUuid(x))||null);
-  if(id&&wantName) replaceNamedAccountLocation(id);
-  const current=id?accs.find(x=>accountRecordUuid(x)===id)||null:null;
+  let current=null;
+  if(wantId&&looksLikeAccountUuid(wantId)){
+    id=wantId;
+    current=accs.find(x=>accountRecordUuid(x)===id)||null;
+  }else if(wantId||wantName){
+    current=accountByLabel(wantId||wantName, accs);
+    if(!current){ paintAccountMissing(); return; }
+    id=legacyAccountKey(current);
+    if(!id){ paintAccountMissing(); return; }
+    const uuid=accountRecordUuid(current);
+    if(uuid&&wantName) replaceNamedAccountLocation(uuid);
+  }else{
+    current=accs.find(x=>legacyAccountKey(x))||null;
+    id=legacyAccountKey(current);
+  }
   const label=(current&&(presentAccountId(current.strategy)||presentAccountId(current.name)))||id;
   const steps=document.querySelector(".steps");
   if(steps) steps.innerHTML=accs.map(x=>{
-    const xid=accountRecordUuid(x);
-    const text=presentAccountId(x.strategy)||presentAccountId(x.name)||xid;
-    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountDetailHref(xid))}">${esc(text)}</a>`;
+    const xid=legacyAccountKey(x);
+    const text=presentAccountId(x.strategy)||presentAccountId(x.name)||accountRecordUuid(x)||xid;
+    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountStepHref(x))}">${esc(text)}</a>`;
   }).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
-  if(!id){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
-  const d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
+  if(!id){ paintAccountEmpty(); return; }
+  let d;
+  try{ d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); }
+  catch(e){
+    if(e&&e.status===404){ paintAccountMissing(); return; }
+    paintAccountError(e);
+    return;
+  }
+  const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+label;
+  const runZh=(a&&a.run_state_zh)||(current&&current.run_state_zh)||"";
+  const run=document.getElementById("ac-run");
+  if(run){ run.hidden=!runZh; if(runZh) run.innerHTML='<span class="dot"></span>'+esc(runZh); }
+  const stateTag=document.getElementById("ac-state");
+  if(stateTag){ stateTag.hidden=!runZh; if(runZh) stateTag.textContent=runZh; }
   const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
   m.querySelector(".kv").innerHTML=[["现金",a.cash_usd,R.cash_usd],["持仓市值",a.positions_value_usd,R.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason||R.exposure_usd],["当日已实现",a.daily_realized_usd,R.daily_realized_usd],["浮动盈亏",a.unrealized_usd,R.unrealized_usd],["已实现盈亏",a.realized_usd,R.realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
@@ -602,10 +757,35 @@ async function renderAccount(){
     if(a.open_positions==null) posLab.innerHTML=nd(R.open_positions||"not_yet_aggregated");
     else posLab.textContent=a.open_positions+" 个市场"+(a.max_open_positions!=null?" / 上限 "+a.max_open_positions:"");
   }
+  const loss=$("#ac-loss");
+  if(loss) stripSkMarkup(loss);
   if(d.positions) rows($("#ac-pos"),'<tr><th>市场</th><th class="hm">方向</th><th class="r hm">股数</th><th class="r hm">均价 / 现价</th><th class="r">浮动</th></tr>',d.positions.map(p=>`<tr><td>${marketHtml(p.title, p)}</td><td class="hm">${esc(p.outcome||"—")}</td><td class="r num hm">${esc(formatShares(p.shares))}</td><td class="r num hm">${Math.round(p.avg_price*100)}¢ / ${p.last_mark==null?"—":Math.round(p.last_mark*100)+"¢"}</td><td class="r num ${cls(p.unrealized_usd)}">${M(p.unrealized_usd,x=>usd(x,true),(p.reasons&&p.reasons.unrealized_usd)||"not_yet_aggregated")}</td></tr>`).join(""));
+  else clearAccountSkeletonTables("#ac-pos");
+  const actLab=$("#ac-act .hd .lbl");
+  if(actLab) actLab.innerHTML="";
   if(d.activity) rows($("#ac-act"),'<tr><th class="hm">时间</th><th>市场</th><th class="hm">用途</th><th class="r">金额</th><th>结果</th></tr>',d.activity.map(activityRow).join(""));
-  else if($("#ac-act")){ const sec=$("#ac-act"); const hd=sec.querySelector(".hd"); sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>'; }
+  else if($("#ac-act")){
+    const sec=$("#ac-act");
+    const table=sec.querySelector("table");
+    if(table) table.innerHTML="";
+    const hd=sec.querySelector(".hd");
+    const lab=hd&&hd.querySelector&&hd.querySelector(".lbl");
+    if(lab) lab.innerHTML="";
+    sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>';
+  }
+  const params=$("#ac-params");
+  if(params) stripSkMarkup(params);
+  dropLiveSkeletons(document);
   paintHeartbeat([d, a, list]);
+}
+function clearAccountSkeletonTables(sel){
+  const root=$(sel);
+  if(!root) return;
+  const table=root.querySelector&&root.querySelector("table");
+  if(!table) return;
+  const html=String(table.innerHTML||"");
+  const head=html.match(/<tr>\s*<th[\s\S]*?<\/tr>/);
+  table.innerHTML=head?head[0]:"";
 }
 /* ---------- Leaders 在跟（注册表） ---------- */
 /* GET/POST/DELETE /v1/accounts/{id}/leaders。id 优先用当前账户 uuid（与账户详情/总览同一 id）。
@@ -1050,7 +1230,7 @@ async function renderStrategies(){
   rows($("#st-mine"),'<tr><th>名称</th><th class="hm">模板</th><th>状态</th><th class="r">操作</th></tr>',(d.strategies||[]).map(s=>`<tr><td><b>${esc(s.name)}</b> <span class="tag">模拟盘</span></td><td class="hm mu">${esc(s.template_id||"空白")}</td><td><span class="tag ${s.state==="running"?"live":"idle"}">${s.state==="running"?"运行中":"已暂停"}</span></td><td class="r"><a class="btn sm" href="#edit">修改参数</a></td></tr>`).join("")||`<tr><td colspan="4">${nd("no_strategies")}</td></tr>`);
 }
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
-window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,mirrorMarketName,formatShares,leaderIdentity,
+window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,mirrorMarketName,formatShares,leaderIdentity,renderAccount,
   accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
   heartbeatLabel,normalizeOverviewRange,overviewRangeEcho,sliceOverviewCurve,shareCardFromTotals,loadOverview,
   leadersReadPath,leadersWritePath,leadersRequestKey,leadersCurrentKey,renderLeaders,writeLeader,
@@ -1089,6 +1269,7 @@ function applyLeaderIdentity(detail){
   document.title=id.title;
   const h=document.querySelector(".top h1");
   if(h){
+    h.querySelectorAll(".sk").forEach(n=>n.remove());
     const av=h.querySelector(".av"); if(av) av.textContent=id.initials;
     [...h.childNodes].forEach(n=>{ if(n.nodeType===3) h.removeChild(n); });
     h.appendChild(document.createTextNode(id.heading));
@@ -1180,16 +1361,16 @@ function rowMarketTitle(row){
   const fromNested=nested&&textField(pick(nested,["question","title","name"]));
   if(fromNested) return presentMarketTitle(fromNested);
   const named=textField(pick(row,["question","title","name","market_title","event_title"]));
-  if(named) return presentMarketTitle(named);
-  if(textField(row.market)) return presentMarketTitle(textField(row.market));
+  if(named&&named!=="市场") return presentMarketTitle(named);
+  if(textField(row.market)&&textField(row.market)!=="市场") return presentMarketTitle(textField(row.market));
   const nestedSlug=nested&&textField(pick(nested,["slug","event_slug","eventSlug"]));
-  const slug=nestedSlug||textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row))||"";
+  const slug=nestedSlug||textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row, false))||"";
   return humanizeSlug(slug);
 }
 /* 接口有时把 slug 塞进 market 字符串。有空格或中文的当标题，纯连字符的读成句子。 */
 function presentMarketTitle(s){
   const t=String(s||"").trim();
-  if(!t||t==="[object Object]") return "";
+  if(!t||t==="[object Object]"||t==="市场") return "";
   if(/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(t)) return humanizeSlug(t);
   return t;
 }
@@ -1206,7 +1387,7 @@ function explicitTitle(row){
     textField(row.market)
   ];
   for(const c of candidates){
-    if(c&&!/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(c)) return c;
+    if(c&&c!=="市场"&&!/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(c)) return c;
   }
   return "";
 }
@@ -1404,7 +1585,7 @@ function leaderTradeBody(detail){
   }).join("");
 }
 const POS_HEAD='<tr><th>市场 · outcome</th><th class="r hm" title="current_size">股数</th><th class="r hm">均价 / 现价</th><th class="r" title="unrealized_pnl">他的浮动</th><th class="r">我方镜像持仓</th></tr>';
-function posKey(p){ const tok=tradeToken(p); if(tok) return "t:"+tok; return "n:"+(mirrorMarketName(p)||pick(p,["title","question","name"])||"")+"|"+tradeOutcome(p); }
+function posKey(p){ const tok=tradeToken(p); if(tok) return "t:"+tok; return "n:"+(mirrorMarketName(p, false)||pick(p,["title","question","name"])||"")+"|"+tradeOutcome(p); }
 function posSize(p){ return numOrNull(pick(p,["current_size","shares","size","qty"])); }
 function leaderPositionBody(detail){
   const d=detail&&typeof detail==="object"?detail:{};
