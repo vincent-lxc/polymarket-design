@@ -139,6 +139,84 @@ assert.match(html, /我方对他的累计盈亏/);
 assert.match(html, /他的交易 · 我方镜像/);
 assert.match(html, /他的当前持仓/);
 assert.match(html, /市场价格 · 买卖点/);
+const pc = html.slice(html.indexOf('id="pc"'), html.indexOf('id="pc"') + 2500);
+assert.match(pc, /\/v1\/markets\/\{token_id\}\/prices/);
+assert.doesNotMatch(pc, /待建/);
+assert.match(pc, /id="pc-sides"/);
+
+const cfbMarkets = PM.leaderMarkets({
+  trades: [
+    { token_id: "alb", condition_id: "cfb", outcome: "Alabama", side: "BUY", notional_usd: 80, t: 1700001800000 },
+    { token_id: "aub", condition_id: "cfb", outcome: "Auburn", side: "SELL", notional_usd: 20, t: 1700001900000 }
+  ],
+  markets: [{ condition_id: "cfb", slug: "alabama-auburn", question: "Alabama vs Auburn" }]
+});
+assert.equal(cfbMarkets[0].title, "Alabama vs Auburn");
+assert.notEqual(cfbMarkets[0].title, "未命名市场");
+assert.equal(PM.dominantSide(cfbMarkets[0]), "Alabama");
+assert.equal(PM.tokenFor(cfbMarkets[0], "Alabama"), "alb");
+assert.equal(PM.tokenFor(cfbMarkets[0], "Auburn"), "aub");
+
+const lateName = PM.leaderMarkets({
+  trades: [
+    { token_id: "y", condition_id: "c", outcome: "Yes", notional_usd: 5 },
+    { token_id: "n", condition_id: "c", outcome: "No", notional_usd: 1, question: "Fed 12 月降息？" }
+  ]
+});
+assert.equal(lateName[0].title, "Fed 12 月降息？");
+
+const sized = PM.leaderMarkets({
+  trades: [
+    { token_id: "alb", condition_id: "g", outcome: "Alabama", side: "BUY", usdcSize: 10 },
+    { token_id: "aub", condition_id: "g", outcome: "Auburn", side: "BUY", usdcSize: 90 }
+  ]
+});
+assert.equal(PM.dominantSide(sized[0]), "Auburn");
+assert.equal(PM.tokenFor(sized[0], "Auburn"), "aub");
+
+const unnamed = PM.leaderMarkets({
+  trades: [{ token_id: "z", outcome: "Yes", side: "BUY", notional_usd: 1 }]
+});
+assert.equal(unnamed[0].title, "未命名市场");
+
+for (const page of ["leader.html", "leader-5c1e.html", "leader-91d4.html", "leader-avalon.html", "leader-lunadegen.html"]) {
+  const pageHtml = fs.readFileSync(new URL("./" + page, import.meta.url), "utf8");
+  assert.doesNotMatch(pageHtml, /prices（待建）/);
+  assert.doesNotMatch(pageHtml, /校准中|Calibrating|ld-curve-label|data-cal="equity"/);
+}
+
+const curveAt = html.indexOf("他的累计盈亏（已实现+浮动）");
+assert.ok(curveAt > 0);
+const curve = html.slice(curveAt, html.indexOf('id="ld-pnl"'));
+assert.match(curve, /<svg/);
+assert.match(curve, /<polyline/);
+
+const lang = fs.readFileSync(new URL("./lang.js", import.meta.url), "utf8");
+assert.doesNotMatch(lang, /校准中|Calibrating/);
+assert.doesNotMatch(api, /校准中|Calibrating|ld-curve-label/);
+
+const cfbBook = PM.normalizePriceBook({
+  history: [{ t: 1700000000, p: 0.41 }, { t: 1700003600, p: 0.46 }],
+  leader_trades: [{ timestamp: 1700001800, side: "BUY", price: 0.44, outcome: "Alabama", usdcSize: 120 }],
+  our_fills: []
+});
+assert.equal(cfbBook.marks.length, 1);
+assert.equal(cfbBook.marks[0].who, "L");
+assert.equal(cfbBook.marks[0].side, "BUY");
+assert.equal(cfbBook.marks[0].outcome, "Alabama");
+assert.ok(cfbBook.marks.every((m) => m.who !== "M"));
+assert.equal(cfbBook.marks[0].notional, 120);
+
+const wrapped = PM.normalizePriceBook({
+  history: [{ t: 1700000000, p: 0.4 }, { t: 1700003600, p: 0.5 }],
+  leader_trades: { trades: [{ timestamp: 1700001800, side: "sell", price: 42, outcome: "Auburn" }] },
+  our_fills: null
+});
+assert.equal(wrapped.marks.length, 1);
+assert.equal(wrapped.marks[0].who, "L");
+assert.equal(wrapped.marks[0].side, "SELL");
+assert.equal(wrapped.marks[0].price, 0.42);
+assert.ok(wrapped.marks.every((m) => m.who !== "M"));
 
 const uuid = "6f1c0c3e-1b7a-4c2d-9a10-aabbccddeeff";
 assert.equal(PM.overviewInstanceHref({ id: uuid, strategy: "paper20000" }, []), "/account?id=" + uuid);

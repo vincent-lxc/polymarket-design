@@ -13,7 +13,8 @@ if(el.dataset.def==="No")M=M.map(function(m){return [m[0],m[1],m[2],m[3]==="Yes"
 var W=640,H=220,pad=24,lastBook=null;
 function y(p,mn,mx){return H-pad-(p-mn)/(mx-mn||1)*(H-2*pad)}
 function sizeSvg(){var sv=el.querySelector("svg");W=Math.max(280,Math.round((sv.getBoundingClientRect&&sv.getBoundingClientRect().width)||0)||640);H=innerWidth<900?240:220;sv.setAttribute("viewBox","0 0 "+W+" "+H);sv.setAttribute("height",H);return sv}
-function sync(){var kn=el.querySelector(".kn");if(kn)kn.style.display="none";el.querySelectorAll("[data-k]").forEach(function(b){var k=b.dataset.k.split(":");if(k[0]==="mkt"){b.classList.toggle("on",String(st.mkt||"0")===k[1]);return}b.classList.toggle("on",st[k[0]]===k[1])})}
+function dk(raw){var p=String(raw||"").split(":");return {key:p[0],value:p.slice(1).join(":")}}
+function sync(){var kn=el.querySelector(".kn");if(kn)kn.style.display="none";el.querySelectorAll("[data-k]").forEach(function(b){var k=dk(b.dataset.k);if(k.key==="mkt"){b.classList.toggle("on",String(st.mkt||"0")===k.value);return}b.classList.toggle("on",st[k.key]===k.value)})}
 function grid(sv,mn,mx){var s="";for(var g=0;g<=4;g++){var v=mn+(mx-mn)*g/4,yy=y(v,mn,mx);s+='<line x1="0" x2="'+W+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" stroke="#1f1f24"/><text x="'+(W-2)+'" y="'+(yy-3).toFixed(1)+'" fill="#6b6b73" font-size="11" text-anchor="end">'+Math.round(v*100)+'¢</text>'}return s}
 function drawEmpty(){var sv=sizeSvg();sv.innerHTML=grid(sv,.2,.8);sv.dataset.series=JSON.stringify({kind:"price",label:st.side+" 价格",t0:Date.now(),dt:0,v:[]});sync()}
 function mockMarks(n){return M.filter(function(m){return m[3]===st.side&&!(m[1]==="M"&&el.dataset.mirror==="0")}).map(function(m){var i=Math.round(m[0]*(n-1));return {i:i,who:m[1],side:m[2],outcome:m[3],notional:m[1]==="L"?1854:969}})}
@@ -28,13 +29,13 @@ function usdTip(n){if(n==null||!isFinite(Number(n)))return "";var v=Math.abs(Num
 function markSvg(x,yy,m,price,t){var pr=Math.round((m.price!=null?m.price:price)*100)+"¢",money=usdTip(m.notional),tip=(m.who==="L"?"<b>他"+(m.side==="SELL"?"卖出":"买入")+" "+esc(m.outcome||st.side)+"</b>":"<b>我方镜像 "+(m.side==="SELL"?"卖出":"买入")+" "+esc(m.outcome||st.side)+"</b>")+"<span>"+pr+(money?" · "+money:"")+"</span><span>"+bj(t)+"</span>";
  if(m.who==="L"){var up=m.side!=="SELL";return '<path data-tip=\''+tip+'\' d="M'+x.toFixed(1)+' '+(up?yy+14:yy-14).toFixed(1)+' l-6 '+(up?8:-8)+' h12z" fill="'+(up?"#2fd47a":"#ff5a5f")+'"/>'}
  return '<circle data-tip=\''+tip+'\' cx="'+x.toFixed(1)+'" cy="'+yy.toFixed(1)+'" r="5" fill="none" stroke="#FF6A1F" stroke-width="2"/>'}
-function outcomeOk(m){if(!m.outcome)return true;return String(m.outcome).toLowerCase()===String(st.side||"").toLowerCase()}
 function paint(book){lastBook=book||{history:[],ohlc:[],marks:[]};var hist=(book.history||[]).slice(),bars=(book.ohlc||[]).slice(),sampled=false;
  if(st.mode==="line"&&hist.length<2&&bars.length){hist=bars.map(function(b){return {t:b.t,p:b.c}})}
  if(st.mode==="k"&&bars.length<1&&hist.length){sampled=true;var size=Math.max(1,Math.ceil(hist.length/24)),built=[];for(var i=0;i<hist.length;i+=size){var c=hist.slice(i,i+size),ps=c.map(function(x){return x.p});built.push({t:c[0].t,o:ps[0],h:Math.max.apply(0,ps),l:Math.min.apply(0,ps),c:ps[ps.length-1]})}bars=built}
  var pts=st.mode==="k"?bars.map(function(b){return b.c}):hist.map(function(p){return p.p});
  if(pts.length<1){drawEmpty();return}
- var marks=(book.marks||[]).filter(function(m){return outcomeOk(m)&&(m.who!=="M"||el.dataset.mirror!=="0")});
+ /* 这本价格账已经按 token 取过。outcome 写成队名时不能再按 Yes/No 丢掉，否则有 leader_trades 也画不出三角。窗口外的点贴到最近的价格点上，不整笔丢弃。 */
+ var marks=(book.marks||[]).filter(function(m){return m&&m.t!=null&&(m.who!=="M"||el.dataset.mirror!=="0")});
  var prices=pts.concat(marks.map(function(m){return m.price}).filter(function(p){return p!=null&&isFinite(p)}));
  var mn=Math.min.apply(0,prices)-.02,mx=Math.max.apply(0,prices)+.02;if(!(mx>mn)){mn-=.02;mx+=.02}
  var sv=sizeSvg(),s=grid(sv,mn,mx),t0,t1,dt=0;
@@ -48,8 +49,8 @@ function paint(book){lastBook=book||{history:[],ohlc:[],marks:[]};var hist=(book
   sv.dataset.series=JSON.stringify({kind:"price",label:st.side+" 价格",t0:t0,dt:dt,v:bars.map(function(b){return b.c})});
  }
  sv.innerHTML=s;var kn=el.querySelector(".kn");if(kn)kn.style.display=st.mode==="k"&&sampled?"":"none";sync();if(window.hvInit)hvInit(el)}
-el.addEventListener("click",function(e){var b=e.target.closest("[data-k]");if(!b||!el.contains(b))return;var k=b.dataset.k.split(":");st[k[0]]=k[1];sync();
- if(st.live){el.dispatchEvent(new CustomEvent("pm:pc",{detail:{key:k[0],value:k[1]}}));return}
+el.addEventListener("click",function(e){var b=e.target.closest("[data-k]");if(!b||!el.contains(b))return;var k=dk(b.dataset.k);st[k.key]=k.value;sync();
+ if(st.live){el.dispatchEvent(new CustomEvent("pm:pc",{detail:{key:k.key,value:k.value}}));return}
  var sv=el.querySelector("svg");sv.style.animation="none";sv.offsetWidth;sv.style.animation="";drawMock()});
 window.PMChart={
  setLive:function(on){st.live=!!on},
