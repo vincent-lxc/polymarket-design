@@ -420,3 +420,6 @@ body[data-page="leader"] .app{min-width:0;max-width:100%}
  body[data-page="leader"] #ld-pnl td,
  body[data-page="leader"] #ld-pnl th{white-space:nowrap!important}
 }
+@media(max-width:480px){
+ body[data-page="leader"] .pc-pill{flex:1 1 auto;max-width:none;min-width:0}
+}

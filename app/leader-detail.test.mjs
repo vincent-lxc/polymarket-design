@@ -173,6 +173,8 @@ assert.doesNotMatch(pc, /待建/);
 assert.doesNotMatch(html, /待新增只读接口|暂未汇总|未命名市场|需后端按市场汇总|待后端计算/);
 const css = fs.readFileSync(new URL("./app.css", import.meta.url), "utf8");
 assert.match(css, /body\[data-page="leader"\] #pc \.pchart\{height:240px;min-height:200px\}/);
+assert.match(css, /@media\(max-width:480px\)\{[\s\S]*\.pc-pill\{flex:1 1 auto;max-width:none/);
+assert.match(api, /显示更多/);
 assert.match(css, /#ld-trades table,\n body\[data-page="leader"\] #ld-pos table/);
 assert.match(css, /\.inflow\{position:static/);
 assert.match(pc, /id="pc-sides"/);
@@ -291,6 +293,49 @@ const bigHtml = PM.marketSwitcherHtml(big, 0);
 assert.equal((bigHtml.match(/class="pc-pill/g) || []).length, 4);
 assert.equal((bigHtml.match(/data-k="mkt:/g) || []).length, 4);
 assert.equal(bigHtml.includes("question 200"), false);
+const narrowPlan = PM.marketSwitcherPlan(many, 2, 1);
+assert.equal(narrowPlan.inline.length, 1);
+assert.equal(narrowPlan.inline[0].i, 2);
+assert.equal(narrowPlan.moreCount, many.length - 1);
+const narrowHtml = PM.marketSwitcherHtml(many, 2, 1);
+const narrowZone = narrowHtml.split('id="pc-pop"')[0];
+assert.equal((narrowZone.match(/class="pc-pill/g) || []).length, 1);
+assert.match(narrowZone, /data-k="mkt:2"/);
+assert.match(narrowHtml, new RegExp("更多 " + (many.length - 1)));
+const pagedTrades = PM.leaderTradeBody({
+  trades: Array.from({ length: 45 }, (_, i) => ({
+    id: "r" + i,
+    token_id: "tok" + i,
+    question: "Market " + i,
+    outcome: "Yes",
+    side: "BUY",
+    notional_usd: 10,
+    price: 0.4,
+    t: 1700000000000 + i * 1000
+  }))
+});
+assert.equal((pagedTrades.match(/<tr/g) || []).length, 45);
+assert.equal((pagedTrades.match(/class="more"/g) || []).length, 25);
+assert.match(pagedTrades, /显示更多|class="more"/);
+const step = PM.leaderRevealCount(45, 20);
+assert.equal(step.shown, 40);
+assert.equal(step.more, true);
+const done = PM.leaderRevealCount(45, 40);
+assert.equal(done.shown, 45);
+assert.equal(done.more, false);
+const pagedPos = PM.leaderPositionBody({
+  open_positions: Array.from({ length: 25 }, (_, i) => ({
+    token_id: "p" + i,
+    question: "Pos " + i,
+    outcome: "Yes",
+    current_size: 1,
+    avg_price: 0.4,
+    last_mark: 0.41,
+    unrealized_pnl: 1
+  }))
+});
+assert.equal((pagedPos.match(/<tr/g) || []).length, 25);
+assert.equal((pagedPos.match(/class="more"/g) || []).length, 5);
 
 for (const page of ["leader.html", "leader-5c1e.html", "leader-91d4.html", "leader-avalon.html", "leader-lunadegen.html"]) {
   const pageHtml = fs.readFileSync(new URL("./" + page, import.meta.url), "utf8");

@@ -151,4 +151,69 @@ assert.equal(paths.length, 2);
 assert.match(dense.svg.innerHTML, /data-count="30"/);
 assert.match(dense.svg.innerHTML, /同柱 30 笔/);
 
+function pathXs(html) {
+  return [...html.matchAll(/<(?:path|circle)[^>]*(?:d="M|cx=")([\d.]+)/g)].map((m) => Number(m[1]));
+}
+function countBoxes(html) {
+  return [...html.matchAll(/<text data-count="(\d+)" x="([\d.]+)" y="([\d.]+)"/g)].map((m) => {
+    const w = Math.max(12, m[1].length * 6.4);
+    const x = Number(m[2]);
+    const y = Number(m[3]);
+    return { x: x - w / 2, y: y - 10, w, h: 12 };
+  });
+}
+function overlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+const wide = [];
+for (let i = 0; i < 96; i++) wide.push({ t: 1700000000000 + i * 900000, p: 0.45 });
+const near = loadChart("?addr=0xabc", "1");
+const nearMarks = [];
+for (let i = 0; i < 10; i++) nearMarks.push({ t: wide[10].t, who: "L", side: "BUY", outcome: "Near", price: 0.45, notional: 1 });
+for (let i = 0; i < 19; i++) nearMarks.push({ t: wide[12].t, who: "L", side: "BUY", outcome: "Near", price: 0.46, notional: 1 });
+for (let i = 0; i < 4; i++) nearMarks.push({ t: wide[40].t, who: "L", side: "BUY", outcome: "Far", price: 0.5, notional: 1 });
+near.chart.paint({ history: wide, marks: nearMarks });
+assert.equal((near.svg.innerHTML.match(/<path /g) || []).length, 2);
+assert.match(near.svg.innerHTML, /data-count="29"/);
+assert.match(near.svg.innerHTML, /data-count="4"/);
+assert.ok(Math.max(...pathXs(near.svg.innerHTML)) <= 640 - 48);
+
+const edge = loadChart("?addr=0xabc", "1");
+edge.chart.paint({
+  history: wide,
+  marks: [{ t: wide[95].t, who: "L", side: "BUY", outcome: "Edge", price: 0.96, notional: 3 }]
+});
+const edgeX = Math.max(...pathXs(edge.svg.innerHTML));
+assert.ok(edgeX <= 640 - 48);
+assert.ok(edgeX + 6 < 640 - 18);
+
+const bars = [];
+for (let i = 0; i < 80; i++) bars.push({ t: 1700000000000 + i * 60000, o: 0.4, h: 0.55, l: 0.35, c: 0.42 });
+const kNear = loadChart("?addr=0xabc", "1");
+kNear.chart.set({ mode: "k" });
+const kMarks = [];
+for (let i = 0; i < 9; i++) kMarks.push({ t: bars[10].t, who: "L", side: "BUY", outcome: "K", price: 0.42, notional: 1 });
+for (let i = 0; i < 33; i++) kMarks.push({ t: bars[11].t, who: "L", side: "BUY", outcome: "K", price: 0.43, notional: 1 });
+kMarks.push({ t: bars[79].t, who: "L", side: "SELL", outcome: "End", price: 0.4, notional: 2 });
+kNear.chart.paint({ history: [], ohlc: bars, marks: kMarks });
+assert.match(kNear.svg.innerHTML, /data-count="42"/);
+assert.ok(Math.max(...pathXs(kNear.svg.innerHTML)) <= 640 - 48);
+
+const stacked = loadChart("?addr=0xabc", "1");
+stacked.chart.paint({
+  history: wide,
+  marks: [
+    { t: wide[20].t, who: "L", side: "BUY", outcome: "L", price: 0.5, notional: 1 },
+    { t: wide[20].t, who: "L", side: "BUY", outcome: "L", price: 0.5, notional: 1 },
+    { t: wide[20].t, who: "M", side: "BUY", outcome: "M", price: 0.5, notional: 1 },
+    { t: wide[20].t, who: "M", side: "BUY", outcome: "M", price: 0.5, notional: 1 }
+  ]
+});
+const boxes = countBoxes(stacked.svg.innerHTML);
+for (let i = 0; i < boxes.length; i++) {
+  for (let j = i + 1; j < boxes.length; j++) assert.equal(overlap(boxes[i], boxes[j]), false);
+}
+assert.match(stacked.svg.innerHTML, /<circle /);
+
 console.log("chart-marks tests ok");
