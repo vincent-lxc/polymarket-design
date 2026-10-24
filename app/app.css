@@ -314,6 +314,12 @@ body.wrail-open{overflow:hidden}
  .rail.open{transform:translateY(0);opacity:1;pointer-events:auto}
  .rail>.rc:not(.note){display:none}
 }
+/* Leader 详情要留下 visual-v4 侧栏。其它页实时模式仍藏未汇总的示例栏。 */
+body[data-page="leader"] .rail > .rc:not(.note){display:block}
+@media(max-width:900px){
+ body[data-page="leader"] .rail{position:static;transform:none;opacity:1;pointer-events:auto;height:auto;max-height:none;border-radius:0;box-shadow:none;background:transparent;border-top:0;padding:0 14px 28px}
+ body[data-page="leader"] .rail > .rc:not(.note){display:block}
+}
 a.mkt{color:inherit}
 a.mkt:hover{color:var(--or)}
 a.mkt .ext{display:inline-block;width:12px;height:12px;margin-left:4px;vertical-align:-2px;color:var(--or)}
