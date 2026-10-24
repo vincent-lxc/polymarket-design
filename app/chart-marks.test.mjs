@@ -152,7 +152,7 @@ assert.match(dense.svg.innerHTML, /data-count="30"/);
 assert.match(dense.svg.innerHTML, /同柱 30 笔/);
 
 function pathXs(html) {
-  return [...html.matchAll(/<(?:path|circle)[^>]*(?:d="M|cx=")([\d.]+)/g)].map((m) => Number(m[1]));
+  return [...html.matchAll(/d="M([\d.]+)|cx="([\d.]+)"/g)].map((m) => Number(m[1] || m[2]));
 }
 function countBoxes(html) {
   return [...html.matchAll(/<text data-count="(\d+)" x="([\d.]+)" y="([\d.]+)"/g)].map((m) => {
@@ -215,5 +215,103 @@ for (let i = 0; i < boxes.length; i++) {
   for (let j = i + 1; j < boxes.length; j++) assert.equal(overlap(boxes[i], boxes[j]), false);
 }
 assert.match(stacked.svg.innerHTML, /<circle /);
+
+function inflate(b, p) {
+  return { x: b.x - p, y: b.y - p, w: b.w + p * 2, h: b.h + p * 2 };
+}
+function glyphsAndLabels(html) {
+  const glyphs = [];
+  for (const m of html.matchAll(/d="M([\d.]+) ([\d.]+) l-6 (-?[\d.]+)/g)) {
+    const x = Number(m[1]);
+    const tip = Number(m[2]);
+    const dy = Number(m[3]);
+    if (dy < 0) glyphs.push({ kind: "sell", x: x - 6, y: tip + dy, w: 12, h: -dy, cx: x });
+    else glyphs.push({ kind: "buy", x: x - 6, y: tip, w: 12, h: dy, cx: x });
+  }
+  for (const m of html.matchAll(/cx="([\d.]+)" cy="([\d.]+)"/g)) {
+    const x = Number(m[1]);
+    const y = Number(m[2]);
+    glyphs.push({ kind: "fill", x: x - 6, y: y - 6, w: 12, h: 12, cx: x, cy: y });
+  }
+  const labels = [...html.matchAll(/<text data-count="(\d+)" x="([\d.]+)" y="([\d.]+)"/g)].map((m) => {
+    const w = Math.max(12, m[1].length * 6.4);
+    const x = Number(m[2]);
+    const y = Number(m[3]);
+    return { n: m[1], x: x - w / 2, y: y - 10, w, h: 12, cx: x };
+  });
+  return { glyphs, labels };
+}
+function assertLabelsClearGlyphs(html) {
+  const { glyphs, labels } = glyphsAndLabels(html);
+  for (const label of labels) {
+    for (const g of glyphs) {
+      assert.equal(overlap(label, inflate(g, 3)), false, `count ${label.n} intersects ${g.kind}`);
+    }
+  }
+}
+
+const gapHist = [];
+for (let i = 0; i < 40; i++) gapHist.push({ t: 1700000000000 + i * 900000, p: 0.5 });
+
+const sellGap = loadChart("?addr=0xabc", "1");
+const sellMarks = [];
+for (let i = 0; i < 14; i++) sellMarks.push({ t: gapHist[20].t, who: "L", side: "SELL", outcome: "Sell", price: 0.5, notional: 1 });
+sellGap.chart.paint({ history: gapHist, marks: sellMarks });
+const sellBits = glyphsAndLabels(sellGap.svg.innerHTML);
+assert.equal(sellBits.labels.length, 1);
+assert.equal(sellBits.glyphs[0].kind, "sell");
+assert.equal(sellBits.labels[0].n, "14");
+assert.ok(sellBits.labels[0].y + sellBits.labels[0].h <= sellBits.glyphs[0].y - 3 + 0.15);
+assert.ok(Math.abs(sellBits.labels[0].cx - sellBits.glyphs[0].cx) < 1);
+assertLabelsClearGlyphs(sellGap.svg.innerHTML);
+
+const buyGap = loadChart("?addr=0xabc", "1");
+buyGap.chart.paint({
+  history: gapHist,
+  marks: [
+    { t: gapHist[20].t, who: "L", side: "BUY", outcome: "Buy", price: 0.5, notional: 1 },
+    { t: gapHist[20].t, who: "L", side: "BUY", outcome: "Buy", price: 0.5, notional: 1 }
+  ]
+});
+const buyBits = glyphsAndLabels(buyGap.svg.innerHTML);
+assert.equal(buyBits.labels.length, 1);
+assert.equal(buyBits.glyphs[0].kind, "buy");
+assert.equal(buyBits.labels[0].n, "2");
+assert.ok(buyBits.labels[0].y >= buyBits.glyphs[0].y + buyBits.glyphs[0].h + 3 - 0.15);
+assert.ok(Math.abs(buyBits.labels[0].cx - buyBits.glyphs[0].cx) < 1);
+assertLabelsClearGlyphs(buyGap.svg.innerHTML);
+
+const fillGap = loadChart("?addr=0xabc", "1");
+fillGap.chart.paint({
+  history: gapHist,
+  marks: [
+    { t: gapHist[20].t, who: "M", side: "BUY", outcome: "Fill", price: 0.5, notional: 1 },
+    { t: gapHist[20].t, who: "M", side: "BUY", outcome: "Fill", price: 0.5, notional: 1 }
+  ]
+});
+const fillBits = glyphsAndLabels(fillGap.svg.innerHTML);
+assert.equal(fillBits.labels.length, 1);
+assert.equal(fillBits.glyphs[0].kind, "fill");
+assert.ok(fillBits.labels[0].x >= fillBits.glyphs[0].x + fillBits.glyphs[0].w + 3 - 0.15);
+assertLabelsClearGlyphs(fillGap.svg.innerHTML);
+
+const low = [];
+for (let i = 0; i < 20; i++) low.push({ t: 1700000000000 + i * 900000, p: i === 0 ? 0.05 : 0.95 });
+const droppedCount = loadChart("?addr=0xabc", "1");
+droppedCount.chart.paint({
+  history: low,
+  marks: [
+    { t: low[0].t, who: "L", side: "BUY", outcome: "Low", price: 0.05, notional: 1 },
+    { t: low[0].t, who: "L", side: "BUY", outcome: "Low", price: 0.05, notional: 1 }
+  ]
+});
+assert.match(droppedCount.svg.innerHTML, /<path[^>]*data-count="2"/);
+assert.doesNotMatch(droppedCount.svg.innerHTML, /<text data-count/);
+assert.equal(glyphsAndLabels(droppedCount.svg.innerHTML).labels.length, 0);
+
+assertLabelsClearGlyphs(near.svg.innerHTML);
+assertLabelsClearGlyphs(dense.svg.innerHTML);
+assertLabelsClearGlyphs(kNear.svg.innerHTML);
+assertLabelsClearGlyphs(stacked.svg.innerHTML);
 
 console.log("chart-marks tests ok");

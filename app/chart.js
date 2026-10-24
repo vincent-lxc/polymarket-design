@@ -58,18 +58,31 @@ function clusterMarks(series, marks, xAt, priceAt, mn, mx){
   if(m.t!=null&&(g.m.t==null||m.t>=g.m.t)){g.m.t=m.t;if(m.outcome)g.m.outcome=m.outcome;if(m.price!=null){g.m.price=m.price;g.px=m.price}}
  });
  var merged=pixelMerge(order);
- var taken=tickBoxes(mn,mx);
+ var glyphs=[];
  merged.forEach(function(g){
   g.x=Math.max(plotL+6, Math.min(W-plotR, g.x));
-  var yy=y(g.px,mn,mx);
-  var label=g.m.count>1?placeCount(g.x, yy, g.m.count, g.m.side!=="SELL", taken):null;
-  s+=markSvg(g.x, yy, g.m, g.px, g.m.t, label);
+  g.yy=y(g.px,mn,mx);
+  glyphs.push(glyphBox(g.m.who, g.m.side, g.x, g.yy));
+ });
+ var taken=tickBoxes(mn,mx);
+ merged.forEach(function(g){
+  var label=g.m.count>1?placeCount(g, glyphs, taken):null;
+  s+=markSvg(g.x, g.yy, g.m, g.px, g.m.t, label);
  });
  return s;
 }
 function markKind(m){return (m.who||"")+"|"+(m.side==="SELL"?"S":"B")}
 function boxHits(a,b){return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y}
 function textBox(x,yy,text){var w=Math.max(12,String(text).length*6.4);return {x:x-w/2,y:yy-10,w:w,h:12}}
+function inflate(b,p){return {x:b.x-p,y:b.y-p,w:b.w+p*2,h:b.h+p*2}}
+/* 买入三角尖在上、底在下；卖出相反。圆的描边算进外沿。 */
+function glyphBox(who, side, x, yy){
+ if(who==="L"){
+  if(side==="SELL") return {x:x-6,y:yy-22,w:12,h:8};
+  return {x:x-6,y:yy+14,w:12,h:8};
+ }
+ return {x:x-6,y:yy-6,w:12,h:12};
+}
 function tickBoxes(mn,mx){
  var boxes=[],g,v,yy,label,w;
  for(g=0;g<=4;g++){
@@ -78,16 +91,34 @@ function tickBoxes(mn,mx){
  }
  return boxes;
 }
-function placeCount(x,yy,n,down,taken){
- var text=String(n), shifts=down?[18,-16,30,-28,42,-40,54]:[-16,18,-28,30,-40,42,-52], dxs=[0,-16,16,-26,26], s,d,lx,ly,box,i,ok;
- for(s=0;s<shifts.length;s++){
-  for(d=0;d<dxs.length;d++){
-   lx=x+dxs[d]; ly=yy+shifts[s]; box=textBox(lx,ly,text);
-   if(box.x<2||box.x+box.w>W-plotR+8||box.y<2||box.y+box.h>H-2) continue;
-   ok=true;
-   for(i=0;i<taken.length;i++){ if(boxHits(box,taken[i])){ ok=false; break; } }
-   if(ok){ taken.push(box); return {x:lx,y:ly}; }
+/* 卖出数字在三角上方，买入在下方，我方圆点在右侧。和任何标记外沿都留出至少 3px，放不下就不画数字。 */
+function placeCount(g, glyphs, taken){
+ var text=String(g.m.count), own=glyphBox(g.m.who, g.m.side, g.x, g.yy), gap=3;
+ var boxW=Math.max(12, text.length*6.4), cands=[], k, dxs=[0,-8,8,-14,14], dxi;
+ if(g.m.who!=="L"){
+  var left=own.x+own.w+gap;
+  for(k=0;k<=4;k++){
+   var lx=left+boxW/2+k*8;
+   cands.push([lx, g.yy+4],[lx, g.yy-4],[lx, g.yy+12]);
   }
+ }else if(g.m.side==="SELL"){
+  var base=(own.y-gap)-2;
+  for(k=0;k<=5;k++) for(dxi=0;dxi<dxs.length;dxi++) cands.push([g.x+dxs[dxi], base-k*6]);
+ }else{
+  var base2=(own.y+own.h+gap)+10;
+  for(k=0;k<=5;k++) for(dxi=0;dxi<dxs.length;dxi++) cands.push([g.x+dxs[dxi], base2+k*6]);
+ }
+ var i,b,j,ok;
+ for(i=0;i<cands.length;i++){
+  b=textBox(cands[i][0], cands[i][1], text);
+  if(b.x<2||b.x+b.w>W-2||b.y<2||b.y+b.h>H-2) continue;
+  ok=true;
+  for(j=0;j<glyphs.length;j++){ if(boxHits(b, inflate(glyphs[j], gap))){ ok=false; break; } }
+  if(!ok) continue;
+  for(j=0;j<taken.length;j++){ if(boxHits(b, taken[j])){ ok=false; break; } }
+  if(!ok) continue;
+  taken.push(b);
+  return {x:cands[i][0], y:cands[i][1]};
  }
  return null;
 }
