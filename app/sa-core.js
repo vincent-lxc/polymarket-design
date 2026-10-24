@@ -68,6 +68,81 @@
     return base;
   }
 
+  /* GET /v1/accounts 的 summary.mode：本仓库契约（mock 与页头）只有 "wallet" 与 "paper"。
+     缺 mode 时页头本来就显示「模拟盘」，不当成钱包。
+     钱包可用资金只认 summary.wallet_available_usd；错误详情里的 available_usd 作同一口径的别名。
+     两个都没有、或不是有限数字，就视为拿不到可用资金。 */
+  function isWalletBook(summary) {
+    return !!(summary && summary.mode === "wallet");
+  }
+
+  function walletAvailableUsd(source) {
+    if (!source || typeof source !== "object") return null;
+    var keys = ["wallet_available_usd", "available_usd"];
+    for (var i = 0; i < keys.length; i++) {
+      if (!Object.prototype.hasOwnProperty.call(source, keys[i])) continue;
+      var raw = source[keys[i]];
+      if (raw == null || raw === "") return null;
+      var n = Number(raw);
+      return isFinite(n) ? n : null;
+    }
+    return null;
+  }
+
+  /* 页头：只有钱包口径且接口标了 over_allocated 才出「超额」。模拟盘、缺 mode 都不出。 */
+  function summaryOverWarning(summary) {
+    summary = summary || {};
+    if (!isWalletBook(summary) || summary.over_allocated !== true) return "";
+    var parts = ["超额提示。分配总额超过钱包可用余额。"];
+    if (summary.allocated_usd != null && isFinite(Number(summary.allocated_usd))) {
+      parts.push("已分配 " + money(summary.allocated_usd) + "。");
+    }
+    var avail = walletAvailableUsd(summary);
+    if (avail != null) parts.push("可用 " + money(avail) + "。");
+    return parts.join("");
+  }
+
+  /* 新建 / 调资：模拟盘一律不提示。钱包只有拿到可用资金、且本次占用超过它才提示。
+     previous_usd 有值时比的是增量（调资）；没有则比整笔（新建）。不使用写死额度。 */
+  function allocationWarning(input) {
+    input = input || {};
+    var type = input.account_type || input.mode || "";
+    if (type !== "wallet") return "";
+    var available = walletAvailableUsd(input);
+    if (available == null && input.summary) available = walletAvailableUsd(input.summary);
+    if (available == null) return "";
+    var requested = Number(input.requested_usd);
+    if (!isFinite(requested)) return "";
+    var need = requested;
+    if (input.previous_usd != null && input.previous_usd !== "") {
+      var prev = Number(input.previous_usd);
+      if (!isFinite(prev)) return "";
+      need = requested - prev;
+    }
+    if (!(need > available)) return "";
+    return "超额提示。这次分配超过钱包可用余额。可用 " + money(available) + "。";
+  }
+
+  /* 新建、复制、改资金、启动：丢掉 paper_over_allocated，其它 code 仍交给 warningText。 */
+  function warningLines(warnings) {
+    var lines = [];
+    (warnings || []).forEach(function (w) {
+      if (!w || w.code === "paper_over_allocated") return;
+      var text = warningText(w.code, w);
+      if (text) lines.push(text);
+    });
+    return lines;
+  }
+
+  /* 页头超额文案加上接口 warnings 过滤后的句子，给测试和页头共用。 */
+  function allocationNoticeText(summary, warnings) {
+    var parts = [];
+    var head = summaryOverWarning(summary);
+    if (head) parts.push(head);
+    warningLines(warnings).forEach(function (line) { parts.push(line); });
+    return parts.join("\n");
+  }
+
   function joinNums(parts) {
     return parts.filter(Boolean).join("，");
   }
@@ -1628,6 +1703,12 @@
     ACCENT: ACCENT,
     errorText: errorText,
     warningText: warningText,
+    isWalletBook: isWalletBook,
+    walletAvailableUsd: walletAvailableUsd,
+    summaryOverWarning: summaryOverWarning,
+    allocationWarning: allocationWarning,
+    warningLines: warningLines,
+    allocationNoticeText: allocationNoticeText,
     isStrategyCatalog: isStrategyCatalog,
     accountListRows: accountListRows,
     normalizeAccountPage: normalizeAccountPage,

@@ -28,6 +28,34 @@ assert.match(SA.errorText("insufficient_wallet_balance", { available_usd: 100, r
 assert.match(SA.errorText("params_locked"), /先停止/);
 assert.match(SA.warningText("paper_over_allocated", { allocated_usd: 80000, limit_usd: 60000 }), /不会拦截/);
 
+const paperOver = { mode: "paper", over_allocated: true, allocated_usd: 80000, paper_limit_usd: 60000, wallet_available_usd: null };
+const paperPage = SA.allocationNoticeText(paperOver, [
+  { code: "paper_over_allocated", allocated_usd: 80000, limit_usd: 60000 },
+  { code: "engine_delay" }
+]);
+assert.equal(/超额/.test(paperPage), false);
+assert.equal(/超过参考额度/.test(paperPage), false);
+assert.match(paperPage, /engine_delay/);
+assert.equal(SA.warningLines([{ code: "paper_over_allocated", allocated_usd: 90000, limit_usd: 60000 }]).join("|"), "");
+assert.equal(SA.warningLines([{ code: "paper_over_allocated" }, { code: "rpc_slow" }]).join("|"), "rpc_slow");
+assert.equal(SA.summaryOverWarning(paperOver), "");
+assert.equal(SA.summaryOverWarning({ over_allocated: true, allocated_usd: 1 }), "");
+assert.match(SA.summaryOverWarning({ mode: "wallet", over_allocated: true, allocated_usd: 50, wallet_available_usd: 10 }), /超额/);
+assert.equal(/超过参考额度/.test(SA.summaryOverWarning({ mode: "wallet", over_allocated: true, wallet_available_usd: 10 })), false);
+assert.equal(SA.summaryOverWarning({ mode: "wallet", over_allocated: false, wallet_available_usd: 1 }), "");
+assert.equal(SA.allocationWarning({ account_type: "paper", requested_usd: 999999, wallet_available_usd: 1 }), "");
+assert.equal(SA.allocationWarning({ mode: "paper", requested_usd: 999999 }), "");
+assert.equal(SA.allocationWarning({ account_type: "wallet", requested_usd: 80 }), "");
+assert.equal(SA.allocationWarning({ account_type: "wallet", requested_usd: 40, wallet_available_usd: 100 }), "");
+assert.match(SA.allocationWarning({ account_type: "wallet", requested_usd: 80, wallet_available_usd: 10 }), /超额/);
+assert.equal(SA.allocationWarning({ account_type: "wallet", requested_usd: 80, previous_usd: 70, wallet_available_usd: 20 }), "");
+assert.match(SA.allocationWarning({ account_type: "wallet", requested_usd: 80, previous_usd: 50, wallet_available_usd: 20 }), /超额/);
+const saSrc = fs.readFileSync(new URL("./sa.js", import.meta.url), "utf8");
+assert.equal(/60000|50000/.test(saSrc), false);
+assert.equal(saSrc.includes("paper_over_allocated"), false);
+assert.match(saSrc, /SA\.warningLines\(/);
+assert.match(saSrc, /SA\.summaryOverWarning\(/);
+
 assert.equal(SA.isStrategyCatalog({ items: [{ strategy_id: "copy" }], next_cursor: null, total: 1 }), true);
 assert.equal(SA.isStrategyCatalog({ strategies: [{ name: "paper" }] }), false);
 assert.equal(SA.isAccountListV2({ accounts: [{ strategy: "paper20000" }] }), false);

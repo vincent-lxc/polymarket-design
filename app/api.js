@@ -570,17 +570,46 @@ async function renderOverview(d, still){
 }
 
 /* ---------- 账户 / Leaders / 健康 / 配置 / 策略 ---------- */
+function blankAccountShell(){
+  const h=document.querySelector(".top h1");
+  if(h) h.innerHTML='账户 <i class="sk m" aria-hidden="true"></i>';
+  const steps=document.querySelector(".steps");
+  if(steps) steps.innerHTML='<i class="sk m"></i>';
+  const big=document.querySelector("#ac-main .big");
+  if(big) big.innerHTML='<i class="sk xl"></i>';
+  const sub=document.querySelector("#ac-main .sub");
+  if(sub) sub.innerHTML='<i class="sk l"></i>';
+  const kv=document.querySelector("#ac-main .kv");
+  if(kv) kv.innerHTML='<div><i class="sk"></i></div>';
+  ["#ac-pos","#ac-act"].forEach(sel=>{
+    const t=$(sel+" table");
+    if(t) t.innerHTML='<tr><td><i class="sk l"></i></td><td><i class="sk"></i></td></tr>';
+  });
+}
+function paintAccountMissing(){
+  const h=document.querySelector(".top h1");
+  if(h) h.textContent="账户";
+  const main=$("#ac-main");
+  if(main) main.innerHTML='<div class="ndbox"><span class="nd">找不到这个账户</span></div><p style="margin-top:12px"><a class="btn" href="/account">返回账户列表</a></p>';
+  const steps=document.querySelector(".steps");
+  if(steps) steps.innerHTML='<a href="/account">返回账户列表</a>';
+}
 async function renderAccount(){
+  const wantId=presentAccountId(Q.get("id"));
+  const wantName=presentAccountId(Q.get("s"));
+  if(wantId||wantName) blankAccountShell();
   const list=await api("/v1/accounts");
   paintHeartbeat(list);
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
   const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordUuid(a)));
-  const wantId=presentAccountId(Q.get("id"));
-  const wantName=presentAccountId(Q.get("s"));
   let id="";
-  if(looksLikeAccountUuid(wantId)) id=wantId;
-  else if(wantName) id=matchAccountUuid(wantName, accs);
-  else id=accountRecordUuid(accs.find(x=>accountRecordUuid(x))||null);
+  if(wantId){
+    if(!looksLikeAccountUuid(wantId)){ paintAccountMissing(); return; }
+    id=wantId;
+  }else if(wantName){
+    id=matchAccountUuid(wantName, accs);
+    if(!id){ paintAccountMissing(); return; }
+  }else id=accountRecordUuid(accs.find(x=>accountRecordUuid(x))||null);
   if(id&&wantName) replaceNamedAccountLocation(id);
   const current=id?accs.find(x=>accountRecordUuid(x)===id)||null:null;
   const label=(current&&(presentAccountId(current.strategy)||presentAccountId(current.name)))||id;
@@ -591,7 +620,10 @@ async function renderAccount(){
     return `<a class="${id&&xid===id?"on":""}" href="${esc(accountDetailHref(xid))}">${esc(text)}</a>`;
   }).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
   if(!id){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
-  const d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
+  let d;
+  try{ d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); }
+  catch(e){ if(e&&e.status===404){ paintAccountMissing(); return; } throw e; }
+  const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+label;
   const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
@@ -1089,6 +1121,7 @@ function applyLeaderIdentity(detail){
   document.title=id.title;
   const h=document.querySelector(".top h1");
   if(h){
+    h.querySelectorAll(".sk").forEach(n=>n.remove());
     const av=h.querySelector(".av"); if(av) av.textContent=id.initials;
     [...h.childNodes].forEach(n=>{ if(n.nodeType===3) h.removeChild(n); });
     h.appendChild(document.createTextNode(id.heading));

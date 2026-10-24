@@ -85,6 +85,19 @@
       return raw ? JSON.parse(raw) : [];
     } catch (err) { return []; }
   }
+  /* 模拟盘丢掉超参考额度那条警告。钱包只在拿到可用资金且本次占用超过它时另加一句，不用写死额度。 */
+  function flashCapitalNotice(accountType, warnings, requested, previous) {
+    var lines = SA.warningLines(warnings);
+    var summary = (listState && listState.summary) || {};
+    var extra = SA.allocationWarning({
+      account_type: accountType || "paper",
+      requested_usd: requested,
+      previous_usd: previous,
+      summary: summary
+    });
+    if (extra) lines.push(extra);
+    if (lines.length) flashPush(lines);
+  }
   function banner(lines, bad) {
     if (!lines || !lines.length) return "";
     return '<div class="' + (bad ? "sa-alert" : "sa-warn") + '" role="alert">' + lines.map(function (l) { return "<div>" + esc(l) + "</div>"; }).join("") + "</div>";
@@ -488,7 +501,8 @@
   function summaryHtml(summary) {
     summary = summary || {};
     var wallet = summary.mode === "wallet";
-    var over = summary.over_allocated ? '<div class="sa-warn"><b>超额提示。</b> ' + esc(SA.warningText("paper_over_allocated", { allocated_usd: summary.allocated_usd, limit_usd: summary.paper_limit_usd })) + "</div>" : "";
+    var overText = SA.summaryOverWarning(summary);
+    var over = overText ? '<div class="sa-warn">' + esc(overText) + "</div>" : "";
     return '<div class="sa-kpis"><div class="sa-kpi lead"><span class="lbl">已分配</span><b class="num">' + esc(SA.formatUsd(summary.allocated_usd, false)) + '</b><span class="sa-note">已归档的资金不计入这里。</span></div><div class="sa-kpi"><span class="lbl">模式</span><b>' + (wallet ? "钱包" : "模拟盘") + '</b></div><div class="sa-kpi"><span class="lbl">' + (wallet ? "可用余额" : "参考额度") + "</span><b class='num'>" + esc(wallet ? SA.formatUsd(summary.wallet_available_usd, false) : (summary.paper_limit_usd != null ? SA.formatUsd(summary.paper_limit_usd, false) : "不拦截")) + "</b></div><div class=\"sa-kpi\"><span class=\"lbl\">状态</span><b>运行中 / 已停止</b><span class=\"sa-note\">只有这两种状态。要改参数就先停止。</span></div></div>" + over;
   }
   function filterBar(f) {
@@ -693,24 +707,27 @@
         };
         list.unshift(created);
         saveMock(list);
-        if (capital > 60000) flashPush([SA.warningText("paper_over_allocated", { allocated_usd: 80000 + capital, limit_usd: 60000 })]);
+        flashCapitalNotice(accountType, [], capital, null);
       } else if (fromId) {
         var copied = await api("/v1/accounts/" + encodeURIComponent(fromId) + "/copy", { method: "POST", body: SA.copyBody({ name: name, params: params, schema: schema, capital_usd: capital }), headers: { "Idempotency-Key": idemKey } });
         created = copied.account || copied;
+        var copyStartWarns = [];
         if (created && created.state !== "running" && created.id) {
           var started = await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
+          copyStartWarns = (started && started.warnings) || [];
           created = (started && started.account) || created;
         }
-        var warns = (copied.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
-        if (warns.length) flashPush(warns);
+        flashCapitalNotice(accountType, [].concat(copied.warnings || [], copyStartWarns), capital, null);
       } else {
         var res = await api("/v1/accounts", { method: "POST", body: SA.launchBody({ strategy_id: strategy.strategy_id, name: name, params: params, schema: schema, capital_usd: capital, account_type: accountType }), headers: { "Idempotency-Key": idemKey } });
         created = res.account || res;
+        var createStartWarns = [];
         if (created && created.state !== "running" && created.id) {
-          await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
+          var startedBody = await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
+          createStartWarns = (startedBody && startedBody.warnings) || [];
+          created = (startedBody && startedBody.account) || created;
         }
-        var warns2 = (res.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
-        if (warns2.length) flashPush(warns2);
+        flashCapitalNotice(accountType, [].concat(res.warnings || [], createStartWarns), capital, null);
       }
       attempt.succeed();
       form.dataset.idemKey = attempt.key();
@@ -839,6 +856,16 @@
   }
 
   var detailState = null;
+  var detailSeq = 0;
+  function detailSkeletonHtml() {
+    return '<div class="top"><h1>账户 <i class="sk m" aria-hidden="true"></i></h1></div><section class="card"><i class="sk xl"></i><i class="sk l" style="margin-top:12px"></i></section><section class="card"><i class="sk l"></i><i class="sk" style="margin-top:10px"></i></section>';
+  }
+  function accountMissingHtml() {
+    return '<div class="top"><h1>账户</h1></div><div class="ndbox"><span class="nd">找不到这个账户</span></div><a class="btn" href="' + esc(href("/account")) + '">返回账户列表</a>';
+  }
+  function isMissingAccount(e) {
+    return !!(e && (e.status === 404 || (e.body && e.body.error === "account_not_found")));
+  }
   function paintDetail() {
     var mount = document.getElementById("sa-mount");
     var a = detailState.account;
@@ -911,12 +938,20 @@
     return '<article class="sa-acard"><b>' + esc(sideMarketLabel(item)) + '</b><div class="sa-meta">' + esc(item.side || "") + " · " + esc(SA.formatUsd(item.fill_usd, false)) + "</div></article>";
   }
   async function paintSide(kind) {
+    if (!detailState || !detailState.account) return;
+    var seq = detailSeq;
+    var accountId = detailState.account.id;
     var slot = detailState.sides[kind];
     var body = document.getElementById(kind === "positions" ? "sa-pos-body" : "sa-trd-body");
     if (!body) return;
     var page;
-    try { page = await fetchSide(detailState.account.id, kind, { limit: slot.pager.limit, cursor: SA.pagerCursor(slot.pager) }); }
-    catch (e) { body.innerHTML = banner([explain(e)], true); return; }
+    try { page = await fetchSide(accountId, kind, { limit: slot.pager.limit, cursor: SA.pagerCursor(slot.pager) }); }
+    catch (e) {
+      if (seq !== detailSeq) return;
+      body.innerHTML = banner([explain(e)], true);
+      return;
+    }
+    if (seq !== detailSeq || !detailState || !detailState.account || detailState.account.id !== accountId) return;
     if (!page) { body.innerHTML = '<div class="ndbox"><span class="nd">无数据</span><span>这个列表还没有返回。</span></div>'; return; }
     if (page.resetNote) slot.pager = SA.pagerInit(slot.pager.limit);
     slot.pager = SA.pagerRemember(slot.pager, page.paged ? page.next_cursor : null);
@@ -1109,16 +1144,16 @@
       var n = Number(document.getElementById("sa-newcap").value);
       if (!isFinite(n) || n <= 0) { toast(SA.errorText("invalid_capital")); return; }
       try {
+        var capWarns = [];
         if (mockMode()) {
           var list = mockList();
           var item = list.filter(function (x) { return x.id === a.id; })[0];
           if (item) { item.capital_usd = n; item.current_segment = (item.current_segment || 1) + 1; saveMock(list); }
-          if (n > 50000) flashPush([SA.warningText("paper_over_allocated", { allocated_usd: n, limit_usd: 60000 })]);
         } else {
           var res = await api("/v1/accounts/" + encodeURIComponent(a.id), { method: "PATCH", body: { capital_usd: n } });
-          var warns = (res.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
-          if (warns.length) flashPush(warns);
+          capWarns = (res && res.warnings) || [];
         }
+        flashCapitalNotice(a.account_type || "paper", capWarns, n, a.capital_usd);
         closeSheet();
         toast("资金已更新，新的一段已开始。");
         await refresh();
@@ -1147,8 +1182,9 @@
           saveMock(list);
         }
       } else {
-        await api("/v1/accounts/" + encodeURIComponent(a.id), { method: "PATCH", body: { params: params } });
-        await api("/v1/accounts/" + encodeURIComponent(a.id) + "/start", { method: "POST" });
+        var patched = await api("/v1/accounts/" + encodeURIComponent(a.id), { method: "PATCH", body: { params: params } });
+        var startedRun = await api("/v1/accounts/" + encodeURIComponent(a.id) + "/start", { method: "POST" });
+        flashCapitalNotice(a.account_type || "paper", [].concat((patched && patched.warnings) || [], (startedRun && startedRun.warnings) || []), null, null);
       }
       toast("已保存并启动，还是这个账户。");
       await refresh();
@@ -1218,13 +1254,25 @@
         return loadCompare(ids2, opt);
       }
       if (act === "scope" && detailState) {
+        var seqScope = ++detailSeq;
         detailState.scope = t.getAttribute("data-v");
         var idKey = SA.presentText(detailState.account.id) || SA.presentText(detailState.account.account_id);
         var strategyKey = SA.presentText(detailState.account.strategy);
         var openedAsStrategy = !!detailState.viaStrategy && !!idKey && idKey === strategyKey;
         var via = openedAsStrategy || (!idKey && !!detailState.viaStrategy);
         var key = idKey || strategyKey;
-        detailState.account = await fetchAccount(key, detailState.scope, via);
+        var mountScope = document.getElementById("sa-mount");
+        if (mountScope) mountScope.innerHTML = detailSkeletonHtml();
+        try {
+          var nextAccount = await fetchAccount(key, detailState.scope, via);
+          if (seqScope !== detailSeq || !detailState) return;
+          detailState.account = nextAccount;
+        } catch (e) {
+          if (seqScope !== detailSeq) return;
+          if (isMissingAccount(e) && mountScope) { mountScope.innerHTML = accountMissingHtml(); return; }
+          toast(explain(e));
+          return;
+        }
         detailState.sides.positions.pager = SA.pagerInit(detailState.sides.positions.pager.limit);
         detailState.sides.trades.pager = SA.pagerInit(detailState.sides.trades.pager.limit);
         paintDetail();
@@ -1388,13 +1436,18 @@
   }
 
   async function openDetail(id, viaStrategy) {
+    var seq = ++detailSeq;
+    detailState = null;
     var mount = takeOver();
-    mount.innerHTML = "<p class='sa-note'>正在读取账户…</p>";
+    mount.innerHTML = detailSkeletonHtml();
+    document.title = "账户 · Wakeloom";
     try {
       var account = await fetchAccount(id, q().get("scope") === "current_segment" ? "current_segment" : "all", !!viaStrategy);
+      if (seq !== detailSeq) return;
       var schema = [];
       var sid = SA.presentText(account.strategy_id);
       if (sid) { try { var st = await fetchStrategy(sid); schema = st.params_schema || []; } catch (e) {} }
+      if (seq !== detailSeq) return;
       detailState = {
         account: account,
         viaStrategy: !!viaStrategy || SA.isLegacyAccount(account),
@@ -1409,7 +1462,8 @@
       document.title = account.name + " · 账户 · Wakeloom";
       paintDetail();
     } catch (e) {
-      mount.innerHTML = banner([explain(e)], true) + '<a class="btn" href="' + esc(href("/account")) + '">返回账户</a>';
+      if (seq !== detailSeq) return;
+      mount.innerHTML = isMissingAccount(e) ? accountMissingHtml() : (banner([explain(e)], true) + '<a class="btn" href="' + esc(href("/account")) + '">返回账户列表</a>');
     }
   }
 
@@ -1419,11 +1473,7 @@
     if (params.get("new")) return paintLaunch(params.get("new"), params.get("from"));
     if (params.get("id")) {
       var rawId = params.get("id");
-      if (!mockMode() && window.PM && PM.looksLikeAccountUuid && !PM.looksLikeAccountUuid(rawId)) {
-        if (params.get("s")) return openNamedAccount(params.get("s"));
-        return loadGroups(filtersFromQuery());
-      }
-      if (params.get("s") && window.PM && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
+      if (params.get("s") && window.PM && PM.looksLikeAccountUuid && PM.looksLikeAccountUuid(rawId) && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
       return openDetail(rawId);
     }
     if (params.get("s")) return openNamedAccount(params.get("s"));

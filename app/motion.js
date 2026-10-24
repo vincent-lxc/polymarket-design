@@ -127,7 +127,7 @@
         if (ty + th > H - 2) ty = Math.max(2, H - th - 2);
         tip.style.transform = "translate(" + tx.toFixed(1) + "px," + ty.toFixed(1) + "px)";
       }
-      if (hasNd) return;
+      if (hasNd || big.querySelector(".sk") || document.documentElement.classList.contains("pending-metrics")) return;
       if (resting && idx === last) {
         var live = parseMoney(restText);
         var endV = valueAt(last);
@@ -272,6 +272,9 @@
     var legend = document.getElementById("attr-legend");
 
     function applyAmounts(arr) {
+      var totalEl = document.getElementById("attr-total");
+      if (document.documentElement.classList.contains("pending-metrics")) return;
+      if ((totalEl && totalEl.querySelector(".sk")) || bar.querySelector(".sk")) return;
       var sum = arr[0] + arr[1] + arr[2];
       if (!(sum > 0)) return;
       var norm = [arr[0] / sum * TOTAL, arr[1] / sum * TOTAL, arr[2] / sum * TOTAL];
