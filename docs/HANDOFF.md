@@ -209,7 +209,7 @@ API：`研发/API-STRATEGY-ACCOUNT-v1-2026-10-23.md`
 - 仓库：https://github.com/vincent-lxc/polymarket-design（squash 合 main；www 自动部署，App 手动部署）。
 - App 部署：`cd /tmp/polymarket-design-deploy && git fetch && git checkout -f origin/main && WRANGLER_CACHE_DIR=/tmp/wrangler-cache npx -y wrangler@4 deploy -c wrangler.app.toml`（需 CLOUDFLARE_API_TOKEN，不在本文）。
 - 云端代理/分支：#39 bc-942317c8 `cursor/leader-skeleton-real-71e3`；#40 bc-5c9537b7 `cursor/account-chart-range-cf33`；卡片 bc-36b80d46。
-- 文件：[前端/HANDOFF-前端-2026-10-24.md](HANDOFF-frontend.md)、`前端/refs/pr78-pnl-buckets-contract.txt`、`产品/release-gate/pr38-2026-10-24/`、规范 `/workspace/知识库/LLM工程/前端开发规范-bot用.md`。
+- 文件：`前端/HANDOFF-前端-2026-10-24.md`、`前端/refs/pr78-pnl-buckets-contract.txt`、`产品/release-gate/pr38-2026-10-24/`、规范 `/workspace/知识库/LLM工程/前端开发规范-bot用.md`。
 - 规矩：云端代理不调 `/v1/auth/*`、不点登出；现网会话只在本机，不进代码/PR/截图。
 
 ## 7. 明天优先（若今晚流量中断）
