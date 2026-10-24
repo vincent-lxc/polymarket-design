@@ -68,11 +68,18 @@ const detail = {
 
 const trades = PM.leaderTradeBody(detail);
 assert.match(trades, /Fed 12 月降息？/);
-assert.match(trades, /\$1,854\.00 @ 42¢/);
-assert.match(trades, /\$969\.00 @ 43¢/);
+const at = (usd, cents) => new RegExp(usd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + '<\\/span><span class="q-at"> @ <\\/span><span class="q-br" aria-hidden="true"><\\/span><span class="q-px">' + cents + "<\\/span>");
+assert.match(trades, at("$1,854.00", "42¢"));
+assert.match(trades, at("$969.00", "43¢"));
 assert.match(trades, /已跟/);
-assert.match(trades, /\$300\.00 @ 18¢/);
+assert.match(trades, at("$300.00", "18¢"));
 assert.match(trades, /价格偏移过大/);
+const tradeRows = trades.split(/<tr\b/).slice(1);
+assert.match(tradeRows[0], /k-hide">[\s\S]*\$1,854\.00[\s\S]*k-primary">[\s\S]*\$969\.00/);
+assert.match(tradeRows[0], /class="k-name"/);
+const skipped = tradeRows.find((row) => row.includes("$300.00"));
+assert.match(skipped, /k-primary">[\s\S]*\$300\.00/);
+assert.match(skipped, /k-quote k-hide">[\s\S]*q-amt na/);
 assert.match(trades, /湖人 vs 勇士/);
 assert.ok(trades.indexOf("$1,854.00") < trades.indexOf("$300.00"));
 
@@ -81,7 +88,9 @@ assert.match(pos, /4,410/);
 assert.match(pos, /42¢ \/ 44¢/);
 assert.match(pos, /\+\$88\.20/);
 assert.match(pos, /120 股/);
-assert.match(pos, /我方镜像持仓|120 股/);
+assert.match(pos, /class="k-name"/);
+assert.match(pos, /k-amt"><span class="q-amt">120 股<\/span>/);
+assert.match(pos, /data-k="浮动"[^>]*>\+\$88\.20/);
 
 const pnl = PM.leaderPnlBody(detail);
 assert.match(pnl, /catsports20000/);
@@ -175,7 +184,11 @@ const css = fs.readFileSync(new URL("./app.css", import.meta.url), "utf8");
 assert.match(css, /body\[data-page="leader"\] #pc \.pchart\{height:240px;min-height:200px\}/);
 assert.match(css, /@media\(max-width:480px\)\{[\s\S]*\.pc-pill\{flex:1 1 auto;max-width:none/);
 assert.match(api, /显示更多/);
-assert.match(css, /#ld-trades table,\n body\[data-page="leader"\] #ld-pos table/);
+assert.match(css, /@media\(max-width:900px\)\{[\s\S]*\.rowcards tr:has\(\.k-name\)\{/);
+assert.equal(css.includes("min-width:640px"), false);
+assert.match(html, /class="card rowcards" id="ld-trades"/);
+assert.match(html, /class="card rowcards" id="ld-pos"/);
+assert.match(html, /class="card rowcards" id="ld-pnl"/);
 assert.match(css, /\.inflow\{position:static/);
 assert.match(pc, /id="pc-sides"/);
 

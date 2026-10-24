@@ -251,16 +251,30 @@ function fillCell(m){
   const px=m.fill_price!=null?` @ ${Math.round(m.fill_price*100)}¢`:"";
   return `${usd(m.fill_usd)}${px}`;
 }
-function mirrorFill(m){
-  if(!m||m.fill_usd==null) return NA;
-  const px=m.fill_price!=null?` @ ${Math.round(m.fill_price*100)}¢`:"";
-  return `${usd(m.fill_usd)}${px}`;
+/* 手机卡片把金额和价格拆开：桌面仍是「金额 @ 价格」一格。没有金额就整格 —。 */
+function quoteInner(amountUsd, cents){
+  const u=usd(amountUsd);
+  if(u==null) return `<span class="q-amt na">—</span><span class="q-br" aria-hidden="true"></span>`;
+  const px=cents==null||cents===""?"":`<span class="q-at"> @ </span><span class="q-br" aria-hidden="true"></span><span class="q-px">${cents}</span>`;
+  const br=px?"":`<span class="q-br" aria-hidden="true"></span>`;
+  return `<span class="q-amt">${u}</span>${px||br}`;
 }
-function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*100)+"¢":null;
-  const L=m.leader_notional_usd!=null?`${usd(m.leader_notional_usd)}${lp?" @ "+lp:""}`:null;
+function quoteTd(amountUsd, cents, primary){
+  const u=usd(amountUsd);
+  const role=primary?"k-primary":"k-hide";
+  return `<td class="r ${u==null?"na":"num"} k-quote ${role}">${quoteInner(amountUsd, cents)}</td>`;
+}
+function rawCents(price){
+  if(price==null||price==="") return null;
+  const n=Number(price);
+  return isFinite(n)?Math.round(n*100)+"¢":null;
+}
+function mirrorRow(m){ const lp=rawCents(m.leader_price);
+  const ours=m.fill_usd!=null;
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已跟</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
   const name=mirrorMarketName(m);
-  return `<tr><td title="${esc(bj(m.decided_at)||"")}">${marketHtml(name, m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r">${mirrorFill(m)}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":NA}</td><td>${res}</td></tr>`; }
+  const side=m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA;
+  return `<tr><td class="k-name" title="${esc(bj(m.decided_at)||"")}">${marketHtml(name, m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td class="k-side">${side}</td>${quoteTd(m.leader_notional_usd, lp, !ours)}${quoteTd(m.fill_usd, rawCents(m.fill_price), ours)}<td class="r ${m.slippage_bps!=null?"num":"na"} k-hide">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":NA}</td><td class="k-res">${res}</td></tr>`; }
 function activityRow(m){
   const side=m.side==="SELL"?"卖出":m.side==="BUY"?"买入":(m.purpose_zh||m.purpose||"—");
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已成交</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
@@ -1578,10 +1592,10 @@ function leaderTradeBody(detail){
     const src=trade||mirror;
     const title=leaderDisplayTitle(trade, idx)||leaderDisplayTitle(mirror, idx);
     const outcome=tradeOutcome(trade)||tradeOutcome(mirror);
-    const his=atPrice(hisAmt, hisPx);
-    const ours=atPrice(ourAmt, ourPx);
     const when=bj(tradeTime(trade)||tradeTime(mirror))||"—";
-    return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td class="num mu hm">${esc(when)}</td><td>${leaderMarketCell(title, src, outcome)}</td><td class="hm">${side==="SELL"?"卖出":side==="BUY"?"买入":NA}</td><td class="r ${his?"num":"na"}">${his||NA}</td><td class="r ${ours?"num":"na"}">${ours||NA}</td><td>${mirrorResult(mirror, side)}</td></tr>`;
+    const oursOn=usd(ourAmt)!=null;
+    const sideTxt=side==="SELL"?"卖出":side==="BUY"?"买入":NA;
+    return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td class="num mu hm k-hide">${esc(when)}</td><td class="k-name">${leaderMarketCell(title, src, outcome)}</td><td class="hm k-side">${sideTxt}</td>${quoteTd(hisAmt, cent(hisPx), !oursOn)}${quoteTd(ourAmt, cent(ourPx), oursOn)}<td class="k-res">${mirrorResult(mirror, side)}</td></tr>`;
   }).join("");
 }
 const POS_HEAD='<tr><th>市场 · outcome</th><th class="r hm" title="current_size">股数</th><th class="r hm">均价 / 现价</th><th class="r" title="unrealized_pnl">他的浮动</th><th class="r">我方镜像持仓</th></tr>';
@@ -1606,8 +1620,20 @@ function leaderPositionBody(detail){
     const pnl=his?numOrNull(pick(his,["unrealized_pnl","unrealized_usd","cash_pnl"])):null;
     const mine=our?posSize(our):null;
     const px=(avg==null&&mark==null)?NA:`${avg==null?"—":cent(avg)} / ${mark==null?"—":cent(mark)}`;
-    const mineHtml=mine==null?NA:`${shareCount(mine)} 股`;
-    return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td>${leaderMarketCell(title, src, outcome)}</td><td class="r num hm">${size==null?NA:shareCount(size)}</td><td class="r num hm">${px}</td><td class="r ${pnl==null?"na":"num "+cls(pnl)}">${pnl==null?LEADER_DASH:usd(pnl,true)}</td><td class="r ${mine==null?"na":"num"}">${mineHtml}</td></tr>`;
+    const mineKnown=mine!=null;
+    const pnlKnown=pnl!=null;
+    const sizeAmt=size==null?`<span class="q-amt na">—</span>`:`<span class="q-amt">${shareCount(size)}</span>`;
+    const mineAmt=mineKnown?`<span class="q-amt">${shareCount(mine)} 股</span>`:"";
+    const br=`<span class="q-br" aria-hidden="true"></span>`;
+    const sizeTd=mineKnown
+      ? `<td class="r num hm k-hide">${size==null?NA:shareCount(size)}</td>`
+      : `<td class="r ${size==null?"na":"num"} hm k-amt">${sizeAmt}${br}</td>`;
+    const pxTd=`<td class="r num ${pnlKnown?"hm k-hide":"k-sub"}" data-k="价格">${px}</td>`;
+    const pnlTd=`<td class="r ${pnlKnown?"num "+cls(pnl)+" k-sub":"na k-hide"}" data-k="浮动">${pnlKnown?usd(pnl,true):LEADER_DASH}</td>`;
+    const mineTd=mineKnown
+      ? `<td class="r num k-amt">${mineAmt}${br}</td>`
+      : `<td class="r na k-hide">${NA}</td>`;
+    return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td class="k-name">${leaderMarketCell(title, src, outcome)}</td>${sizeTd}${pxTd}${pnlTd}${mineTd}</tr>`;
   }).join("");
 }
 function leaderPnlBag(detail){
@@ -1622,9 +1648,13 @@ function leaderPnlBag(detail){
     reason:(d.reasons&&d.reasons.pnl)||pnl.reason||null
   };
 }
-function moneyTd(x, reason){
-  if(x==null||!isFinite(x)) return `<td class="r">${nd(reason||"not_yet_aggregated")}</td>`;
-  return `<td class="r num ${cls(x)}">${usd(x,true)}</td>`;
+function moneyTd(x, reason, role, label){
+  const missing=x==null||!isFinite(x);
+  const inner=missing?nd(reason||"not_yet_aggregated"):usd(x,true);
+  const tone=missing?"na":"num "+cls(x);
+  if(role==="amt") return `<td class="r ${tone} k-amt"><span class="q-amt">${inner}</span><span class="q-br" aria-hidden="true"></span></td>`;
+  const k=label?` data-k="${esc(label)}"`:"";
+  return `<td class="r ${tone} k-sub"${k}>${inner}</td>`;
 }
 function leaderPnlBody(detail){
   const bag=leaderPnlBag(detail);
@@ -1637,9 +1667,9 @@ function leaderPnlBody(detail){
     return {name, realized, unrealized, total, reason:row.reasons&&(row.reasons.realized_usd||row.reasons.total)};
   });
   const sum=key=>rows.length&&rows.every(r=>r[key]!=null)?rows.reduce((s,r)=>s+r[key],0):null;
-  const foot=`<tr><td><b>合计</b></td>${moneyTd(sum("realized"), bag.reason)}${moneyTd(sum("unrealized"), bag.reason)}${moneyTd(sum("total"), bag.reason)}</tr>`;
+  const foot=`<tr><td class="k-name"><b>合计</b></td>${moneyTd(sum("realized"), bag.reason, "sub", "已实现")}${moneyTd(sum("unrealized"), bag.reason, "sub", "浮动")}${moneyTd(sum("total"), bag.reason, "amt")}</tr>`;
   if(!rows.length) return `<tr><td colspan="4">${LEADER_EMPTY}</td></tr>`+foot;
-  return rows.map(r=>`<tr><td>${esc(r.name)}</td>${moneyTd(r.realized,r.reason)}${moneyTd(r.unrealized,r.reason)}${moneyTd(r.total,r.reason)}</tr>`).join("")+foot;
+  return rows.map(r=>`<tr><td class="k-name">${esc(r.name)}</td>${moneyTd(r.realized, r.reason, "sub", "已实现")}${moneyTd(r.unrealized, r.reason, "sub", "浮动")}${moneyTd(r.total, r.reason, "amt")}</tr>`).join("")+foot;
 }
 function copyRateText(v){
   if(v==null) return null;
