@@ -12,15 +12,13 @@
 <p class="note" id="ld-sync"></p>
 <p class="dim" id="ld-asof" style="font-size:12px"></p>
 </section>
-<section class="card" id="ld-removed"><div class="hd"><h2>已移出</h2><span class="btn sm soon" aria-disabled="true" title="即将上线">明细<em>即将上线</em></span></div>
-<div class="ndbox"><span class="nd">暂未汇总</span><span>移出明细仍即将上线。从上面的在跟表移出，会立刻写进注册表。</span></div></section>
+<section class="card" id="ld-removed" hidden><div class="hd"><h2>已移出</h2></div></section>
 <section class="card" id="ld-screen"><div class="hd"><h2>最近一次筛选</h2><span class="lbl">热推引擎不在这张票里</span><span class="btn sm soon" aria-disabled="true" title="即将上线">热推<em>即将上线</em></span></div>
 <div class="ndbox"><span class="nd">即将上线</span><span>筛选和热推另票。接口如果带回 last_screen，这里会换成那次结果。</span></div></section>
 <section class="card" id="ld-manual"><div class="hd"><h2>手动名单</h2><span class="btn sm soon" aria-disabled="true" title="即将上线：白名单高级规则">高级规则<em>即将上线</em></span></div>
 <p class="note">白名单、排除名单的高级规则仍不可点。加入和移出在上面的在跟表完成。</p></section>
 </main><aside class="rail">
-<div class="rc"><div class="hd" style="margin:0"><h2>需要注意</h2></div>
-<div class="ndbox" style="margin-top:8px"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>持仓数接口还没聚合。</span></div></div>
+<div class="rc" hidden><div class="hd" style="margin:0"><h2>需要注意</h2></div></div>
 <div class="rc note">仅模拟盘 · 加入和移出写注册表，下次筛选或热推后引擎才跟单。</div>
 </aside></div><nav class="tabs"><a href="/overview" class="">总览</a><a href="/account" class="">账户</a><a href="/strategies" class="">策略</a><a href="/markets" class="">市场</a><a href="/leaders" class="on">领导者</a><a href="/config" class="">配置</a><a href="/health" class="">健康</a></nav>
 <div id="ld-pick" class="ovl" hidden><div class="mask" data-close="1"></div><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ld-pick-title" style="max-height:min(78vh,640px);overflow:auto"><div style="display:flex;align-items:center"><h2 id="ld-pick-title">选人加入</h2><button type="button" class="x" data-close="1" aria-label="关闭">✕</button></div>

@@ -316,6 +316,10 @@ body[data-page="leader"] .rail > .rc:not(.note){display:block}
 a.mkt{color:inherit}
 a.mkt:hover{color:var(--or)}
 a.mkt .ext{display:inline-block;width:12px;height:12px;margin-left:4px;vertical-align:-2px;color:var(--or)}
+.mkt-name{display:inline-block;max-width:min(28ch,46vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+.attr-list{display:flex;flex-direction:column;gap:8px}
+.attr-row{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.attr-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* 钱包栏顶部：登录身份 + 登出 + 账户与安全 */
 .wid{padding-bottom:12px;border-bottom:1px solid var(--line,#1f1f24);margin-bottom:12px}
 .wid-row{display:flex;align-items:center;gap:8px;margin-top:4px}
