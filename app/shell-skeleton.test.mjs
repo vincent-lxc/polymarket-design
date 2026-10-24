@@ -78,3 +78,11 @@ assert.equal(strategiesHtml.includes("修改参数 · <i class=\"sk\">"), false)
 const css = fs.readFileSync(path.join(dir, "app.css"), "utf8");
 assert.match(css, /#ov-mirrors td,#ov-mirrors th,#ov-mirrors \.na\{white-space:nowrap\}/);
 assert.match(css, /#ov-mirrors td:first-child\{white-space:normal;min-width:10em\}/);
+assert.match(overviewHtml, /class="card rowcards" id="ov-mirrors"/);
+assert.equal(overviewHtml.includes("我方累计盈亏"), false);
+const cardCss = css.slice(css.indexOf("这些表改成一行一卡"));
+assert.match(cardCss, /@media\(max-width:900px\)/);
+assert.match(cardCss, /\.rowcards tr:has\(\.k-name\)\{[\s\S]*display:flex/);
+assert.equal(cardCss.includes("@media(min-width:1280px)"), false);
+assert.match(css, /\.q-br\{display:none\}/);
+assert.match(leader, /class="card rowcards" id="ld-trades"/);

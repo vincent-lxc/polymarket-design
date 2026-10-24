@@ -168,6 +168,9 @@ td.r,th.r{text-align:right}
 @media(max-width:900px){table{min-width:0!important}td{white-space:normal}td.num,td .num,.tag{white-space:nowrap}}
 #ov-mirrors td,#ov-mirrors th,#ov-mirrors .na{white-space:nowrap}
 #ov-mirrors td:first-child{white-space:normal;min-width:10em}
+.q-br{display:none}
+.q-usd{display:none}
+.q-unit{display:none}
 /* v4.3 collapse */
 tr.more{display:none}
 .tw.open tr.more{display:table-row;animation:rowin .5s var(--ease) both}
@@ -403,18 +406,53 @@ body[data-page="leader"] .app{min-width:0;max-width:100%}
  body[data-page="leader"] .seg{flex-wrap:wrap}
  body[data-page="leader"] .tabs{left:0;right:0;width:auto;max-width:100vw}
  body[data-page="leader"] #pc .pchart{height:240px;min-height:200px}
- body[data-page="leader"] #ld-trades .tw,
- body[data-page="leader"] #ld-pos .tw,
- body[data-page="leader"] #ld-pnl .tw{overflow-x:auto;max-width:100%}
- body[data-page="leader"] #ld-trades table,
- body[data-page="leader"] #ld-pos table,
- body[data-page="leader"] #ld-pnl table{min-width:640px!important;width:max-content}
- body[data-page="leader"] #ld-trades td,
- body[data-page="leader"] #ld-pos td,
- body[data-page="leader"] #ld-trades th,
- body[data-page="leader"] #ld-pos th,
- body[data-page="leader"] #ld-pnl td,
- body[data-page="leader"] #ld-pnl th{white-space:nowrap!important}
+}
+/* 手机（现有 900 断点，含 ≤640）：这些表改成一行一卡。≥901 含桌面 1280 仍是表格。 */
+@media(max-width:900px){
+ .rowcards .tw{overflow-x:clip;max-width:100%}
+ .rowcards table{display:block;width:100%!important;min-width:0!important}
+ .rowcards tr:has(th){display:none}
+ .rowcards tr:has(.k-name){
+  display:flex;flex-wrap:wrap;align-items:baseline;column-gap:10px;row-gap:0;
+  margin:0 0 8px;padding:10px 12px;background:var(--bg);border-radius:10px
+ }
+ .rowcards tr:has(.k-name):last-child{margin-bottom:0}
+ .rowcards tr.more{display:none}
+ .rowcards .tw.open tr.more:has(.k-name){display:flex;animation:rowin .5s var(--ease) both}
+ .rowcards tr:has(.k-name)>td{border:0;padding:0!important;min-width:0!important;background:transparent}
+ .rowcards td.k-name{order:1;flex:1 1 0;min-width:0;white-space:normal!important}
+ .rowcards td.k-name .mkt-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;max-width:100%}
+ .rowcards td.k-name .mkt-ell,
+ .rowcards td.k-name .mkt-ell .mkt{white-space:normal;overflow:visible;text-overflow:clip;max-width:100%}
+ .rowcards td.k-quote.k-primary,
+ .rowcards td.k-amt{display:contents}
+ .rowcards .q-amt{order:2;flex:0 0 auto;margin-left:auto;white-space:nowrap;font-weight:600;text-align:right}
+ .rowcards .q-at{display:none}
+ .rowcards .q-br{display:block;order:3;flex:0 0 100%;width:100%;height:0;overflow:hidden}
+ .rowcards .q-px,
+ .rowcards .q-shares,
+ .rowcards td.k-side,
+ .rowcards td.k-res,
+ .rowcards td.k-sub{order:4;margin-top:4px}
+ .rowcards .q-usd{display:block}
+ .rowcards .q-unit{display:inline}
+ .rowcards .q-shares{color:var(--mu);font-size:12px;font-weight:500;white-space:nowrap}
+ .rowcards td.k-side,
+ .rowcards td.k-side.hm{display:inline;color:var(--mu);font-size:12px;white-space:nowrap}
+ .rowcards .q-px{color:var(--mu);white-space:nowrap}
+ .rowcards td.k-res{display:inline;min-width:0;white-space:normal}
+ .rowcards td.k-res .tag{white-space:normal}
+ .rowcards td.k-sub{display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap}
+ .rowcards td.k-sub::before{content:attr(data-k);color:var(--dim);font-size:11px;font-weight:500}
+ .rowcards td.k-hide{display:none!important}
+ .rowcards td.k-amt.hm{display:contents!important}
+ .rowcards tr:not(:has(th)):not(:has(.k-name)){display:block;padding:12px;background:var(--bg);border-radius:10px}
+ .rowcards tr:not(:has(th)):not(:has(.k-name)) td{display:block;border:0;padding:0!important;white-space:normal!important}
+ #ov-mirrors.rowcards td,#ov-mirrors.rowcards .na{white-space:normal}
+ #ov-mirrors.rowcards td.k-name{min-width:0}
+ #ov-mirrors.rowcards .q-amt,#ov-mirrors.rowcards .q-px{white-space:nowrap}
+ .rowcards .sk{display:inline-block;width:64px;min-width:0;margin-left:0}
+ .rowcards td.k-name .sk.l{width:46%;max-width:168px;min-width:0}
 }
 @media(max-width:480px){
  body[data-page="leader"] .pc-pill{flex:1 1 auto;max-width:none;min-width:0}
