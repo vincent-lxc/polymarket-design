@@ -20,11 +20,11 @@ function humanizeSlug(slug){
 }
 function shortMarketId(id){
   const s=String(id||"").trim();
-  if(!s||s==="市场") return "";
-  return s.length>10?s.slice(0,6)+"…"+s.slice(-4):s;
+  if(!s) return "市场";
+  return "市场 "+(s.length>10?s.slice(0,6)+"…":s);
 }
 function fallbackMarketTitle(row){
-  if(!row||typeof row!=="object") return "";
+  if(!row||typeof row!=="object") return "市场";
   const slug=textField(pick(row,["event_slug","slug","eventSlug","market_slug"]));
   const human=humanizeSlug(slug);
   if(human) return human;
@@ -607,37 +607,112 @@ function paintAccountMissing(){
   const steps=document.querySelector(".steps");
   if(steps) steps.innerHTML='<a href="/account">返回账户列表</a>';
 }
+/* 旧列表没有 uuid。退出骨架时标题、副文、指标和两张表一起清，避免灰条一直留着。 */
+function clearAccountSkeleton(){
+  const h=document.querySelector(".top h1");
+  if(h) h.textContent="账户";
+  const sub=$("#ac-main .sub");
+  if(sub) sub.innerHTML="";
+  const kv=$("#ac-main .kv");
+  if(kv) kv.innerHTML="";
+  ["#ac-pos","#ac-act"].forEach(sel=>{
+    const root=$(sel);
+    if(!root) return;
+    const table=root.querySelector&&root.querySelector("table");
+    if(table){
+      const html=String(table.innerHTML||"");
+      const head=html.match(/<tr>\s*<th[\s\S]*?<\/tr>/);
+      table.innerHTML=head?head[0]:"";
+    }
+    if(root.querySelectorAll) root.querySelectorAll(".sk").forEach(el=>el.remove());
+    const lab=root.querySelector&&root.querySelector(".hd .lbl");
+    if(lab) lab.innerHTML="";
+  });
+}
+function paintAccountEmpty(){
+  clearAccountSkeleton();
+  const big=$("#ac-main .big");
+  if(big) big.innerHTML=nd("no_accounts");
+}
+function paintAccountError(err){
+  clearAccountSkeleton();
+  const big=$("#ac-main .big");
+  const msg=(err&&err.offline)?"连不上接口":((err&&err.message)||"没有完成");
+  if(big) big.innerHTML='<span class="nd">'+esc(msg)+'</span>';
+  const sub=$("#ac-main .sub");
+  if(sub) sub.innerHTML='<button type="button" class="btn sm" id="ac-retry">重试</button>';
+  const btn=$("#ac-retry");
+  if(btn&&btn.addEventListener) btn.addEventListener("click",()=>{ blankAccountShell(); renderAccount(); });
+}
+/* 真实 /v1/accounts 仍是旧列表：有 uuid 用 uuid，否则用策略名请求 /v1/accounts/{strategy}。 */
+function legacyAccountKey(a){
+  if(!a) return "";
+  return accountRecordUuid(a)||presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordId(a);
+}
+function accountByLabel(label, accs){
+  const key=presentAccountId(label);
+  if(!key) return null;
+  const hits=(accs||[]).filter(a=>a&&(sameAccountLabel(a.strategy,key)||sameAccountLabel(a.name,key)||sameAccountLabel(accountRecordId(a),key)||sameAccountLabel(accountRecordUuid(a),key)));
+  return hits.length===1?hits[0]:null;
+}
+function accountStepHref(a){
+  const uuid=accountRecordUuid(a);
+  if(uuid) return accountDetailHref(uuid);
+  const name=presentAccountId(a&&a.strategy)||presentAccountId(a&&a.name)||accountRecordId(a);
+  return name?appHref("/account",{id:name}):appHref("/account");
+}
 async function renderAccount(){
   const wantId=presentAccountId(Q.get("id"));
   const wantName=presentAccountId(Q.get("s"));
   if(wantId||wantName) blankAccountShell();
-  const list=await api("/v1/accounts");
+  let list;
+  try{ list=await api("/v1/accounts"); }
+  catch(e){
+    if(e&&e.status===404){ paintAccountEmpty(); return; }
+    paintAccountError(e);
+    return;
+  }
   paintHeartbeat(list);
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
-  const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordUuid(a)));
+  const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordId(a)||accountRecordUuid(a)));
   let id="";
-  if(wantId){
-    if(!looksLikeAccountUuid(wantId)){ paintAccountMissing(); return; }
+  let current=null;
+  if(wantId&&looksLikeAccountUuid(wantId)){
     id=wantId;
-  }else if(wantName){
-    id=matchAccountUuid(wantName, accs);
+    current=accs.find(x=>accountRecordUuid(x)===id)||null;
+  }else if(wantId||wantName){
+    current=accountByLabel(wantId||wantName, accs);
+    if(!current){ paintAccountMissing(); return; }
+    id=legacyAccountKey(current);
     if(!id){ paintAccountMissing(); return; }
-  }else id=accountRecordUuid(accs.find(x=>accountRecordUuid(x))||null);
-  if(id&&wantName) replaceNamedAccountLocation(id);
-  const current=id?accs.find(x=>accountRecordUuid(x)===id)||null:null;
+    const uuid=accountRecordUuid(current);
+    if(uuid&&wantName) replaceNamedAccountLocation(uuid);
+  }else{
+    current=accs.find(x=>legacyAccountKey(x))||null;
+    id=legacyAccountKey(current);
+  }
   const label=(current&&(presentAccountId(current.strategy)||presentAccountId(current.name)))||id;
   const steps=document.querySelector(".steps");
   if(steps) steps.innerHTML=accs.map(x=>{
-    const xid=accountRecordUuid(x);
-    const text=presentAccountId(x.strategy)||presentAccountId(x.name)||xid;
-    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountDetailHref(xid))}">${esc(text)}</a>`;
+    const xid=legacyAccountKey(x);
+    const text=presentAccountId(x.strategy)||presentAccountId(x.name)||accountRecordUuid(x)||xid;
+    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountStepHref(x))}">${esc(text)}</a>`;
   }).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
-  if(!id){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
+  if(!id){ paintAccountEmpty(); return; }
   let d;
   try{ d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); }
-  catch(e){ if(e&&e.status===404){ paintAccountMissing(); return; } throw e; }
+  catch(e){
+    if(e&&e.status===404){ paintAccountMissing(); return; }
+    paintAccountError(e);
+    return;
+  }
   const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+label;
+  const runZh=(a&&a.run_state_zh)||(current&&current.run_state_zh)||"";
+  const run=document.getElementById("ac-run");
+  if(run){ run.hidden=!runZh; if(runZh) run.innerHTML='<span class="dot"></span>'+esc(runZh); }
+  const stateTag=document.getElementById("ac-state");
+  if(stateTag){ stateTag.hidden=!runZh; if(runZh) stateTag.textContent=runZh; }
   const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
   m.querySelector(".kv").innerHTML=[["现金",a.cash_usd,R.cash_usd],["持仓市值",a.positions_value_usd,R.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason||R.exposure_usd],["当日已实现",a.daily_realized_usd,R.daily_realized_usd],["浮动盈亏",a.unrealized_usd,R.unrealized_usd],["已实现盈亏",a.realized_usd,R.realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
@@ -1095,7 +1170,7 @@ async function renderStrategies(){
   rows($("#st-mine"),'<tr><th>名称</th><th class="hm">模板</th><th>状态</th><th class="r">操作</th></tr>',(d.strategies||[]).map(s=>`<tr><td><b>${esc(s.name)}</b> <span class="tag">模拟盘</span></td><td class="hm mu">${esc(s.template_id||"空白")}</td><td><span class="tag ${s.state==="running"?"live":"idle"}">${s.state==="running"?"运行中":"已暂停"}</span></td><td class="r"><a class="btn sm" href="#edit">修改参数</a></td></tr>`).join("")||`<tr><td colspan="4">${nd("no_strategies")}</td></tr>`);
 }
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
-window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,mirrorMarketName,formatShares,leaderIdentity,
+window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,mirrorMarketName,formatShares,leaderIdentity,renderAccount,
   accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
   heartbeatLabel,normalizeOverviewRange,overviewRangeEcho,sliceOverviewCurve,shareCardFromTotals,loadOverview,
   leadersReadPath,leadersWritePath,leadersRequestKey,leadersCurrentKey,renderLeaders,writeLeader,

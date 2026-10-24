@@ -36,8 +36,16 @@ const account = fs.readFileSync(path.join(dir, "account.html"), "utf8");
 assert.match(account, /<h1>账户 <i class="sk m"/);
 assert.equal(account.includes("找不到这个账户"), false);
 assert.equal(visible(account).includes("40 个市场"), false);
-assert.match(account, /请输入账户名以确认/);
+assert.equal(account.includes('id="pause"'), false);
+assert.equal(account.includes('id="close"'), false);
 assert.equal(/请手输「/.test(visible(account)), false);
+assert.match(account, /id="ac-run" hidden/);
+const config = fs.readFileSync(path.join(dir, "config.html"), "utf8");
+assert.match(config, /请手输「全部停止」以确认/);
+assert.match(config, /placeholder="全部停止"/);
+assert.match(config, /请手输「解绑」以确认/);
+assert.match(config, /placeholder="解绑"/);
+assert.equal(config.includes("请输入账户名以确认"), false);
 
 const leader = fs.readFileSync(path.join(dir, "leader.html"), "utf8");
 assert.match(leader, /id="ld-idl"/);
@@ -52,5 +60,16 @@ for (const cell of mirrorRows.match(/<td[^>]*>[\s\S]*?<\/td>/g) || []) {
   const text = cell.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
   if (/^市场$/.test(text)) assert.fail("mirror cell is bare 市场");
 }
+assert.equal(overviewHtml.includes("评分 82"), false);
+assert.equal(overviewHtml.includes("238 bps"), false);
+assert.equal(overviewHtml.includes("12/200"), false);
+assert.equal(overviewHtml.includes("100/100"), false);
+for (const name of files.filter((n) => n.startsWith("leader"))) {
+  const html = fs.readFileSync(path.join(dir, name), "utf8");
+  assert.equal(html.includes("4,410"), false, name);
+  assert.equal(html.includes("120 股"), false, name);
+  assert.equal(html.includes(">82<"), false, name);
+}
 const css = fs.readFileSync(path.join(dir, "app.css"), "utf8");
 assert.match(css, /#ov-mirrors td,#ov-mirrors th,#ov-mirrors \.na\{white-space:nowrap\}/);
+assert.match(css, /#ov-mirrors td:first-child\{white-space:normal;min-width:10em\}/);

@@ -150,7 +150,7 @@
   function money(x) {
     var n = Number(x);
     if (!isFinite(n)) return "—";
-    return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   function isStrategyCatalog(d) {
@@ -1507,11 +1507,25 @@
     return list;
   }
 
-  function mockSummary(mode) {
+  /* 额度数字由调用方传入。模拟盘不在这里写死 60000 / 80000。 */
+  function mockSummary(mode, opts) {
+    opts = opts && typeof opts === "object" ? opts : {};
     if (mode === "wallet") {
-      return { mode: "wallet", allocated_usd: 5000, wallet_available_usd: 1200, over_allocated: false };
+      return {
+        mode: "wallet",
+        allocated_usd: opts.allocated_usd != null ? opts.allocated_usd : 5000,
+        wallet_available_usd: opts.wallet_available_usd != null ? opts.wallet_available_usd : 1200,
+        over_allocated: !!opts.over_allocated
+      };
     }
-    return { mode: "paper", allocated_usd: 80000, wallet_available_usd: null, over_allocated: true, paper_limit_usd: 60000 };
+    var paper = {
+      mode: "paper",
+      allocated_usd: opts.allocated_usd != null ? opts.allocated_usd : null,
+      wallet_available_usd: opts.wallet_available_usd != null ? opts.wallet_available_usd : null,
+      over_allocated: !!opts.over_allocated
+    };
+    if (opts.paper_limit_usd != null) paper.paper_limit_usd = opts.paper_limit_usd;
+    return paper;
   }
 
   function mockFilter(list, q) {
@@ -1538,7 +1552,7 @@
     var last = slice[slice.length - 1];
     var next = start + limit < filtered.length && last ? last.id : null;
     return {
-      summary: mockSummary(q.mode),
+      summary: mockSummary(q.mode, q),
       items: slice,
       accounts: slice,
       next_cursor: next,

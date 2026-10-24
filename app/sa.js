@@ -503,7 +503,8 @@
     var wallet = summary.mode === "wallet";
     var overText = SA.summaryOverWarning(summary);
     var over = overText ? '<div class="sa-warn">' + esc(overText) + "</div>" : "";
-    return '<div class="sa-kpis"><div class="sa-kpi lead"><span class="lbl">已分配</span><b class="num">' + esc(SA.formatUsd(summary.allocated_usd, false)) + '</b><span class="sa-note">已归档的资金不计入这里。</span></div><div class="sa-kpi"><span class="lbl">模式</span><b>' + (wallet ? "钱包" : "模拟盘") + '</b></div><div class="sa-kpi"><span class="lbl">' + (wallet ? "可用余额" : "参考额度") + "</span><b class='num'>" + esc(wallet ? SA.formatUsd(summary.wallet_available_usd, false) : (summary.paper_limit_usd != null ? SA.formatUsd(summary.paper_limit_usd, false) : "不拦截")) + "</b></div><div class=\"sa-kpi\"><span class=\"lbl\">状态</span><b>运行中 / 已停止</b><span class=\"sa-note\">只有这两种状态。要改参数就先停止。</span></div></div>" + over;
+    var avail = wallet ? '<div class="sa-kpi"><span class="lbl">可用余额</span><b class=\'num\'>' + esc(SA.formatUsd(summary.wallet_available_usd, false)) + "</b></div>" : "";
+    return '<div class="sa-kpis"><div class="sa-kpi lead"><span class="lbl">已分配</span><b class="num">' + esc(SA.formatUsd(summary.allocated_usd, false)) + '</b><span class="sa-note">已归档的资金不计入这里。</span></div><div class="sa-kpi"><span class="lbl">模式</span><b>' + (wallet ? "钱包" : "模拟盘") + "</b></div>" + avail + '<div class="sa-kpi"><span class="lbl">状态</span><b>运行中 / 已停止</b><span class="sa-note">只有这两种状态。要改参数就先停止。</span></div></div>' + over;
   }
   function filterBar(f) {
     return '<div class="sa-filters"><div class="seg" role="tablist"><button type="button" data-act="arch" data-v="0"' + (f.archived ? "" : ' class="on"') + '>在用</button><button type="button" data-act="arch" data-v="1"' + (f.archived ? ' class="on"' : "") + '>已归档</button></div><label class="mu">状态 <select class="in" data-act="state" style="width:auto;display:inline-block;padding:4px 8px"><option value=""' + (f.state ? "" : " selected") + '>全部</option><option value="running"' + (f.state === "running" ? " selected" : "") + '>运行中</option><option value="stopped"' + (f.state === "stopped" ? " selected" : "") + '>已停止</option></select></label><label class="mu">排序 <select class="in" data-act="sort" style="width:auto;display:inline-block;padding:4px 8px"><option value="return_pct"' + (f.sort === "return_pct" ? " selected" : "") + '>收益率</option><option value="net_pnl_usd"' + (f.sort === "net_pnl_usd" ? " selected" : "") + '>净收益</option><option value="capital_usd"' + (f.sort === "capital_usd" ? " selected" : "") + '>资金</option><option value="created_at"' + (f.sort === "created_at" ? " selected" : "") + '>创建时间</option></select></label></div>';
@@ -1196,15 +1197,7 @@
     var params = q();
     if (document.body.dataset.page === "compare") return loadCompare((params.get("ids") || "").split(",").filter(Boolean), compareState && compareState.data ? { axis: compareState.data.axis, metric: compareState.data.metric, scope: compareState.data.scope } : { axis: "elapsed", metric: "return_pct", scope: "all" });
     if (params.get("s") && !params.get("id") && !params.get("new") && document.body.dataset.page === "account") return openNamedAccount(params.get("s"));
-    if (params.get("id") && document.body.dataset.page === "account") {
-      var rawId = params.get("id");
-      if (!mockMode() && window.PM && PM.looksLikeAccountUuid && !PM.looksLikeAccountUuid(rawId)) {
-        if (params.get("s")) return openNamedAccount(params.get("s"));
-        return loadGroups(filtersFromQuery());
-      }
-      if (params.get("s") && window.PM && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
-      return openDetail(rawId);
-    }
+    if (params.get("id") && document.body.dataset.page === "account") return openAccountByRef(params.get("id"));
     if (document.body.dataset.page === "account") return loadGroups(filtersFromQuery());
   }
   async function onAct(ev) {
@@ -1435,6 +1428,46 @@
     return openDetail(id, mockMode() && id === label);
   }
 
+  /* ?id= 不是 uuid 时，先用名字在列表里对 uuid。对上再打开；对不上才说找不到。mock 的 id 就是名字。 */
+  async function openAccountByRef(rawId) {
+    var uuidLike = window.PM && PM.looksLikeAccountUuid && PM.looksLikeAccountUuid(rawId);
+    if (mockMode() || uuidLike) {
+      if (q().get("s") && uuidLike && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
+      return openDetail(rawId);
+    }
+    var id = "";
+    try {
+      var rows = await collectAccounts(false);
+      id = namedAccountId(rawId, rows);
+      if (!id) {
+        try { id = namedAccountId(rawId, await collectAccounts(true)); }
+        catch (archivedErr) { id = ""; }
+      }
+    } catch (e) {
+      var mountErr = takeOver();
+      if (mountErr) mountErr.innerHTML = banner([explain(e)], true) + '<a class="btn" href="' + esc(href("/account")) + '">返回账户列表</a>';
+      return;
+    }
+    if (!id) {
+      var missing = takeOver();
+      if (missing) missing.innerHTML = accountMissingHtml();
+      document.title = "账户 · Wakeloom";
+      return;
+    }
+    try {
+      if (window.PM && PM.looksLikeAccountUuid && PM.looksLikeAccountUuid(id) && history && history.replaceState) {
+        var next = new URLSearchParams(location.search || "");
+        if (next.get("id") !== id) {
+          next.set("id", id);
+          next.delete("s");
+          var qs = next.toString();
+          history.replaceState(null, "", (location.pathname || "/account") + (qs ? "?" + qs : "") + (location.hash || ""));
+        }
+      }
+    } catch (e2) {}
+    return openDetail(id);
+  }
+
   async function openDetail(id, viaStrategy) {
     var seq = ++detailSeq;
     detailState = null;
@@ -1471,11 +1504,7 @@
     detailState = null;
     var params = q();
     if (params.get("new")) return paintLaunch(params.get("new"), params.get("from"));
-    if (params.get("id")) {
-      var rawId = params.get("id");
-      if (params.get("s") && window.PM && PM.looksLikeAccountUuid && PM.looksLikeAccountUuid(rawId) && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
-      return openDetail(rawId);
-    }
+    if (params.get("id")) return openAccountByRef(params.get("id"));
     if (params.get("s")) return openNamedAccount(params.get("s"));
     takeOver();
     document.title = "账户 · Wakeloom 织迹";

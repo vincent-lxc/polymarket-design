@@ -167,6 +167,7 @@ td.r,th.r{text-align:right}
 @media(max-width:900px){.card table{display:table;width:100%;white-space:normal}.card .tw{overflow-x:auto}td,th{padding-left:6px!important;padding-right:6px!important}}
 @media(max-width:900px){table{min-width:0!important}td{white-space:normal}td.num,td .num,.tag{white-space:nowrap}}
 #ov-mirrors td,#ov-mirrors th,#ov-mirrors .na{white-space:nowrap}
+#ov-mirrors td:first-child{white-space:normal;min-width:10em}
 /* v4.3 collapse */
 tr.more{display:none}
 .tw.open tr.more{display:table-row;animation:rowin .5s var(--ease) both}
