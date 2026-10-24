@@ -9,8 +9,35 @@ const PUBLIC_PAGES=new Set(["board","markets","login"]);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 /* 市场名：有 event_slug / slug 才链到 polymarket.com/event/，否则纯文本。 */
-function marketHtml(name, row){ return window.PMMarket?PMMarket.html(name, row):esc(name==null||String(name).trim()===""?"未命名市场":name); }
-/* 总览镜像名在 recent_mirrors[].market，没有 title。market 为 null 时才用 slug，仍没有才写未命名。 */
+/* 没有标题时：slug 读成句子，再不行用「市场」加短 id。不要把内部占位写到界面上。 */
+function humanizeSlug(slug){
+  const raw=String(slug||"").trim();
+  if(!raw||raw==="[object Object]") return "";
+  const spaced=raw.replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
+  if(!spaced) return "";
+  if(/[A-Z\u4e00-\u9fff]/.test(spaced)) return spaced;
+  return spaced.replace(/\b[a-z]/g,c=>c.toUpperCase());
+}
+function shortMarketId(id){
+  const s=String(id||"").trim();
+  if(!s) return "市场";
+  return "市场 "+(s.length>10?s.slice(0,6)+"…":s);
+}
+function fallbackMarketTitle(row){
+  if(!row||typeof row!=="object") return "市场";
+  const slug=textField(pick(row,["event_slug","slug","eventSlug","market_slug"]));
+  const human=humanizeSlug(slug);
+  if(human) return human;
+  const id=textField(pick(row,["token_id","tokenId","asset_id","asset","clob_token_id","condition_id","conditionId","market_id"]));
+  return shortMarketId(id);
+}
+function marketLabel(name, row){
+  const named=name==null?"":String(name).trim();
+  if(named&&named!=="[object Object]") return named;
+  return fallbackMarketTitle(row);
+}
+function marketHtml(name, row){ const text=marketLabel(name, row); return window.PMMarket?PMMarket.html(text, row):esc(text); }
+/* 总览镜像名在 recent_mirrors[].market，没有 title。market 为 null 时才用 slug。 */
 function mirrorMarketName(row){
   if(!row||typeof row!=="object") return null;
   if(typeof row.market==="string"&&row.market.trim()) return row.market.trim();
@@ -29,12 +56,15 @@ function formatShares(x){
 }
 
 /* ---------- 显示规则 ---------- */
-/* not_yet_aggregated →「暂未汇总」；其它缺失 →「无数据」；算不出 → —。永不补 0 / 假数字 */
+/* not_yet_aggregated →「暂未汇总」；其它缺失 →「无数据」；算不出 → —。永不补 0 / 假数字。
+   leader 页不把内部状态写给用户：格子里用 —，整块空着写「暂无数据」。 */
 const ND='<span class="nd">无数据</span>';
 const NA='<span class="na">—</span>';
+const LEADER_EMPTY='<span class="nd">暂无数据</span>';
+const LEADER_DASH='<span class="na">—</span>';
 const why=r=>r?` title="${esc(r)}"`:"";
 const isPending=r=>r==="not_yet_aggregated"||(typeof r==="string"&&/(^|,)\s*not_yet_aggregated\s*(,|$)/.test(r));
-const nd=r=>isPending(r)?`<span class="nd"${why(r)}>暂未汇总</span>`:`<span class="nd"${why(r)}>无数据</span>`;
+const nd=r=>PAGE==="leader"?LEADER_DASH:(isPending(r)?`<span class="nd"${why(r)}>暂未汇总</span>`:`<span class="nd"${why(r)}>无数据</span>`);
 function usd(x,sign){ if(x==null||!isFinite(x))return null; const s=sign&&x>0?"+":x<0?"−":""; return s+"$"+Math.abs(x).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function pct(f,sign=true,d=2){ if(f==null||!isFinite(f))return null; const v=f*100; return (sign&&v>0?"+":v<0?"−":"")+Math.abs(v).toFixed(d)+"%"; }
 const cls=x=>x==null?"na":x>0?"up":x<0?"dn":"";
@@ -106,7 +136,15 @@ function revealMetrics(){
 }
 function badge(kind,title){ revealMetrics(); document.querySelectorAll(".demo-badge,.live-badge,.demo-banner").forEach(e=>e.remove());
   const tr=(zh,en)=>window.PMLang?PMLang.t(zh,en):zh;
-  const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?tr("示例，不是你的账户","Sample, not your account"):tr("数据更新中","Data updating"); b.title=title||""; document.body.appendChild(b); document.body.classList.toggle("live",kind!=="demo");
+  const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?tr("示例，不是你的账户","Sample, not your account"):tr("数据更新中","Data updating"); b.title=title||"";
+  const leaderMain=PAGE==="leader"?document.querySelector(".main"):null;
+  if(leaderMain){
+    b.classList.add("inflow");
+    const top=leaderMain.querySelector(".top");
+    if(top) top.insertAdjacentElement("afterend", b);
+    else leaderMain.prepend(b);
+  }else document.body.appendChild(b);
+  document.body.classList.toggle("live",kind!=="demo");
   if(kind==="demo"){ const ban=document.createElement("div"); ban.className="demo-banner"; ban.setAttribute("role","status"); ban.textContent="示例，不是你的账户"; const main=document.querySelector(".main")||document.body; main.prepend(ban); document.documentElement.classList.add("mock-demo"); } }
 function keepMock(){ document.querySelectorAll("a[href]").forEach(a=>{const href=a.getAttribute("href"); if(!href||href.startsWith("#")||/^[a-z]+:/i.test(href))return; let u; try{u=new URL(href,location.href);}catch(e){return;} if(u.origin!==location.origin)return; u.searchParams.set("mock","1"); a.href=u.pathname+u.search+u.hash; }); }
 function fallback(reason){ badge("demo",reason); keepMock(); }
@@ -170,7 +208,7 @@ function todayMissList(t){ return ((t&&t.missing_accounts)||[]).filter(m=>(m.fie
 function todayMiss(t){ const m=todayMissList(t); return m.length&&t.today_pnl_usd!=null?`<span class="mu">（不含 ${m.length} 个实例）</span>`:""; }
 function todayTitle(t){ const m=todayMissList(t); return m.length?` title="缺日初基线：${esc(m.join("、"))}"`:""; }
 /* 实时模式下，接口没覆盖到的静态示例块（无 id 的卡片、右栏示例）换成「无数据」，不再把示例当实时数据展示。
-   Leader 详情除外：visual-v4 的 #pc 和未命名卡片要留在页面上，由 renderLeader 用 BFF 填充。 */
+   Leader 详情除外：visual-v4 的 #pc 和没有 id 的卡片要留在页面上，由 renderLeader 用 BFF 填充。 */
 function stripDemo(){
   if(PAGE==="leader") return;
   document.querySelectorAll("main section.card:not([id]), main section#pc").forEach(sec=>{
@@ -1016,7 +1054,7 @@ window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,mirrorMarketName
   accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
   heartbeatLabel,normalizeOverviewRange,overviewRangeEcho,sliceOverviewCurve,shareCardFromTotals,loadOverview,
   leadersReadPath,leadersWritePath,leadersRequestKey,leadersCurrentKey,renderLeaders,writeLeader,
-  leaderPriceQuery,leaderMarkets,leaderTradeBody,leaderPositionBody,leaderPnlBody,leaderPnlBag,normalizePriceBook,dominantSide,tokenFor,
+  leaderPriceQuery,leaderMarkets,leaderTradeBody,leaderPositionBody,leaderPnlBody,leaderPnlBag,normalizePriceBook,dominantSide,tokenFor,marketLabel,
   saveDraft:(id,params,name)=>api("/v1/me/strategies/"+encodeURIComponent(id),{method:"PATCH",body:{params,mode:"paper"},confirm:name}),
   createDraft:(name,template_id,params)=>api("/v1/me/strategies",{method:"POST",body:{name,template_id,params,mode:"paper"},confirm:name})};
 
@@ -1123,9 +1161,12 @@ function tradeSide(t){
 function tradeNotional(t){ return numOrNull(pick(t,["notional_usd","notional","amount_usd","leader_notional_usd","usd","usdcSize","usdc_size"])); }
 function tradePrice(t){ return normPx(pick(t,["price","leader_price","avg_price","fill_price"])); }
 function leaderPriceQuery(tokenId, addr, range){
-  const r=range||"1d";
-  const bucket={"1h":"1m","1d":"1h","1w":"1h","all":"1d"}[r]||"1h";
-  return `/v1/markets/${encodeURIComponent(tokenId)}/prices?range=${encodeURIComponent(r)}&bucket=${encodeURIComponent(bucket)}&leader=${encodeURIComponent(addr)}`;
+  const raw=range||"1d";
+  const key=raw==="全部"?"all":raw;
+  /* 接口只认 max。界面上的「全部」若传 all，服务端会静默退回 1d。 */
+  const apiRange=key==="all"?"max":key;
+  const bucket={"1h":"1m","1d":"1h","1w":"1h","all":"1d","max":"1d"}[key]||"1h";
+  return `/v1/markets/${encodeURIComponent(tokenId)}/prices?range=${encodeURIComponent(apiRange)}&bucket=${encodeURIComponent(bucket)}&leader=${encodeURIComponent(addr)}`;
 }
 function textField(v){
   if(typeof v!=="string") return "";
@@ -1135,13 +1176,54 @@ function textField(v){
 /* 成交行经常没有 title。question / slug 可能在同一条的 market 对象里，或在 leaders 详情的 markets / 持仓上。 */
 function rowMarketTitle(row){
   if(!row||typeof row!=="object") return "";
-  if(textField(row.market)) return textField(row.market);
   const nested=row.market&&typeof row.market==="object"&&!Array.isArray(row.market)?row.market:null;
-  const fromNested=nested&&(textField(pick(nested,["question","title","name"]))||textField(pick(nested,["slug","event_slug","eventSlug"])));
-  if(fromNested) return fromNested;
+  const fromNested=nested&&textField(pick(nested,["question","title","name"]));
+  if(fromNested) return presentMarketTitle(fromNested);
   const named=textField(pick(row,["question","title","name","market_title","event_title"]));
-  if(named) return named;
-  return textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row))||"";
+  if(named) return presentMarketTitle(named);
+  if(textField(row.market)) return presentMarketTitle(textField(row.market));
+  const nestedSlug=nested&&textField(pick(nested,["slug","event_slug","eventSlug"]));
+  const slug=nestedSlug||textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row))||"";
+  return humanizeSlug(slug);
+}
+/* 接口有时把 slug 塞进 market 字符串。有空格或中文的当标题，纯连字符的读成句子。 */
+function presentMarketTitle(s){
+  const t=String(s||"").trim();
+  if(!t||t==="[object Object]") return "";
+  if(/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(t)) return humanizeSlug(t);
+  return t;
+}
+function leaderTitleIndex(detail){
+  const d=detail&&typeof detail==="object"?detail:{};
+  return nameIndex([].concat(bagList(d.markets), bagList(d.trades), bagList(d.mirrors), bagList(d.open_positions), bagList(d.positions), bagList(d.our_positions)));
+}
+function explicitTitle(row){
+  if(!row||typeof row!=="object") return "";
+  const nested=row.market&&typeof row.market==="object"&&!Array.isArray(row.market)?row.market:null;
+  const candidates=[
+    nested&&textField(pick(nested,["question","title","name"])),
+    textField(pick(row,["question","title","name","market_title","event_title"])),
+    textField(row.market)
+  ];
+  for(const c of candidates){
+    if(c&&!/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(c)) return c;
+  }
+  return "";
+}
+function leaderDisplayTitle(row, idx){
+  const direct=explicitTitle(row);
+  if(direct) return direct;
+  const cond=rowCond(row||{});
+  const token=tradeToken(row||{});
+  const via=(cond&&idx&&idx.byCond.get(cond))||(token&&idx&&idx.byToken.get(token))||"";
+  if(via) return via;
+  const own=row?rowMarketTitle(row):"";
+  return own||fallbackMarketTitle(row||{});
+}
+function leaderMarketCell(title, row, outcome){
+  const name=`<span class="mkt-ell" title="${esc(title)}">${marketHtml(title, row)}</span>`;
+  const out=outcome?`<span class="fk">${esc(outcome)}</span>`:"";
+  return `<span class="mkt-line">${name}${out}</span>`;
 }
 function rowCond(row){
   const cond=pick(row,["condition_id","market_id","conditionId"]);
@@ -1173,9 +1255,9 @@ function leaderMarkets(detail){
     const title=rowMarketTitle(t)||(cond&&idx.byCond.get(cond))||idx.byToken.get(token)||"";
     const group=cond?("c:"+cond):(title?("n:"+title):("t:"+token));
     const outcome=tradeOutcome(t)||"Yes";
-    if(!map.has(group)) map.set(group,{key:group,title:title||"未命名市场",notional:0,outcomes:{}});
+    if(!map.has(group)) map.set(group,{key:group,title:title||shortMarketId(token||cond),titleFallback:!title,notional:0,outcomes:{}});
     const m=map.get(group);
-    if((!m.title||m.title==="未命名市场")&&title) m.title=title;
+    if(title&&m.titleFallback){ m.title=title; m.titleFallback=false; }
     const n=Math.abs(tradeNotional(t)||0);
     m.notional+=n;
     if(!m.outcomes[outcome]) m.outcomes[outcome]={token_id:token,notional:0};
@@ -1303,7 +1385,8 @@ function leaderTradePairs(detail){
 const TRADE_HEAD='<tr><th class="hm">时间</th><th>市场 · outcome</th><th class="hm">方向</th><th class="r" title="trades.notional @ price">他 金额 @ 价格</th><th class="r" title="copy_fills.usd @ price">我方 金额 @ 价格</th><th>结果</th></tr>';
 function leaderTradeBody(detail){
   const pairs=leaderTradePairs(detail);
-  if(!pairs.length) return `<tr><td colspan="6">${nd("no_trades")}</td></tr>`;
+  if(!pairs.length) return `<tr><td colspan="6">${LEADER_EMPTY}</td></tr>`;
+  const idx=leaderTitleIndex(detail);
   return pairs.map(({trade,mirror})=>{
     const same=trade===mirror;
     const side=tradeSide(trade)||tradeSide(mirror);
@@ -1311,12 +1394,13 @@ function leaderTradeBody(detail){
     const hisPx=same?normPx(pick(trade,["leader_price","price"])): (tradePrice(trade)!=null?tradePrice(trade):normPx(mirror&&pick(mirror,["leader_price"])));
     const ourAmt=mirror?numOrNull(pick(mirror,["fill_usd","our_notional_usd","copied_usd","our_usd"])):null;
     const ourPx=mirror?normPx(pick(mirror,["fill_price","our_price"])):null;
-    const name=mirrorMarketName(trade)||mirrorMarketName(mirror);
+    const src=trade||mirror;
+    const title=leaderDisplayTitle(trade, idx)||leaderDisplayTitle(mirror, idx);
     const outcome=tradeOutcome(trade)||tradeOutcome(mirror);
     const his=atPrice(hisAmt, hisPx);
     const ours=atPrice(ourAmt, ourPx);
     const when=bj(tradeTime(trade)||tradeTime(mirror))||"—";
-    return `<tr><td class="num mu hm">${esc(when)}</td><td>${marketHtml(name, trade||mirror)}${outcome?` <span class="fk" style="display:inline">${esc(outcome)}</span>`:""}</td><td class="hm">${side==="SELL"?"卖出":side==="BUY"?"买入":NA}</td><td class="r ${his?"num":"na"}">${his||NA}</td><td class="r ${ours?"num":"na"}">${ours||NA}</td><td>${mirrorResult(mirror, side)}</td></tr>`;
+    return `<tr><td class="num mu hm">${esc(when)}</td><td>${leaderMarketCell(title, src, outcome)}</td><td class="hm">${side==="SELL"?"卖出":side==="BUY"?"买入":NA}</td><td class="r ${his?"num":"na"}">${his||NA}</td><td class="r ${ours?"num":"na"}">${ours||NA}</td><td>${mirrorResult(mirror, side)}</td></tr>`;
   }).join("");
 }
 const POS_HEAD='<tr><th>市场 · outcome</th><th class="r hm" title="current_size">股数</th><th class="r hm">均价 / 现价</th><th class="r" title="unrealized_pnl">他的浮动</th><th class="r">我方镜像持仓</th></tr>';
@@ -1329,10 +1413,11 @@ function leaderPositionBody(detail){
   const rows=bagList(d.open_positions).map(p=>({his:p, our:ours.get(posKey(p))||null, key:posKey(p)}));
   const seen=new Set(rows.map(r=>r.key));
   bagList(d.our_positions).forEach(p=>{ const k=posKey(p); if(seen.has(k)) return; seen.add(k); rows.push({his:null, our:p, key:k}); });
-  if(!rows.length) return `<tr><td colspan="5">${nd("no_positions")}</td></tr>`;
+  if(!rows.length) return `<tr><td colspan="5">${LEADER_EMPTY}</td></tr>`;
+  const idx=leaderTitleIndex(detail);
   return rows.map(({his,our})=>{
     const src=his||our||{};
-    const name=mirrorMarketName(src)||pick(src,["title","question","name"]);
+    const title=leaderDisplayTitle(his, idx)||leaderDisplayTitle(our, idx);
     const outcome=tradeOutcome(his||{})||tradeOutcome(our||{});
     const size=his?posSize(his):null;
     const avg=his?normPx(pick(his,["avg_price","avgPrice","average_price"])):null;
@@ -1341,7 +1426,7 @@ function leaderPositionBody(detail){
     const mine=our?posSize(our):null;
     const px=(avg==null&&mark==null)?NA:`${avg==null?"—":cent(avg)} / ${mark==null?"—":cent(mark)}`;
     const mineHtml=mine==null?NA:`${shareCount(mine)} 股`;
-    return `<tr><td>${marketHtml(name, src)}${outcome?` <span class="fk" style="display:inline">${esc(outcome)}</span>`:""}</td><td class="r num hm">${size==null?NA:shareCount(size)}</td><td class="r num hm">${px}</td><td class="r ${pnl==null?"na":"num "+cls(pnl)}">${pnl==null?nd(his&&his.reasons&&his.reasons.unrealized_pnl):usd(pnl,true)}</td><td class="r ${mine==null?"na":"num"}">${mineHtml}</td></tr>`;
+    return `<tr><td>${leaderMarketCell(title, src, outcome)}</td><td class="r num hm">${size==null?NA:shareCount(size)}</td><td class="r num hm">${px}</td><td class="r ${pnl==null?"na":"num "+cls(pnl)}">${pnl==null?LEADER_DASH:usd(pnl,true)}</td><td class="r ${mine==null?"na":"num"}">${mineHtml}</td></tr>`;
   }).join("");
 }
 function leaderPnlBag(detail){
@@ -1372,7 +1457,7 @@ function leaderPnlBody(detail){
   });
   const sum=key=>rows.length&&rows.every(r=>r[key]!=null)?rows.reduce((s,r)=>s+r[key],0):null;
   const foot=`<tr><td><b>合计</b></td>${moneyTd(sum("realized"), bag.reason)}${moneyTd(sum("unrealized"), bag.reason)}${moneyTd(sum("total"), bag.reason)}</tr>`;
-  if(!rows.length) return `<tr><td colspan="4">${nd(bag.reason||"not_yet_aggregated")}</td></tr>`+foot;
+  if(!rows.length) return `<tr><td colspan="4">${LEADER_EMPTY}</td></tr>`+foot;
   return rows.map(r=>`<tr><td>${esc(r.name)}</td>${moneyTd(r.realized,r.reason)}${moneyTd(r.unrealized,r.reason)}${moneyTd(r.total,r.reason)}</tr>`).join("")+foot;
 }
 function copyRateText(v){
@@ -1407,7 +1492,7 @@ function categoryRows(src){
 }
 function marketDistRows(src){
   return bagList(src).map(m=>({
-    name:typeof m==="string"?m:String(pick(m,["market","title","name","question"])||"未命名市场"),
+    name:typeof m==="string"?m:String(pick(m,["market","title","name","question"])||fallbackMarketTitle(m)),
     share:numOrNull(pick(m,["share","weight","pct"])),
     pnl:numOrNull(pick(m,["realized_pnl","realized_usd","pnl"]))
   })).filter(m=>m.name);
@@ -1419,7 +1504,7 @@ function winLabel(win){
 }
 function holdLabel(x){ return x>=1440?(x/1440).toFixed(1)+" 天":x>=60?(x/60).toFixed(1)+" 小时":Math.round(x)+" 分钟"; }
 const PNL_HEAD='<tr><th>策略</th><th class="r">已实现</th><th class="r">浮动</th><th class="r">合计</th></tr>';
-let leaderWin="90d", leaderN=20, leaderAddr="", leaderDetail=null, pcMarket=0, pcBook=null;
+let leaderWin="90d", leaderN=20, leaderAddr="", leaderDetail=null, pcMarket=0, pcBook=null, leaderFixture=false;
 function perfBag(d){
   const m=d&&d.metrics||{};
   return {
@@ -1460,19 +1545,19 @@ function paintLeaderBreakdown(m, extra){
   const maxC=Math.max(1,...cats.map(c=>Math.abs(c.pnl!=null?c.pnl:(c.settled||0))));
   const catHtml=cats.length?cats.slice(0,5).map(c=>{
     const wl=`${c.wins==null?"—":Math.round(c.wins)}/${c.settled==null?"—":Math.round(c.settled)}`;
-    const pnl=c.pnl==null?nd("not_yet_aggregated"):`<span class="${cls(c.pnl)}">${usd(c.pnl,true)}</span>`;
+    const pnl=c.pnl==null?LEADER_DASH:`<span class="${cls(c.pnl)}">${usd(c.pnl,true)}</span>`;
     const w=Math.max(4, Math.round(Math.abs(c.pnl!=null?c.pnl:(c.settled||0))/maxC*100));
     return `<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(c.name)}</span><span class="num">${wl} · ${pnl}</span></div><div class="meter"><i style="width:${w}%"></i></div></div>`;
-  }).join(""):`<div style="margin-top:8px">${nd("no_categories")}</div>`;
+  }).join(""):`<div style="margin-top:8px">${LEADER_EMPTY}</div>`;
   const hhi=numOrNull(extra.category_hhi), top=numOrNull(extra.top_event_share);
-  const conc=hhi==null&&top==null?`<div class="note" style="margin-top:6px">${nd("not_yet_aggregated")}</div>`:`<div class="note fi" tabindex="0" style="margin-top:6px" title="字段：category_hhi · top_event_share" data-f="category_hhi · top_event_share">集中度 ${hhi==null?"—":Number(hhi).toFixed(2)} · 最大事件占比 ${top==null?"—":pct(top,false,0)}</div>`;
+  const conc=hhi==null&&top==null?`<div class="note" style="margin-top:6px">${LEADER_EMPTY}</div>`:`<div class="note fi" tabindex="0" style="margin-top:6px" title="字段：category_hhi · top_event_share" data-f="category_hhi · top_event_share">集中度 ${hhi==null?"—":Number(hhi).toFixed(2)} · 最大事件占比 ${top==null?"—":pct(top,false,0)}</div>`;
   const maxM=Math.max(1,...mkts.map(x=>Math.abs(x.share!=null?x.share:(x.pnl||0))));
   const mktHtml=mkts.length?mkts.slice(0,5).map(row=>{
     const right=row.share!=null?pct(row.share,false,0):(row.pnl==null?"—":`<span class="${cls(row.pnl)}">${usd(row.pnl,true)}</span>`);
     const basis=Math.abs(row.share!=null?row.share:(row.pnl||0));
     const w=Math.max(4, Math.round(basis/maxM*100));
     return `<div style="margin-top:8px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(row.name)}</span><span class="num">${right}</span></div><div class="meter"><i style="width:${w}%"></i></div></div>`;
-  }).join(""):`<div style="margin-top:8px"><span class="nd">无数据</span></div><div class="note fi" tabindex="0" style="margin-top:6px" title="需按 condition_id 汇总 trades / positions" data-f="按 condition_id 汇总 trades / positions">需后端按市场汇总</div>`;
+  }).join(""):`<div style="margin-top:8px">${LEADER_EMPTY}</div>`;
   const wz=winLabel(extra.window||leaderWin);
   const roi=M(m.roi,x=>pct(x,true,1), m.reasons&&m.reasons.roi);
   const dd=M(m.max_drawdown,x=>pct(-Math.abs(x),true,1), m.reasons&&m.reasons.max_drawdown);
@@ -1529,7 +1614,7 @@ function paintLeaderRail(detail, health){
       const lis=items.length?items.map(x=>{
         const text=typeof x==="string"?x:(x&&(x.zh||x.label||x.code))||"";
         return text?`<li>${esc(text)}</li>`:"";
-      }).join(""):`<li>${nd("not_yet_aggregated")}</li>`;
+      }).join(""):`<li>${LEADER_EMPTY}</li>`;
       rc.innerHTML=`<div class="hd" style="margin:0"><h2>需要注意</h2>${pill}</div><ul>${lis}</ul>`;
     }else if(role==="usage"){
       const raw=bagList(d.position_usage||d.occupancy||(d.pnl&&d.pnl.position_usage)||d.accounts);
@@ -1539,7 +1624,7 @@ function paintLeaderRail(detail, health){
         max:numOrNull(a.max_open_positions!=null?a.max_open_positions:a.max)
       })).filter(a=>a.name&&(a.open!=null||a.max!=null));
       if(!rows.length){
-        rc.innerHTML=`<h2>持仓占用 Top</h2><div class="mr"><div class="ndbox" style="margin-top:8px"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>持仓数接口还没聚合。</span></div></div>`;
+        rc.innerHTML=`<h2>持仓占用 Top</h2><div class="mr">${LEADER_EMPTY}</div>`;
         return;
       }
       rows.sort((a,b)=>((b.max?b.open/b.max:0)-(a.max?a.open/a.max:0)));
@@ -1574,10 +1659,14 @@ function lockPrivateBlocks(addr){
   });
 }
 function blankLeaderLive(reason){
-  const why=reason||"leader_unavailable";
-  paintLeaderTable("#ld-pnl", PNL_HEAD, `<tr><td colspan="4">${nd(why)}</td></tr>`);
-  paintLeaderTable("#ld-trades", TRADE_HEAD, `<tr><td colspan="6">${nd(why)}</td></tr>`);
-  paintLeaderTable("#ld-pos", POS_HEAD, `<tr><td colspan="5">${nd(why)}</td></tr>`);
+  const why=reason==="offline"?"暂时连不上":"暂时没有这份数据";
+  const msg=`<span class="nd">${esc(why)}</span>`;
+  paintLeaderTable("#ld-pnl", PNL_HEAD, `<tr><td colspan="4">${msg}</td></tr>`);
+  paintLeaderTable("#ld-trades", TRADE_HEAD, `<tr><td colspan="6">${msg}</td></tr>`);
+  paintLeaderTable("#ld-pos", POS_HEAD, `<tr><td colspan="5">${msg}</td></tr>`);
+  const lbl=$("#pc")&&$("#pc").querySelector(".hd .lbl");
+  if(lbl) setPcLabel(lbl, reason==="offline"?"暂时连不上":"无数据");
+  const host=$("#pc-mkts"); if(host) host.remove();
   if(window.PMChart) PMChart.drawEmpty();
 }
 function paintSideToggle(market, side){
@@ -1587,18 +1676,134 @@ function paintSideToggle(market, side){
   const cur=choices.find(s=>s.toLowerCase()===String(side||"").toLowerCase())||choices[0];
   seg.innerHTML=choices.map(s=>`<span data-k="side:${esc(s)}" class="${s===cur?"on":""}">${esc(s)}</span>`).join("");
 }
+/* 一行：当前市场 + 最多 3 个截断标签，其余进「更多 N」。顺序沿用 leaderMarkets 的名义金额。 */
+function marketSwitcherPlan(markets, current){
+  const list=Array.isArray(markets)?markets:[];
+  if(list.length<2) return {current:0, inline:[], more:[], moreCount:0};
+  const cur=Math.max(0, Math.min(current|0, list.length-1));
+  const chosen=new Set([cur]);
+  for(let i=0;i<list.length && chosen.size<4;i++) chosen.add(i);
+  const inline=[], more=[];
+  list.forEach((m,i)=>{ (chosen.has(i)?inline:more).push({m,i}); });
+  return {current:cur, inline, more, moreCount:more.length};
+}
+function notionalShort(n){
+  const x=Number(n);
+  if(!isFinite(x)||x<=0) return "";
+  if(x>=1e6) return "$"+(x/1e6).toFixed(1)+"m";
+  if(x>=1000) return "$"+(x/1000).toFixed(x>=10000?0:1)+"k";
+  return "$"+Math.round(x).toLocaleString("en-US");
+}
+const PC_FIND_PAGE=50;
+let pcMoreItems=[], pcFindQuery="", pcFindShown=0;
+function marketSwitcherSlice(items, query, offset, limit){
+  const list=Array.isArray(items)?items:[];
+  const q=String(query||"").trim().toLowerCase();
+  const filtered=q?list.filter(it=>String((it.m&&it.m.title)||it.title||"").toLowerCase().includes(q)):list.slice();
+  const start=Math.max(0, offset|0);
+  const size=limit==null?PC_FIND_PAGE:Math.max(0, limit|0);
+  return {total:filtered.length, rows:filtered.slice(start, start+size)};
+}
+function marketOptHtml(item){
+  const m=item.m||item;
+  const i=item.i;
+  const on=i===pcMarket;
+  const n=notionalShort(m.notional);
+  return `<button type="button" role="option" class="pc-opt${on?" on":""}" tabindex="0" data-k="mkt:${i}" title="${esc(m.title)}" aria-selected="${on?"true":"false"}"><span class="pc-opt-t">${esc(m.title)}</span>${n?`<span class="num pc-opt-n">${esc(n)}</span>`:""}</button>`;
+}
+function fillPcOpts(reset){
+  const pop=document.querySelector("#pc-pop"); if(!pop) return;
+  const box=pop.querySelector(".pc-opts"); if(!box) return;
+  const empty=pop.querySelector(".pc-find-empty");
+  if(reset){ pcFindShown=0; box.scrollTop=0; }
+  const page=marketSwitcherSlice(pcMoreItems, pcFindQuery, pcFindShown, PC_FIND_PAGE);
+  if(reset) box.innerHTML="";
+  if(page.rows.length) box.insertAdjacentHTML("beforeend", page.rows.map(marketOptHtml).join(""));
+  pcFindShown+=page.rows.length;
+  if(empty) empty.hidden=page.total>0;
+}
+function marketSwitcherHtml(markets, current){
+  const plan=marketSwitcherPlan(markets, current==null?0:current);
+  if(!plan.inline.length) return "";
+  const pills=plan.inline.map(({m,i})=>{
+    const on=i===plan.current;
+    return `<button type="button" class="pc-pill${on?" on":""}" data-k="mkt:${i}" title="${esc(m.title)}" aria-pressed="${on?"true":"false"}">${esc(m.title)}</button>`;
+  }).join("");
+  if(!plan.moreCount) return pills;
+  return pills+`<button type="button" class="pc-more" aria-haspopup="listbox" aria-expanded="false" aria-controls="pc-pop">更多 ${plan.moreCount}</button><div class="pc-pop" id="pc-pop" aria-hidden="true"><input class="pc-find" type="search" placeholder="搜索市场" aria-label="搜索市场" aria-controls="pc-opts" autocomplete="off" spellcheck="false"><div class="pc-opts" id="pc-opts" role="listbox"></div><div class="pc-find-empty" hidden>没有匹配的市场</div></div>`;
+}
+function setPcLabel(lbl, text){
+  if(!lbl) return;
+  let t=lbl.querySelector(".pc-lbl-t");
+  if(!t){
+    lbl.textContent="";
+    t=document.createElement("span");
+    t.className="pc-lbl-t";
+    lbl.appendChild(t);
+  }
+  t.textContent=text;
+}
 function paintMarketSwitcher(markets){
   const el=$("#pc"); if(!el) return;
   const lbl=el.querySelector(".hd .lbl");
   const cur=markets[pcMarket]||markets[0];
-  if(lbl) lbl.textContent=cur?cur.title:"无数据";
-  const ctl=el.querySelector(".ctl");
-  let seg=el.querySelector("#pc-mkts");
-  if(!markets || markets.length<2){ if(seg) seg.remove(); return; }
-  if(!seg && ctl){ seg=document.createElement("div"); seg.className="seg"; seg.id="pc-mkts"; ctl.prepend(seg); }
-  if(!seg) return;
-  seg.innerHTML=markets.map((m,i)=>`<span data-k="mkt:${i}" class="${i===pcMarket?"on":""}">${esc(m.title)}</span>`).join("");
+  setPcLabel(lbl, cur?cur.title:"无数据");
+  let host=el.querySelector("#pc-mkts");
+  if(host && host.classList.contains("seg")){ host.remove(); host=null; }
+  const html=marketSwitcherHtml(markets, pcMarket);
+  if(!html){ if(host) host.remove(); return; }
+  if(!host){
+    host=document.createElement("div");
+    host.id="pc-mkts";
+    host.className="pc-mkts";
+    host.setAttribute("role","group");
+    host.setAttribute("aria-label","切换市场");
+    const ctl=el.querySelector(".ctl");
+    if(ctl) ctl.parentNode.insertBefore(host, ctl);
+    else el.appendChild(host);
+  }
+  host.innerHTML=html;
+  const pop=host.querySelector("#pc-pop");
+  const plan=marketSwitcherPlan(markets, pcMarket);
+  pcMoreItems=plan.more||[];
+  pcFindQuery="";
+  pcFindShown=0;
+  if(pop){
+    try{ pop.inert=true; }catch(e){}
+    const find=pop.querySelector(".pc-find");
+    const box=pop.querySelector(".pc-opts");
+    if(find) find.addEventListener("input", ()=>{ pcFindQuery=find.value||""; fillPcOpts(true); });
+    if(box) box.addEventListener("scroll", ()=>{
+      if(pcFindShown>=marketSwitcherSlice(pcMoreItems, pcFindQuery, 0, 1e9).total) return;
+      if(box.scrollTop+box.clientHeight>=box.scrollHeight-48) fillPcOpts(false);
+    });
+    fillPcOpts(true);
+  }
 }
+function closePcPop(){
+  const pop=document.querySelector("#pc-pop");
+  const more=document.querySelector("#pc .pc-more");
+  if(pop){ pop.classList.remove("open"); pop.setAttribute("aria-hidden","true"); try{ pop.inert=true; }catch(e){} }
+  if(more) more.setAttribute("aria-expanded","false");
+}
+function openPcPop(){
+  const pop=document.querySelector("#pc-pop");
+  const more=document.querySelector("#pc .pc-more");
+  if(!pop) return;
+  try{ pop.inert=false; }catch(e){}
+  pop.setAttribute("aria-hidden","false");
+  pop.classList.add("open");
+  if(more) more.setAttribute("aria-expanded","true");
+  const find=pop.querySelector(".pc-find");
+  if(find&&find.focus) find.focus();
+  else {
+    const opt=pop.querySelector('[role="option"]');
+    if(opt&&opt.focus) opt.focus();
+  }
+}
+window.PM.marketSwitcherPlan=marketSwitcherPlan;
+window.PM.marketSwitcherHtml=marketSwitcherHtml;
+window.PM.marketSwitcherSlice=marketSwitcherSlice;
 async function paintLeaderPrices(detail, addr){
   leaderDetail=detail;
   const markets=leaderMarkets(detail||{});
@@ -1621,6 +1826,11 @@ async function paintLeaderPrices(detail, addr){
   await loadLeaderPrices(addr, market, side, range);
 }
 async function loadLeaderPrices(addr, market, side, range){
+  if(leaderFixture){
+    pcBook=leaderFixtureBook();
+    if(window.PMChart){ PMChart.set({live:true, side, range, mkt:String(pcMarket)}); PMChart.paint(pcBook); }
+    return;
+  }
   const tokenId=tokenFor(market, side);
   if(!tokenId){ pcBook=null; if(window.PMChart) PMChart.drawEmpty(); return; }
   const q=leaderPriceQuery(tokenId, addr, range);
@@ -1664,10 +1874,41 @@ function bindLeaderChrome(){
   if(pc&&!pc.dataset.bound){
     pc.dataset.bound="1";
     pc.addEventListener("pm:pc", ev=>{ onPcEvent((ev&&ev.detail)||{}); });
+    pc.addEventListener("click", ev=>{
+      const more=ev.target.closest&&ev.target.closest(".pc-more");
+      if(more&&pc.contains(more)){
+        ev.preventDefault();
+        const pop=pc.querySelector("#pc-pop");
+        if(pop&&pop.classList.contains("open")) closePcPop();
+        else openPcPop();
+        return;
+      }
+      if(ev.target.closest&&ev.target.closest("#pc-pop [data-k]")) closePcPop();
+    });
+    pc.addEventListener("keydown", ev=>{
+      const pop=pc.querySelector("#pc-pop");
+      if(ev.key==="Escape"){ closePcPop(); return; }
+      if(!pop||!pop.classList.contains("open")) return;
+      if(ev.key!=="ArrowDown"&&ev.key!=="ArrowUp") return;
+      const opts=[...pop.querySelectorAll('[role="option"]')];
+      if(!opts.length) return;
+      ev.preventDefault();
+      const i=opts.indexOf(document.activeElement);
+      const next=ev.key==="ArrowDown"?opts[Math.min(opts.length-1,(i<0?0:i+1))]:opts[Math.max(0,i<0?0:i-1)];
+      if(next&&next.focus) next.focus();
+    });
+  }
+  if(!document.documentElement.dataset.pcpop){
+    document.documentElement.dataset.pcpop="1";
+    document.addEventListener("click", ev=>{
+      if(ev.target.closest&&ev.target.closest("#pc-mkts")) return;
+      closePcPop();
+    });
+    document.addEventListener("keydown", ev=>{ if(ev.key==="Escape") closePcPop(); });
   }
 }
 async function onPcEvent(d){
-  if(!leaderAddr||!token.get()) return;
+  if(!leaderAddr||(!token.get()&&!leaderFixture)) return;
   const markets=leaderMarkets(leaderDetail||{});
   if(d.key==="mkt"){ pcMarket=Number(d.value)||0; if(pcMarket>=markets.length) pcMarket=0; }
   const market=markets[pcMarket]||markets[0];
@@ -1707,21 +1948,127 @@ async function hydrateLeader(addr, opts){
   paintLeaderRail(detail, health);
   if(!(opts&&opts.keepChart)) await paintLeaderPrices(detail, addr);
 }
+const FIXTURE_TITLES=[
+  "US x Iran ceasefire continues through October 22?",
+  "US x Iran ceasefire continues through November 8?",
+  "Will the Democratic Party control the Senate after the 2026 Midterm elections?",
+  "Will the Republican Party control the Senate after the 2026 Midterm elections?",
+  "US x Iran ceasefire continues through October 28?",
+  "US x Iran ceasefire continues through November 30?",
+  "US x Iran ceasefire continues through November 15?",
+  "US–Iran Hormuz Agreement by November 30?",
+  "Israel x Iran ceasefire continues through October 24?",
+  "Israel x Iran ceasefire continues through October 27?",
+  "Will Benjamin Netanyahu be the next Prime Minister of Israel?",
+  "Strait of Hormuz traffic returns to normal by October 31?",
+  "Any G20 leader out in 2026?",
+  "Will Iran's nuclear program be constrained through December 2026?",
+  "Will a US Navy vessel transit the Strait of Hormuz in November 2026?",
+  "Bitcoin above $150,000 on December 31, 2026?"
+];
+function leaderFixtureDetail(addr){
+  const trades=FIXTURE_TITLES.map((title,i)=>({
+    id:"fx"+i,
+    token_id:"fx-yes-"+i,
+    condition_id:"fx-cond-"+i,
+    question:title,
+    outcome:"Yes",
+    side:i%5===0?"SELL":"BUY",
+    notional_usd:(FIXTURE_TITLES.length-i)*1250,
+    price:0.41+((i%7)*0.03),
+    t:Date.UTC(2026,9,21,12,0,0)-i*3600e3
+  }));
+  trades.push({
+    id:"fx-no",
+    token_id:"fx-no-0",
+    condition_id:"fx-cond-0",
+    question:FIXTURE_TITLES[0],
+    outcome:"No",
+    side:"BUY",
+    notional_usd:400,
+    price:0.52,
+    t:Date.UTC(2026,9,21,11,0,0)
+  });
+  trades.push({id:"fx-u", token_id:"0x12ab89cdef0123456789", outcome:"Yes", side:"BUY", notional_usd:20, price:0.33, t:Date.UTC(2026,9,20,8,0,0)});
+  trades.push({id:"fx-slug", token_id:"fx-slug", slug:"will-the-fed-cut-rates-in-december", outcome:"Yes", side:"BUY", notional_usd:15, price:0.37, t:Date.UTC(2026,9,20,7,0,0)});
+  const t0=Date.UTC(2026,8,1);
+  const equity_curve=Array.from({length:24},(_,i)=>({t:new Date(t0+i*864e5).toISOString(), equity:42000+i*900+((i%4)-1)*200}));
+  return {
+    address:addr,
+    user_name:"classified",
+    profile:{user_name:"classified", x_username:"classified", portfolio_value_usd:48210},
+    as_of:"2026-10-22T11:06:07Z",
+    smart_score:70,
+    gate_pass:true,
+    metrics:{win_rate:0.485, roi:0.171, max_drawdown:0.031, resolved_markets:270, smart_score:70, gate_pass:true, median_trade_usd:420, median_hold_minutes:18*60, category_hhi:0.41, top_event_share:0.12},
+    settled:{wins:131, losses:139, realized_pnl:9840},
+    categories:[{category:"政治", wins:80, settled:160, realized_pnl:6200},{category:"地缘", wins:40, settled:90, realized_pnl:2100}],
+    equity_curve,
+    trades,
+    mirrors:[{leader_trade_id:"fx0", token_id:"fx-yes-0", fill_usd:400, fill_price:0.42, decision:"copied", side:"BUY"}],
+    open_positions:[{token_id:"fx-yes-0", question:FIXTURE_TITLES[0], outcome:"Yes", current_size:1200, avg_price:0.42, last_mark:0.46, unrealized_pnl:48}],
+    our_positions:[{token_id:"fx-yes-0", outcome:"Yes", current_size:40}],
+    pnl:{by_strategy:[{strategy:"paper", realized_usd:12, unrealized_usd:3, total_usd:15}], copy_rate:{copied:4, signals:18}}
+  };
+}
+function leaderFixtureBook(){
+  const t0=Date.UTC(2026,9,21,0,0,0);
+  const history=[];
+  for(let i=0;i<96;i++){
+    const p=0.46+Math.sin(i/7)*0.07+(i%17===0?-0.04:0);
+    history.push({t:t0+i*15*60*1000, p:Math.max(0.08, Math.min(0.92, +p.toFixed(4)))});
+  }
+  const leader_trades=[];
+  const anchor=history[72].t;
+  for(let i=0;i<14;i++){
+    leader_trades.push({t:anchor+i*1000, side:i%8===0?"SELL":"BUY", price:history[72].p, outcome:"Yes", notional_usd:180+i*15});
+  }
+  [18,36,54,88].forEach((idx,k)=>{
+    leader_trades.push({t:history[idx].t, side:k===2?"SELL":"BUY", price:history[idx].p, outcome:"Yes", notional_usd:900+k*120});
+  });
+  const our_fills=[{t:history[36].t+800, side:"BUY", price:history[36].p, outcome:"Yes", fill_usd:400}];
+  return normalizePriceBook({history, leader_trades, our_fills});
+}
+async function hydrateLeaderFixture(addr){
+  const detail=leaderFixtureDetail(addr);
+  leaderDetail=detail;
+  applyLeaderIdentity(detail);
+  const metrics=Object.assign({}, detail.metrics, {reasons:detail.metric_reasons});
+  fillPerf(metrics, leaderProf(detail, addr), perfBag(detail));
+  paintLeaderPerfCurve(detail.equity_curve, null);
+  const asof=$("#ld-perf .hd .r"); if(asof) asof.textContent=detail.as_of?`截至 ${bj(detail.as_of)}`:"";
+  paintLeaderPnl(detail);
+  paintLeaderTrades(detail);
+  paintLeaderPositions(detail);
+  paintLeaderRail(detail, null);
+  await paintLeaderPrices(detail, addr);
+}
+function clearLeaderDemoTags(){
+  const top=document.querySelector(".top");
+  if(top) top.querySelectorAll(".tag,.pill").forEach(e=>e.remove());
+}
 async function renderLeader(opts){
   const addr=Q.get("addr"); if(!addr) return "static";
   leaderAddr=addr;
+  clearLeaderDemoTags();
   document.title="Leader · Wakeloom 织迹";
   const h0=document.querySelector(".top h1");
   if(h0){ const av=h0.querySelector(".av"); if(av) av.textContent=""; [...h0.childNodes].forEach(n=>{ if(n.nodeType===3) n.textContent=""; }); }
   const idl0=$("#ld-idl"); if(idl0) idl0.innerHTML=`<a href="/leaders" class="dim">Leaders</a> / <span class="nd">…</span>`;
   const shellAsOf=$("#ld-perf .hd .r"); if(shellAsOf&&!(opts&&opts.keepChart)) shellAsOf.textContent="";
   bindLeaderChrome();
+  if(Q.get("fixture")==="1"){
+    leaderFixture=true;
+    try{ await hydrateLeaderFixture(addr); }
+    catch(e){ console.warn(e); blankLeaderLive("error"); }
+    return "fixture";
+  }
   if(token.get()){
     try{ await hydrateLeader(addr, opts); }
     catch(e){
-      if(e&&e.status===401) throw e;
+      if(e&&e.status===401){ lockPrivateBlocks(addr); return "locked"; }
       console.warn(e);
-      blankLeaderLive(e&&e.offline?"offline":(e&&e.message)||"leader_unavailable");
+      blankLeaderLive(e&&e.offline?"offline":"error");
     }
     return;
   }
@@ -1736,7 +2083,7 @@ async function renderLeader(opts){
     publicOnly(w);
   }catch(e){
     console.warn(e);
-    blankLeaderLive(e&&e.offline?"offline":(e&&e.message)||"leader_unavailable");
+    blankLeaderLive(e&&e.offline?"offline":"error");
   }
 }
 function refreshLeader(){ return renderLeader({keepChart:true}).catch(e=>{ console.warn(e); if(e&&e.status===401) return; }); }
@@ -1938,7 +2285,14 @@ async function boot(){
   try{
     if(PAGE==="markets"){ await renderMarkets(); if(token.get()) stripDemo(); return badge("live", token.get()?"BFF":"公开接口"); }
     if(PAGE==="board") return;
-    if(PAGE==="leader"){ const r=await renderLeader(); if(r==="static")return fallback("示例 leader 页（无 addr 参数）"); stripDemo(); return badge("live"); }
+    if(PAGE==="leader"){
+      const r=await renderLeader();
+      if(r==="static")return fallback("示例 leader 页（无 addr 参数）");
+      stripDemo();
+      if(r==="fixture") return badge("demo","本地 fixture（?fixture=1），形状对齐 0x12d6…f2a8，未请求 BFF");
+      if(r==="locked"){ revealMetrics(); return; }
+      return badge("live");
+    }
     if(!R[PAGE])return;
     if(!token.get())return toLogin();
     const state=await R[PAGE](); stripDemo();

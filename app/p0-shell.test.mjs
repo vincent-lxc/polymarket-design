@@ -185,7 +185,8 @@ assert.equal(PM.mirrorMarketName({ market: "Ipswich O/U", title: undefined }), "
 assert.equal(PM.mirrorMarketName({ title: "不要用标题", market: "Xi Jinping out" }), "Xi Jinping out");
 assert.equal(PM.mirrorMarketName({ market: null, title: "Fed", slug: "ipswich-ou" }), "ipswich-ou");
 assert.equal(PM.mirrorMarketName({ market: null, title: "Fed" }), null);
-assert.equal(PM.marketHtml(PM.mirrorMarketName({ market: null, title: "Fed" }), { title: "Fed" }), "未命名市场");
+assert.equal(PM.marketHtml(PM.mirrorMarketName({ market: null, title: "Fed" }), { title: "Fed" }), "市场");
+assert.equal(PM.marketHtml(null, { title: "Fed" }).includes("未命名"), false);
 assert.equal(PM.marketHtml("Ipswich O/U", { market: "Ipswich O/U" }).includes("Ipswich O/U"), true);
 
 assert.equal(PM.formatShares(609.1500000000001), "609.15");

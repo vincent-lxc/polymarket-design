@@ -81,12 +81,33 @@ assert.equal(live.chart.state().side, "Yes");
 
 live.chart.paint({
   history,
-  marks: [{ t: 1600000000000, who: "L", side: "SELL", outcome: "Auburn", price: 0.2, notional: 40 }]
+  marks: [{ t: 1700002000000, who: "L", side: "SELL", outcome: "Auburn", price: 0.4, notional: 40 }]
 });
 assert.match(live.svg.innerHTML, /<path /);
 assert.match(live.svg.innerHTML, /Auburn/);
 assert.match(live.svg.innerHTML, /#ff5a5f/);
 assert.doesNotMatch(live.svg.innerHTML, /<circle /);
+
+const outside = loadChart("?addr=0xabc", "1");
+const outsideMarks = [];
+for (let i = 0; i < 10; i++) outsideMarks.push({ t: 1600000000000, who: "L", side: "BUY", outcome: "Out", price: 0.2, notional: 10 });
+for (let i = 0; i < 4; i++) outsideMarks.push({ t: 1700001800000, who: "L", side: "BUY", outcome: "In", price: 0.44, notional: 5 });
+outsideMarks.push({ t: 1800000000000, who: "M", side: "BUY", outcome: "Later", price: 0.9, notional: 9 });
+outside.chart.paint({ history, marks: outsideMarks });
+assert.match(outside.svg.innerHTML, /In/);
+assert.match(outside.svg.innerHTML, /data-count="4"/);
+assert.doesNotMatch(outside.svg.innerHTML, /Out/);
+assert.doesNotMatch(outside.svg.innerHTML, /Later/);
+assert.doesNotMatch(outside.svg.innerHTML, /<circle /);
+assert.doesNotMatch(outside.svg.innerHTML, /20¢/);
+
+const noFills = loadChart("?addr=0xabc", "1");
+noFills.chart.paint({
+  history,
+  marks: [{ t: 1700001800000, who: "L", side: "BUY", outcome: "Yes", price: 0.42, notional: 10 }]
+});
+assert.match(noFills.svg.innerHTML, /<path /);
+assert.doesNotMatch(noFills.svg.innerHTML, /<circle /);
 
 live.chart.paint({
   history,
@@ -116,5 +137,18 @@ dropped.chart.paint({
 });
 assert.doesNotMatch(dropped.svg.innerHTML, /<path /);
 assert.doesNotMatch(dropped.svg.innerHTML, /<circle /);
+
+const dense = loadChart("?addr=0xabc", "1");
+const pile = [];
+for (let i = 0; i < 30; i++) {
+  pile.push({ t: 1700001800000, who: "L", side: "BUY", outcome: "Alabama", price: 0.44, notional: 10 });
+}
+pile.push({ t: 1700001800000, who: "L", side: "SELL", outcome: "Alabama", price: 0.4, notional: 8 });
+dense.chart.set({ mode: "k" });
+dense.chart.paint({ history, ohlc: [], marks: pile });
+const paths = dense.svg.innerHTML.match(/<path /g) || [];
+assert.equal(paths.length, 2);
+assert.match(dense.svg.innerHTML, /data-count="30"/);
+assert.match(dense.svg.innerHTML, /同柱 30 笔/);
 
 console.log("chart-marks tests ok");

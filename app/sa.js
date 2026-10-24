@@ -882,19 +882,33 @@
     paintSide("positions");
     paintSide("trades");
   }
+  function sideMarketLabel(item) {
+    if (window.PM && PM.marketLabel) return PM.marketLabel(item && (item.title || item.market), item);
+    var named = item && String(item.title || item.market || "").trim();
+    if (named) return named;
+    var slug = item && (item.event_slug || item.slug);
+    if (slug && String(slug).trim()) {
+      var s = String(slug).trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+      if (!/[A-Z]/.test(s)) s = s.replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
+      if (s) return s;
+    }
+    var id = item && String(item.token_id || item.condition_id || item.asset_id || "").trim();
+    if (!id) return "市场";
+    return "市场 " + (id.length > 10 ? id.slice(0, 6) + "…" : id);
+  }
   function sideRow(kind, item) {
     if (kind === "positions") {
-      var name = window.PM && PM.marketHtml ? PM.marketHtml(item.title || item.market, item) : esc(item.title || item.market || "未命名市场");
+      var name = window.PM && PM.marketHtml ? PM.marketHtml(item.title || item.market, item) : esc(sideMarketLabel(item));
       var shares = window.PM && PM.formatShares ? PM.formatShares(item.shares) : (item.shares == null || item.shares === "" ? "—" : (isFinite(Number(item.shares)) ? Number(item.shares).toFixed(2) : "—"));
       return "<tr><td>" + name + "</td><td>" + esc(item.outcome || "—") + "</td><td class='r num'>" + esc(shares) + "</td><td class='r num'>" + esc(SA.formatUsd(item.unrealized_usd, true)) + "</td></tr>";
     }
     var when = window.PM && PM.bj ? (PM.bj(item.decided_at) || "—") : esc(item.decided_at || "—");
-    var market = window.PM && PM.marketHtml ? PM.marketHtml(item.market, item) : esc(item.market || "未命名市场");
+    var market = window.PM && PM.marketHtml ? PM.marketHtml(item.market, item) : esc(sideMarketLabel(item));
     return "<tr><td class='num'>" + esc(when) + "</td><td>" + market + "</td><td>" + esc(item.side === "SELL" ? "卖出" : item.side === "BUY" ? "买入" : (item.side || "—")) + "</td><td class='r num'>" + esc(SA.formatUsd(item.fill_usd, false)) + "</td></tr>";
   }
   function sideCard(kind, item) {
-    if (kind === "positions") return '<article class="sa-acard"><b>' + esc(item.title || item.market || "未命名市场") + '</b><div class="sa-meta">' + esc(item.outcome || "") + " · " + esc(SA.formatUsd(item.unrealized_usd, true)) + "</div></article>";
-    return '<article class="sa-acard"><b>' + esc(item.market || "未命名市场") + '</b><div class="sa-meta">' + esc(item.side || "") + " · " + esc(SA.formatUsd(item.fill_usd, false)) + "</div></article>";
+    if (kind === "positions") return '<article class="sa-acard"><b>' + esc(sideMarketLabel(item)) + '</b><div class="sa-meta">' + esc(item.outcome || "") + " · " + esc(SA.formatUsd(item.unrealized_usd, true)) + "</div></article>";
+    return '<article class="sa-acard"><b>' + esc(sideMarketLabel(item)) + '</b><div class="sa-meta">' + esc(item.side || "") + " · " + esc(SA.formatUsd(item.fill_usd, false)) + "</div></article>";
   }
   async function paintSide(kind) {
     var slot = detailState.sides[kind];

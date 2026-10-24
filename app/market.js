@@ -19,10 +19,18 @@
   function href(slug) {
     return "https://polymarket.com/event/" + encodeURIComponent(slug);
   }
+  function humanize(slug) {
+    if (!slug) return "";
+    var spaced = String(slug).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!spaced) return "";
+    if (/[A-Z]/.test(spaced)) return spaced;
+    return spaced.replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); });
+  }
   function html(name, row) {
-    var text = name == null || String(name).trim() === "" ? "未命名市场" : String(name);
-    var safe = esc(text);
     var slug = pick(row);
+    var raw = name == null ? "" : String(name).trim();
+    var text = raw ? String(name) : (humanize(slug) || "市场");
+    var safe = esc(text);
     if (!slug) return safe;
     return '<a class="mkt" href="' + href(slug) + '" target="_blank" rel="noopener noreferrer">' + safe + ICON + "</a>";
   }
