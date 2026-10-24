@@ -90,7 +90,8 @@
     "关闭钱包": "Close wallet",
     "等待运行": "Waiting to run",
     "净值从引擎接入后开始计算": "Equity is tracked once the engine is connected",
-    "暂无净值": "No equity yet"
+    "暂无净值": "No equity yet",
+    "校准中": "Calibrating"
   };
 
   function applyStatic() {

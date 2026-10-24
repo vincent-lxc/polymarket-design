@@ -182,8 +182,25 @@ assert.equal(unnamed[0].title, "未命名市场");
 for (const page of ["leader.html", "leader-5c1e.html", "leader-91d4.html", "leader-avalon.html", "leader-lunadegen.html"]) {
   const pageHtml = fs.readFileSync(new URL("./" + page, import.meta.url), "utf8");
   assert.doesNotMatch(pageHtml, /prices（待建）/);
-  assert.doesNotMatch(pageHtml, /校准中/);
 }
+
+const curveAt = html.indexOf('id="ld-curve-label"');
+assert.ok(curveAt > 0);
+const curve = html.slice(curveAt, html.indexOf('id="ld-pnl"'));
+assert.match(curve, /他的累计盈亏（已实现\+浮动）/);
+assert.match(curve, /data-cal="equity"[^>]*>校准中/);
+assert.match(curve, /<svg/);
+assert.match(curve, /<polyline/);
+assert.doesNotMatch(curve.slice(0, 700), /display:\s*none|visibility:\s*hidden|opacity:\s*0/);
+const pcCard = html.slice(html.indexOf('id="pc"'), html.indexOf('id="ld-trades"'));
+assert.doesNotMatch(pcCard, /校准中/);
+
+const lang = fs.readFileSync(new URL("./lang.js", import.meta.url), "utf8");
+assert.match(lang, /"校准中": "Calibrating"/);
+
+const paint = api.slice(api.indexOf("function paintLeaderPerfCurve"), api.indexOf("function numOrNull"));
+assert.match(paint, /<polyline/);
+assert.doesNotMatch(paint, /ld-curve-label|校准中|display:\s*none/);
 
 const cfbBook = PM.normalizePriceBook({
   history: [{ t: 1700000000, p: 0.41 }, { t: 1700003600, p: 0.46 }],
