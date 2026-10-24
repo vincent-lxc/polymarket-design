@@ -69,7 +69,12 @@ for (const name of files.filter((n) => n.startsWith("leader"))) {
   assert.equal(html.includes("4,410"), false, name);
   assert.equal(html.includes("120 股"), false, name);
   assert.equal(html.includes(">82<"), false, name);
+  assert.equal(/>71</.test(html), false, name);
+  assert.equal(/>64</.test(html), false, name);
+  assert.equal(/10-\d{2}/.test(html), false, name);
 }
+const strategiesHtml = fs.readFileSync(path.join(dir, "strategies.html"), "utf8");
+assert.equal(strategiesHtml.includes("修改参数 · <i class=\"sk\">"), false);
 const css = fs.readFileSync(path.join(dir, "app.css"), "utf8");
 assert.match(css, /#ov-mirrors td,#ov-mirrors th,#ov-mirrors \.na\{white-space:nowrap\}/);
 assert.match(css, /#ov-mirrors td:first-child\{white-space:normal;min-width:10em\}/);

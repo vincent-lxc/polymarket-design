@@ -599,6 +599,24 @@ function blankAccountShell(){
     if(t) t.innerHTML='<tr><td><i class="sk l"></i></td><td><i class="sk"></i></td></tr>';
   });
 }
+function stripSkMarkup(el){
+  if(!el||typeof el.innerHTML!=="string") return;
+  el.innerHTML=el.innerHTML
+    .replace(/<i\b[^>]*class="sk[^"]*"[^>]*>\s*<\/i>/g,"")
+    .replace(/<div class="meter">[\s\S]*?<\/div>/g,"");
+}
+function dropLiveSkeletons(root){
+  const scope=root||document;
+  if(scope.querySelectorAll){
+    const list=scope.querySelectorAll(".sk");
+    if(list&&list.forEach) list.forEach(el=>{ if(el&&el.remove) el.remove(); });
+  }
+  if(scope.querySelectorAll){
+    const meters=scope.querySelectorAll("#ac-loss .meter, #ac-main .meter");
+    if(meters&&meters.forEach) meters.forEach(el=>{ if(el&&el.remove) el.remove(); });
+  }
+}
+/* 找不到账户时主卡、持仓、成交和策略备注一起换掉，不留灰条。 */
 function paintAccountMissing(){
   const h=document.querySelector(".top h1");
   if(h) h.textContent="账户";
@@ -606,8 +624,19 @@ function paintAccountMissing(){
   if(main) main.innerHTML='<div class="ndbox"><span class="nd">找不到这个账户</span></div><p style="margin-top:12px"><a class="btn" href="/account">返回账户列表</a></p>';
   const steps=document.querySelector(".steps");
   if(steps) steps.innerHTML='<a href="/account">返回账户列表</a>';
+  ["#ac-pos","#ac-act","#ac-params","#ac-loss"].forEach(sel=>{
+    const root=$(sel);
+    if(!root) return;
+    const table=root.querySelector&&root.querySelector("table");
+    if(table) table.innerHTML="";
+    const lab=root.querySelector&&root.querySelector(".hd .lbl");
+    if(lab) lab.innerHTML="";
+    root.innerHTML="";
+    stripSkMarkup(root);
+  });
+  dropLiveSkeletons(document);
 }
-/* 旧列表没有 uuid。退出骨架时标题、副文、指标和两张表一起清，避免灰条一直留着。 */
+/* 旧列表没有 uuid。退出骨架时标题、副文、指标、日亏条和两张表一起清，避免灰条一直留着。 */
 function clearAccountSkeleton(){
   const h=document.querySelector(".top h1");
   if(h) h.textContent="账户";
@@ -615,6 +644,8 @@ function clearAccountSkeleton(){
   if(sub) sub.innerHTML="";
   const kv=$("#ac-main .kv");
   if(kv) kv.innerHTML="";
+  const loss=$("#ac-loss");
+  if(loss) stripSkMarkup(loss);
   ["#ac-pos","#ac-act"].forEach(sel=>{
     const root=$(sel);
     if(!root) return;
@@ -624,10 +655,14 @@ function clearAccountSkeleton(){
       const head=html.match(/<tr>\s*<th[\s\S]*?<\/tr>/);
       table.innerHTML=head?head[0]:"";
     }
-    if(root.querySelectorAll) root.querySelectorAll(".sk").forEach(el=>el.remove());
     const lab=root.querySelector&&root.querySelector(".hd .lbl");
     if(lab) lab.innerHTML="";
+    stripSkMarkup(root);
+    if(root.querySelectorAll) root.querySelectorAll(".sk").forEach(el=>{ if(el&&el.remove) el.remove(); });
   });
+  const params=$("#ac-params");
+  if(params) stripSkMarkup(params);
+  dropLiveSkeletons(document);
 }
 function paintAccountEmpty(){
   clearAccountSkeleton();
@@ -722,10 +757,35 @@ async function renderAccount(){
     if(a.open_positions==null) posLab.innerHTML=nd(R.open_positions||"not_yet_aggregated");
     else posLab.textContent=a.open_positions+" 个市场"+(a.max_open_positions!=null?" / 上限 "+a.max_open_positions:"");
   }
+  const loss=$("#ac-loss");
+  if(loss) stripSkMarkup(loss);
   if(d.positions) rows($("#ac-pos"),'<tr><th>市场</th><th class="hm">方向</th><th class="r hm">股数</th><th class="r hm">均价 / 现价</th><th class="r">浮动</th></tr>',d.positions.map(p=>`<tr><td>${marketHtml(p.title, p)}</td><td class="hm">${esc(p.outcome||"—")}</td><td class="r num hm">${esc(formatShares(p.shares))}</td><td class="r num hm">${Math.round(p.avg_price*100)}¢ / ${p.last_mark==null?"—":Math.round(p.last_mark*100)+"¢"}</td><td class="r num ${cls(p.unrealized_usd)}">${M(p.unrealized_usd,x=>usd(x,true),(p.reasons&&p.reasons.unrealized_usd)||"not_yet_aggregated")}</td></tr>`).join(""));
+  else clearAccountSkeletonTables("#ac-pos");
+  const actLab=$("#ac-act .hd .lbl");
+  if(actLab) actLab.innerHTML="";
   if(d.activity) rows($("#ac-act"),'<tr><th class="hm">时间</th><th>市场</th><th class="hm">用途</th><th class="r">金额</th><th>结果</th></tr>',d.activity.map(activityRow).join(""));
-  else if($("#ac-act")){ const sec=$("#ac-act"); const hd=sec.querySelector(".hd"); sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>'; }
+  else if($("#ac-act")){
+    const sec=$("#ac-act");
+    const table=sec.querySelector("table");
+    if(table) table.innerHTML="";
+    const hd=sec.querySelector(".hd");
+    const lab=hd&&hd.querySelector&&hd.querySelector(".lbl");
+    if(lab) lab.innerHTML="";
+    sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>';
+  }
+  const params=$("#ac-params");
+  if(params) stripSkMarkup(params);
+  dropLiveSkeletons(document);
   paintHeartbeat([d, a, list]);
+}
+function clearAccountSkeletonTables(sel){
+  const root=$(sel);
+  if(!root) return;
+  const table=root.querySelector&&root.querySelector("table");
+  if(!table) return;
+  const html=String(table.innerHTML||"");
+  const head=html.match(/<tr>\s*<th[\s\S]*?<\/tr>/);
+  table.innerHTML=head?head[0]:"";
 }
 /* ---------- Leaders 在跟（注册表） ---------- */
 /* GET/POST/DELETE /v1/accounts/{id}/leaders。id 优先用当前账户 uuid（与账户详情/总览同一 id）。
