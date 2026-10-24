@@ -160,6 +160,58 @@ API：`研发/API-STRATEGY-ACCOUNT-v1-2026-10-23.md`
 
 ---
 
+### 6.x 后端（Blake）交接
+
+**做到哪**
+- 已合已上：#72–#76（#76 是回撤门禁「null 放行」加 cutover，现网 DEPLOYED_SHA `e8757616`）。
+- #77（卡片手续费只扣一次，共用 `bff/fee-basis.ts`）：数据已验过，paper20000 卡片 5,889.41 / +29.45%，四处一致。Casey 数据门已过。
+- #78（`GET /v1/accounts/:id/pnl-buckets` 日/周/月/年趋势）：base 目前是 #77 分支，**#77 合后要把 base 改回 master 再合**。全段对账差 $0，Casey 数据门已过。
+- 真实返回、核对文档都在 `研发/pr77-responses/`、`研发/CHECK-PR77-real-responses-2026-10-24.md`、`研发/CHECK-PR78-real-responses-2026-10-24.md`。
+
+**下一步**
+1. 等 Emily 截图 → Casey 门 → Morgan「可以」，然后先 squash 合 #77，再合 #78，和 Emily 前端一起上。
+2. 部署只重启 pmct-bff。部署前在 `backups/` 下做备份，部署后冒烟 paper20000 卡片和 pnl-buckets，报 Morgan；Casey 30 分钟内现网过门，不过关就回滚。
+3. Leader 页「—」：`GET /v1/leaders/:addr` 的 `pnl.by_strategy` 为空、或 realized/unrealized 为 null 时要补齐，加 `pnl.total`，补「近 N 笔输赢」「利润占比」。排查报告写到 `研发/CHECK-leader-pnl-dash-2026-10-24.md`（正在写），原始返回在 `研发/leader-pnl-responses/`。之后开 PR。
+4. BFF 访问日志小 PR：只记路径、状态码、耗时，不记 token，用 `BFF_ACCESS_LOG` 开关。云端代理 bc-de1c4ad4 在写，出 PR 后给 Morgan 审。
+5. #76 还欠的：在群里贴三个数（候选人数前后对比、alex 回撤显示、新放进来的前 10 个钱包），再请 Casey 确认 alex 不显示 −100%。
+
+**卡在哪 / 明天**
+- 钱包超额校验（读不到余额就拒绝，去掉 paper_over_allocated）涉及真钱，挪到明天。
+- 分析回填只拉第一页 500 条，待修。
+- 首屏慢：和 Emily 一起查。
+- impersonate（临时登录）上线前要拆掉。现在是测试期，按 Vincent 说法可以直接签会话。22:39 的无人认领试探，Vincent 定了不换密钥。
+- 生产机磁盘 40G/96G，`backups/` 占 20G，清理要先确认。
+- 主机 iowait 偏高；#59 等 SonarCloud 恢复后补扫；fees20000 观察一周。
+
+**关键位置**
+- 生产：`box@34.97.60.149:/home/grokbot/pmct/polymarket-trade-engine`。服务有 pmct-copy、pmct-analytics、pmct-bff、zerofeetrend、whale5k、acct-supervisor。BFF 监听 127.0.0.1:7810，日志在 `logs/bff.log`，会话表在 `data/pmct-bff.db`。
+- 仓库：https://github.com/vincent-lxc/polymarket-copy-engine（squash 合到 master）。
+- 在跑或在看的云端代理：bc-c1a51d87（#77）、bc-1bb9c421（#78）、bc-8399f9c6（#76）、bc-de1c4ad4（访问日志）。
+- 规矩：不读也不复制 `bff.env` 等密钥文件；token 只以私有文件路径交接，不贴到群里。
+
+### 6.x 前端（Emily）交接
+
+**做到哪**
+- 已合已上：#38（手机表格一行一卡），main `1176cfc`，App Version `462572d5-f1fc-474f-8349-3ac6be45365a`；回滚点 #36 `befc8958-9b04-490a-9250-3ce472779ca3`。等 Casey 现网复查。
+- #39（leader 去假数字）：已做 500/断网显示「暂时连不上，稍后再试」+重试，账户列表「连不上接口」+重试，测试 `app/load-error.test.mjs`。已下发但未回：401 顶部条「登录已失效，请重新登录」（保留数据、不自动跳转）、1280 交易表 41px 横滚、「近 N 笔」字面 N、手机「跟单率」标签截断、累计盈亏空态；合 origin/main（leader.html 4 处冲突两边保留，不 force-push），统一 `?v=`。
+- #40（账户趋势图 日/周/月/年+自定义，盈亏柱）：11 项测试过，已发 #78 契约和 7 份真实返回，正在出 1280/390 真实数据截图，并加「柱子合计 = 卡片 5,873.08，差 ≤ $1」测试。
+- 卡片手续费标注（还没开 PR）：大数字仍是净值，加「净收益 +$X（已扣估算手续费 $Y）」，% 用扣费后，总览合计标「含估算手续费」。用 `研发/pr77-responses/` 8 份 #77 返回；期望 paper20000 NAV $27,886.86 / +$5,889.41 / $1,997.46 / +29.45% / 「估算」；paper20000fees −$1,801.11 / −9.01%，不标估算。
+
+**下一步**
+1. 收 #40 和卡片截图，自查后交 Casey 按 `产品/ACCEPT-account-chart-range-2026-10-24.md` 过门 → Morgan「可以」→ 等 Blake 合 #77、#78 后合前端并部署 App。
+2. #39 回来后复审截图过门；Blake 补 `pnl.total`/近 N/利润占比后接上。
+3. 部署后群里贴 Version，@Casey 30 分钟内复查，不过就 `wrangler rollback`。
+
+**卡在哪**
+- 前端一起上要等 #77、#78 合并部署；leader「—」等 Blake 补字段。
+
+**关键位置**
+- 仓库：https://github.com/vincent-lxc/polymarket-design（squash 合 main；www 自动部署，App 手动部署）。
+- App 部署：`cd /tmp/polymarket-design-deploy && git fetch && git checkout -f origin/main && WRANGLER_CACHE_DIR=/tmp/wrangler-cache npx -y wrangler@4 deploy -c wrangler.app.toml`（需 CLOUDFLARE_API_TOKEN，不在本文）。
+- 云端代理/分支：#39 bc-942317c8 `cursor/leader-skeleton-real-71e3`；#40 bc-5c9537b7 `cursor/account-chart-range-cf33`；卡片 bc-36b80d46。
+- 文件：[前端/HANDOFF-前端-2026-10-24.md](HANDOFF-frontend.md)、`前端/refs/pr78-pnl-buckets-contract.txt`、`产品/release-gate/pr38-2026-10-24/`、规范 `/workspace/知识库/LLM工程/前端开发规范-bot用.md`。
+- 规矩：云端代理不调 `/v1/auth/*`、不点登出；现网会话只在本机，不进代码/PR/截图。
+
 ## 7. 明天优先（若今晚流量中断）
 
 1. Casey 完成 #38 现网复查；不过关回滚到 #36 Version `befc8958`。  
@@ -210,3 +262,10 @@ SEO/GEO：`前端/SEO-GEO-PLAN.md`；GSC/Bing 用 `itopssh@gmail.com`（Quinn/Op
 ---
 
 *撰写：Morgan · 2026-10-24 23:50 Asia/Hong_Kong · 依据当晚群聊与上述落盘材料；后续变更请改本文件并在群里一句话通知。*
+
+### Casey（产品 / 发布门）交接 · 2026-10-24 23:55 HKT
+- 做到：#77、#78 数据门已过（`产品/release-gate/pr77-2026-10-24/`、`pr78-2026-10-24/`）；#38 截图门已过，现网复查（电脑 1280 + 手机 390）正在进行，截图落 `产品/release-gate/pr38-prod-2026-10-24/`。
+- 下一步：① 给出 #38 现网结论（不过关就叫回滚到 #36 `befc8958`）；② Emily 交卡片手续费标注 + 趋势图截图后按 `产品/ACCEPT-account-chart-range-2026-10-24.md` 过门；③ 上线后 30 分钟内现网复查，并用 `gate-test-1024` 模拟盘验出入金柱，验完停止并删除；④ #76 开回撤开关后复看 alex（应约 $14,857 / 5.68%，不得 −100%）；⑤ 每日 20:20 发布门日报（routine 已设），最差 3 处清一条划一条（`产品/daily-gate/2026-10-24/2110/DAILY-GATE-2110.md`）。
+- 卡点：无。现网复查只读，绝不点登出、停止、归档、启动、平仓、暂停（Morgan 点名的除外）。
+- 关键口径：手续费按 B（估算扣、标「估算」）；同窗口柱合计 = 卡片扣费后净收益，差 ≤ $1；大数字为净值，旁注「已扣估算手续费 $X」，百分比用扣费后。
+
