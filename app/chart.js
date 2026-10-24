@@ -19,7 +19,7 @@ function sizeSvg(){var sv=el.querySelector("svg");W=Math.max(280,Math.round((sv.
 function dk(raw){var p=String(raw||"").split(":");return {key:p[0],value:p.slice(1).join(":")}}
 function sync(){var kn=el.querySelector(".kn");if(kn)kn.style.display="none";el.querySelectorAll("[data-k]").forEach(function(b){var k=dk(b.dataset.k);if(k.key==="mkt"){b.classList.toggle("on",String(st.mkt||"0")===k.value);return}b.classList.toggle("on",st[k.key]===k.value)})}
 function grid(sv,mn,mx){var s="";for(var g=0;g<=4;g++){var v=mn+(mx-mn)*g/4,yy=y(v,mn,mx);s+='<line x1="0" x2="'+W+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" stroke="#1f1f24"/><text x="'+(W-2)+'" y="'+(yy-3).toFixed(1)+'" fill="#6b6b73" font-size="11" text-anchor="end">'+Math.round(v*100)+'¢</text>'}return s}
-function drawEmpty(){var sv=sizeSvg();sv.innerHTML=grid(sv,.2,.8);sv.dataset.series=JSON.stringify({kind:"price",label:st.side+" 价格",t0:Date.now(),dt:0,v:[]});sync()}
+function drawEmpty(){var sv=sizeSvg();sv.innerHTML='<rect class="pc-skel" x="4" y="8" width="'+(W-8)+'" height="'+(H-16)+'" rx="8" fill="#26262b"/>';sv.dataset.series=JSON.stringify({kind:"price",label:st.side+" 价格",t0:Date.now(),dt:0,v:[]});sync()}
 function mockMarks(n){return M.filter(function(m){return m[3]===st.side&&!(m[1]==="M"&&el.dataset.mirror==="0")}).map(function(m){var i=Math.round(m[0]*(n-1));return {i:i,who:m[1],side:m[2],outcome:m[3],notional:m[1]==="L"?1854:969}})}
 function drawMock(){var sv=sizeSvg();var a=series(st.range);if(st.side==="No")a=a.map(function(p){return 1-p});
  var T0=(window.hvBase||Date.UTC(2026,9,21,4,40))-(N[st.range]-1)*DT[st.range];var mn=Math.min.apply(0,a)-.02,mx=Math.max.apply(0,a)+.02,n=a.length,s=grid(sv,mn,mx);

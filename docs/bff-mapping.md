@@ -30,7 +30,7 @@
 | 成交、未结算持仓、当日已实现 | `totals.fills` / `open_positions` / `daily_realized_usd` | ⚠ fills / 当日已实现常未聚合 →「暂未汇总」；持仓数只用 `open_positions`，不用 `positions.length` |
 | 合计净值曲线 | `equity_curve[]` | ✅（文档没写点的字段，前端按 `{t,equity}` 读） |
 | 当前主力 leader | `main_leader`：address、user_name、score、weight、selected_at | ✅ |
-| 主力卡「近 N 笔输赢」「跟此人累计」「进行中镜像」 | 无 | ❌ 总览不带，要再请求 `/v1/leaders/{addr}` |
+| 主力卡「近期输赢」「跟此人累计」「进行中镜像」 | 近几笔是 leader 自己的成交。标题有 `recent_closed.n` 时写成「他近 {n} 笔输赢」，否则「近期输赢」。不用 `count`，不写死 20，不用 `recent_n`，页面不出现字母 N。输赢数值总览仍不带 | ❌ 数值要再请求 `/v1/leaders/{addr}` |
 | 镜像单 8 条 | `recent_mirrors[]` | ⚠ 有 leader_notional_usd、fill_usd、slippage_bps、reason_zh，但没有单笔手续费，页面上的「手续费」「滑点成本 $」两列没有数据，改成显示滑点 bps |
 | 利润归属分段条 | `attribution[]` | ⚠ 过时：BFF 仍未聚合，字段为 `null` + `not_yet_aggregated`；前端显示「暂未汇总」，不再假装已齐 |
 | 策略实例对比 | `accounts[]`：strategy、net_pnl_usd、net_pct、equity_usd、open_positions、max_open_positions、run_state_zh | ✅ |
@@ -67,8 +67,10 @@
 | 全期胜 / 负 / 已实现 | `settled` | ✅ |
 | 按品类 | `categories` | ⚠ 结构文档没写 |
 | 按市场分布 | `markets[]`（前 20 加「其他」） | ✅（以前是「待后端」） |
-| 近 N 笔输赢 | `recent_closed`、`recent_n` | ✅ |
-| 我方累计（按策略加合计） | `pnl.by_strategy[]`、`pnl.copy_rate`；利润占比用 `pnl.our_share` 或 `pnl.share` | ✅ 按策略已有。`our_share` / `recent_closed` 不在 Blake 最新字段清单里，缺了显示无数据 |
+| 他近期输赢 | `recent_closed` = `{n,count,wins,losses,pnl_usd,from,to}`，统计的是 leader 自己的成交。标题用 `n` 写成「他近 {n} 笔输赢」；没有 `n` 则「他近期输赢」，不用 `count`，不写死 20，不读 `recent_n`，不露字母 N。值：「{wins} 胜 {losses} 负 · 合计 ±$X」，`from`/`to` 转北京时间 `MM-DD~MM-DD`。null 且 `reasons.recent_closed=no_closed` 显示「暂无已平仓记录」；其他原因「—」并悬停中文 | ⚠ #82 未合入前现网可能没有该对象，此时走上面的缺省标题 |
+| 我方累计（按策略加合计） | 每行和合计读 `realized_usd` / `unrealized_usd` / `total_usd`。合计优先 `pnl.total` 同名字段，没有再前端加总。`fill_usd` / `our_total_usd` 是成交额，不当时盈亏。单个字段 null 显示「—」，`no_mark` 悬停「缺最新价」。`no_fills` 或没有成交行时整块「未跟过」。原因先读 `pnl.reasons`，再读 `reasons.pnl` | ⚠ #82 未合入前缺的字段仍走旧的加总 |
+| 利润占比 | `pnl.profit_share` 是 0–1，前端 ×100 显示一位小数，不自己除。`reasons.profit_share=loss` 时用 `pnl.loss_usd` 显示「亏损 −$X」；`not_followed` 显示「未跟过」；`no_profitable_leaders`、`no_mark` 等显示「—」并悬停中文原因。利润占比和合计行悬停同一句：`pnl.fees_deducted === true` 时「占所有赚钱 leader 盈利之和，已扣估算手续费」，字段缺失或为 false 时「占所有赚钱 leader 盈利之和，未扣估算手续费」。字段名等 #82 定稿后再对。响应里没有 `profit_share` 则整项不显示。不用 `our_share` | ⚠ #82 未合入前现网没有该字段，整项隐藏；手续费开关按缺失处理 |
+| 跟单率 | `copy_rate` 仍是 0–1 的数字。明细对象 `{copied,followed,signals,rate}` 在 `copy_rate_detail`。有明细就用它的 `rate` 显示百分比，悬停「跟了 {copied+followed} / 信号 {signals}」；没有明细就用 `copy_rate` 数字。对象不再显示 `copied / signals`。null 且 `no_signals` 显示「—」，悬停「没有信号」 | ⚠ 明细字段随 #82，未合入前只显示数字 |
 | 风险标记 | `flags`、`flag_labels`、`flag_notes` | ✅ |
 | 持仓占用 Top | 详情上的 `position_usage` / `occupancy` / `accounts` | ⚠ 没有单独接口。没有这些字段时显示「暂未汇总」，不留示例数字 |
 | 价格买卖点 | `GET /v1/markets/{token_id}/prices?range=&bucket=&leader=` → `history` / `ohlc` / `leader_trades` / `our_fills` | ✅ 已上线。`token_id` 从详情 `trades` 取。缺 `ohlc` 时用 `history` 采样，并标出高低点为采样 |

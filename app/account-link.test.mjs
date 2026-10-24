@@ -180,6 +180,18 @@ const bare = pm.store["#ov-accts"]._table.innerHTML;
 assert.match(bare, /href="\/account"/);
 assert.equal(bare.includes("?s="), false);
 assert.match(bare, />paper20000</);
+assert.match(bare, /class="k-name"/);
+assert.match(bare, /class="r num k-eq"/);
+assert.match(bare, /class="k-res"/);
+assert.equal(pm.store["#ov-recent-lbl"].textContent, "近期输赢");
+await PM.renderOverview(Object.assign({}, overview, { main_leader: { recent_n: 20, user_name: "A", address: "0xabc" }, recent_n: 50 }));
+assert.equal(pm.store["#ov-recent-lbl"].textContent, "近期输赢");
+await PM.renderOverview(Object.assign({}, overview, { main_leader: { user_name: "A", address: "0xabc", pnl: { recent_n: 7 } } }));
+assert.equal(pm.store["#ov-recent-lbl"].textContent, "近期输赢");
+await PM.renderOverview(Object.assign({}, overview, { main_leader: { user_name: "A", address: "0xabc", recent_n: 50, recent_closed: { n: 20, count: 7, wins: 4, losses: 3, pnl_usd: 1.25 } } }));
+assert.equal(pm.store["#ov-recent-lbl"].textContent, "他近 20 笔输赢");
+await PM.renderOverview(Object.assign({}, overview, { main_leader: { user_name: "A", address: "0xabc", recent_n: 20, recent_closed: { count: 7, wins: 4, losses: 3, pnl_usd: 1.25 } } }));
+assert.equal(pm.store["#ov-recent-lbl"].textContent, "近期输赢");
 
 const legacy = loadApi("?s=paper20000&mock=1");
 legacy.location.pathname = "/account";
