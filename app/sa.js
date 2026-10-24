@@ -905,7 +905,7 @@
     if (!usePnl) return legacyChartHtml();
     detailState.model = null;
     if (pnl.status === "loading") return '<div class="sa-chart hero sa-pnl-loading" id="sa-chart" aria-busy="true"></div>';
-    if (pnl.status === "error") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(P.ERROR_TEXT) + "</span></div>";
+    if (pnl.status === "error") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(pnl.notice || P.ERROR_TEXT) + "</span></div>";
     if (pnl.status === "blocked") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(pnl.notice || P.RANGE_TEXT) + "</span></div>";
     if (pnl.status === "empty") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(P.EMPTY_TEXT) + "</span></div>";
     if (pnl.status === "ready" && pnl.model && pnl.model.drawn) return '<div class="sa-chart hero" id="sa-chart">' + P.svg(pnl.model) + '<div class="sa-tip"></div></div>';
@@ -920,7 +920,9 @@
       return '<button type="button" data-act="granularity" data-v="' + v + '"' + (gname === v ? ' class="on"' : "") + ">" + label + "</button>";
     }
     var win = pnl.window || { from: "", to: "", min: "", today: "" };
-    var minAttr = win.min ? ' min="' + esc(win.min) + '"' : "";
+    var floor = win.min || "";
+    if (floor && win.from && win.from < floor) floor = "";
+    var minAttr = floor ? ' min="' + esc(floor) + '"' : "";
     var maxAttr = win.today ? ' max="' + esc(win.today) + '"' : "";
     return {
       gran: '<div class="seg" role="tablist" aria-label="粒度">' + btn("day", "日") + btn("week", "周") + btn("month", "月") + btn("year", "年") + "</div>",
@@ -931,9 +933,10 @@
     var scope = detailState.scope;
     var pnl = detailState.pnl;
     var clip = pnl && pnl.status === "ready" && pnl.model && pnl.model.clip ? pnl.model.clip : "";
+    var fees = pnl && pnl.status === "ready" && pnl.model && pnl.model.feesNote ? pnl.model.feesNote : "";
     var segList = segListHtml();
     var controls = rangeControlsHtml();
-    return '<div class="sa-chartbar"><div class="sa-scopes"><div class="seg" role="tablist"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div>" + controls.gran + "</div>" + controls.dates + "</div>" + (clip ? '<p class="sa-clip" role="status">' + esc(clip) + "</p>" : "") + detailChartHtml() + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "");
+    return '<div class="sa-chartbar"><div class="sa-scopes"><div class="seg" role="tablist"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div>" + controls.gran + "</div>" + controls.dates + "</div>" + (clip ? '<p class="sa-clip" role="status">' + esc(clip) + "</p>" : "") + (fees ? '<p class="sa-fees" role="status">' + esc(fees) + "</p>" : "") + detailChartHtml() + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "");
   }
   function bindPnl(host, model) {
     var svg = host.querySelector("svg");
@@ -1031,7 +1034,7 @@
     var seq = ++pnl.seq;
     var token = detailSeq;
     var base = pnlNowOpts(pnl);
-    var win = pnl.custom ? P.clampWindow(pnl.from, pnl.to, Object.assign({ granularity: pnl.granularity }, base)) : P.clampWindow(P.defaultWindow(pnl.granularity, base).from, P.defaultWindow(pnl.granularity, base).to, Object.assign({ granularity: pnl.granularity }, base));
+    var win = pnl.custom ? P.clampWindow(pnl.from, pnl.to, Object.assign({ granularity: pnl.granularity, custom: true }, base)) : P.clampWindow(P.defaultWindow(pnl.granularity, base).from, P.defaultWindow(pnl.granularity, base).to, Object.assign({ granularity: pnl.granularity, custom: false }, base));
     pnl.window = { from: win.from, to: win.to, min: win.min || "", today: win.today };
     pnl.notice = win.warn || "";
     if (win.warn) {
@@ -1066,7 +1069,7 @@
         pnl.weekStart = next.weekStart || pnl.weekStart;
         return loadPnl();
       }
-      var view = P.present({ payload: data, hadSuccess: true, granularity: pnl.granularity, tz: pnl.tz });
+      var view = P.present({ payload: data, hadSuccess: true, granularity: pnl.granularity, tz: pnl.tz, scope: detailState.scope, from: win.from });
       if (view.mode === "legacy") {
         pnl.status = "unsupported";
         pnl.controls = false;
@@ -1086,12 +1089,16 @@
       paintCurve();
     } catch (e) {
       if (seq !== pnl.seq || token !== detailSeq || !detailState || detailState.pnl !== pnl) return;
-      var fail = P.present({ error: { status: e && e.status, offline: !!(e && e.offline) }, hadSuccess: pnl.hadSuccess });
+      var fail = P.present({ error: { status: e && e.status, offline: !!(e && e.offline), code: e && e.body && (e.body.error || e.body.code) }, hadSuccess: pnl.hadSuccess });
       pnl.model = null;
       pnl.payload = null;
+      pnl.notice = fail.message || "";
       if (fail.mode === "legacy") {
         pnl.status = "unsupported";
         pnl.controls = false;
+      } else if (fail.mode === "blocked") {
+        pnl.status = "blocked";
+        pnl.controls = true;
       } else {
         pnl.status = "error";
         pnl.controls = true;

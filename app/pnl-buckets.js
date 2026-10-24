@@ -1,6 +1,7 @@
 /* 账户详情趋势图的日期窗口和盈亏柱。只消费 /v1/accounts/:id/pnl-buckets。
    接口没有、404 或第一次就失败时，调用方退回原来的净值曲线，不在这里补数字。
-   悬停「手续费为估算」只看这一期的 fees_estimated，不看顶层同名字段。 */
+   悬停「手续费为估算」看这一期的 fees_estimated（契约里与顶层一致）。
+   X 轴和悬停标题用每期 label。累计收益率用 cum_return_pct，has_data=false 时为 null，折线断开。 */
 (function (g) {
   var UP = "#2fd47a";
   var DOWN = "#ff5a5f";
@@ -10,8 +11,10 @@
   var DAY_CAP = 366;
   var EMPTY_TEXT = "这段时间还没有数据";
   var ERROR_TEXT = "图表暂时加载不了，稍后刷新";
-  var RANGE_TEXT = "这段超过 366 天，请改用周或月。";
+  var RANGE_TEXT = "区间太长，请改用周或月";
+  var INVALID_TEXT = "开始日期晚于结束日期";
   var FEE_TEXT = "手续费为估算";
+  var PARTIAL_TEXT = "本期未结束";
 
   function pad2(n) { return (n < 10 ? "0" : "") + n; }
 
@@ -126,12 +129,12 @@
       var p = parseISODate(today);
       from = addMonths(isoDate(p.y, p.m, 1), -11);
     } else if (g1 === "year") {
-      from = civilDate(opts.inception, zone) || today;
+      var incYear = civilDate(opts.inception, zone);
+      var yp = parseISODate(incYear || today);
+      from = yp ? isoDate(yp.y, 1, 1) : today;
     } else {
       from = addDays(today, -29);
     }
-    var min = civilDate(opts.inception, zone);
-    if (min && from < min) from = min;
     if (from > today) from = today;
     return { granularity: g1, from: from, to: today, custom: false };
   }
@@ -144,7 +147,7 @@
     var min = civilDate(opts.inception, zone);
     var f = parseISODate(from) ? from : today;
     var t = parseISODate(to) ? to : today;
-    if (min && f < min) f = min;
+    if (opts.custom && min && f < min) f = min;
     if (t > today) t = today;
     if (f > t) f = t;
     var granularity = normalizeGranularity(opts.granularity);
@@ -181,15 +184,20 @@
   }
 
   function bucketRows(payload) {
-    if (Array.isArray(payload)) return payload;
-    if (!payload || typeof payload !== "object") return null;
-    var buckets = payload.buckets;
-    var items = payload.items;
-    if (Array.isArray(buckets) && buckets.length) return buckets;
-    if (Array.isArray(items) && items.length) return items;
-    if (Array.isArray(buckets)) return buckets;
-    if (Array.isArray(items)) return items;
-    return null;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+    return Array.isArray(payload.buckets) ? payload.buckets : null;
+  }
+
+  function noEquity(payload) {
+    return !!(payload && payload.reasons && payload.reasons.buckets === "no_equity_points");
+  }
+
+  function errorCode(err) {
+    if (!err) return "";
+    if (err.code) return String(err.code);
+    var body = err.body;
+    if (body && (body.error || body.code)) return String(body.error || body.code);
+    return "";
   }
 
   function looksLikePayload(payload) {
@@ -209,30 +217,34 @@
     var flagged = hasFlag(raw.has_data);
     var pnl = finite(raw.pnl_net);
     var nav = finite(raw.nav_end);
+    var navStart = finite(raw.nav_start);
+    var flow = finite(raw.flow_usd);
     var fees = finite(raw.fees);
+    var feesUncharged = finite(raw.fees_uncharged);
     var pr = finite(raw.period_return_pct);
     var cr = finite(raw.cum_return_pct);
     var has = flagged == null ? (pnl != null || nav != null || pr != null || cr != null) : flagged;
     var feesEstimated = raw.fees_estimated === true || raw.fees_estimated === "true";
+    var partial = raw.partial === true || raw.partial === "true";
+    var segment = raw.segment == null || raw.segment === "" || !isFinite(Number(raw.segment)) ? null : Number(raw.segment);
+    var base = {
+      has: !!has,
+      label: raw.label == null ? "" : String(raw.label),
+      partial: partial,
+      segment: segment,
+      feesEstimated: feesEstimated,
+      start: raw.period_start || "",
+      end: raw.period_end || ""
+    };
     if (!has) {
-      return { has: false, pnl: null, nav: null, fees: null, pr: null, cr: null, feesEstimated: feesEstimated, start: raw.period_start || "", end: raw.period_end || "" };
+      return Object.assign(base, { pnl: null, nav: null, navStart: null, flow: null, fees: null, feesUncharged: null, pr: null, cr: null });
     }
-    return { has: true, pnl: pnl, nav: nav, fees: fees, pr: pr, cr: cr, feesEstimated: feesEstimated, start: raw.period_start || "", end: raw.period_end || "" };
+    return Object.assign(base, { pnl: pnl, nav: nav, navStart: navStart, flow: flow, fees: fees, feesUncharged: feesUncharged, pr: pr, cr: cr });
   }
 
   function withReturns(rows) {
-    var usePeriod = rows.some(function (r) { return r.has && r.pr != null; });
-    if (usePeriod) {
-      var cum = 0;
-      return rows.map(function (r) {
-        if (!r.has || r.pr == null) return Object.assign({}, r, { cum: null, cumBefore: null, plot: false });
-        var before = cum;
-        cum = (1 + cum) * (1 + r.pr) - 1;
-        return Object.assign({}, r, { cumBefore: before, cum: cum, plot: true });
-      });
-    }
-    var seen = false;
     var prev = 0;
+    var seen = false;
     return rows.map(function (r) {
       if (!r.has || r.cr == null) return Object.assign({}, r, { cum: null, cumBefore: null, plot: false });
       var before = seen ? prev : 0;
@@ -269,17 +281,43 @@
     return mmdd(start) + " – " + mmdd(end);
   }
 
-  function clipText(payload, zone) {
+  /* 「账户 MM-DD 开始运行」只用顶层 inception_at。clipped_from 是当时请求的起点，不是开跑日。 */
+  function clipText(payload, opts) {
+    opts = opts || {};
     if (!payload || typeof payload !== "object") return "";
-    var clip = payload.clipped_from;
-    var seg = payload.segment_start_at;
-    var hasClip = !(clip == null || clip === "");
-    var hasSeg = !(seg == null || seg === "");
-    if (!hasClip && !hasSeg) return "";
-    var src = hasSeg ? seg : clip;
-    var day = civilDate(src, zone);
-    if (!day) return "";
-    return "已从当前分段开始（" + mmdd(day) + "）";
+    var zone = zoneOf(opts.tz || payload.tz);
+    var scope = opts.scope || payload.scope || "all";
+    var from = opts.from || "";
+    var segDay = civilDate(payload.segment_start_at, zone);
+    if (scope === "current_segment" && segDay && from && from < segDay) {
+      return "已从当前分段开始（" + mmdd(segDay) + "）";
+    }
+    var inc = civilDate(payload.inception_at, zone);
+    if (!inc) return "";
+    return "账户 " + mmdd(inc) + " 开始运行";
+  }
+
+  function unchargedFees(payload) {
+    var rows = bucketRows(payload);
+    if (!rows) return null;
+    var sum = 0;
+    var any = false;
+    rows.forEach(function (raw) {
+      if (!raw || raw.has_data === false || raw.has_data === "false") return;
+      var n = finite(raw.fees_uncharged);
+      if (n == null) return;
+      any = true;
+      sum += n;
+    });
+    return any ? sum : null;
+  }
+
+  function feesNote(payload) {
+    if (!payload || typeof payload !== "object") return "";
+    if (!(payload.fees_estimated === true || payload.fees_estimated === "true")) return "";
+    var sum = unchargedFees(payload);
+    if (sum == null) return "";
+    return "估算手续费 " + formatUsd(sum, false);
   }
 
   function formatPct(frac) {
@@ -310,9 +348,10 @@
     });
   }
 
-  function tooltipFor(row, granularity, zone, fees) {
-    var title = periodTitle(row, granularity, zone);
-    if (!row.has) return { title: title, rows: [{ k: "", v: "无数据", cls: "" }], fee: "" };
+  function tooltipFor(row, granularity, zone) {
+    var title = row.label || periodTitle(row, granularity, zone);
+    var partial = row.partial ? PARTIAL_TEXT : "";
+    if (!row.has) return { title: title, rows: [{ k: "", v: "无数据", cls: "" }], fee: "", partial: partial };
     var pnlCls = row.pnl > 0 ? "up" : row.pnl < 0 ? "dn" : "";
     return {
       title: title,
@@ -322,18 +361,20 @@
         { k: "累计收益率", v: formatPct(row.cum), cls: row.cum > 0 ? "up" : row.cum < 0 ? "dn" : "" },
         { k: "期末净值", v: formatUsd(row.nav, false), cls: "" }
       ],
-      fee: fees ? FEE_TEXT : ""
+      fee: row.feesEstimated ? FEE_TEXT : "",
+      partial: partial
     };
   }
 
   function tooltipHtml(tip) {
-    tip = tip || { title: "", rows: [], fee: "" };
+    tip = tip || { title: "", rows: [], fee: "", partial: "" };
     var rows = (tip.rows || []).map(function (r) {
       if (!r.k) return "<div>" + esc(r.v) + "</div>";
       return "<div><span class=\"mu\">" + esc(r.k) + "</span> <b class=\"" + esc(r.cls || "") + "\">" + esc(r.v) + "</b></div>";
     }).join("");
     var fee = tip.fee ? "<div class=\"mu\">" + esc(tip.fee) + "</div>" : "";
-    return "<b>" + esc(tip.title) + "</b>" + rows + fee;
+    var partial = tip.partial ? "<div class=\"mu\">" + esc(tip.partial) + "</div>" : "";
+    return "<b>" + esc(tip.title) + "</b>" + rows + fee + partial;
   }
 
   function bucketChart(payload, opts) {
@@ -432,12 +473,18 @@
         x1: r.x1,
         pnl: r.pnl,
         nav: r.nav,
+        navStart: r.navStart,
+        flow: r.flow,
+        feesUncharged: r.feesUncharged,
+        segment: r.segment,
+        partial: r.partial,
         pr: r.pr,
         cum: r.cum,
         cumBefore: r.cumBefore,
         plot: r.plot,
         bar: r.bar,
-        tip: tooltipFor(r, granularity, zone, !!r.feesEstimated)
+        label: r.label,
+        tip: tooltipFor(r, granularity, zone)
       };
     });
     var drawn = slots.some(function (s) { return s.bar || s.plot; });
@@ -453,6 +500,8 @@
     pushLabel(minY);
     var startDay = n ? civilDate(rows[0].start, zone) : "";
     var endDay = n ? (inclusiveEnd(rows[n - 1].end, zone) || civilDate(rows[n - 1].start, zone)) : "";
+    var startLabel = n ? (rows[0].label || mmdd(startDay)) : "";
+    var endLabel = n > 1 ? (rows[n - 1].label || mmdd(endDay)) : "";
     return {
       width: width,
       height: height,
@@ -464,10 +513,12 @@
       slots: slots,
       yLabels: yLabels,
       drawn: drawn,
-      clip: clipText(payload, zone),
+      clip: clipText(payload, { tz: zone, scope: opts.scope, from: opts.from }),
+      feesUncharged: unchargedFees(payload),
+      feesNote: feesNote(payload),
       granularity: granularity,
-      startLabel: mmdd(startDay),
-      endLabel: mmdd(endDay),
+      startLabel: startLabel,
+      endLabel: endLabel,
       lineTop: lineTop,
       lineBot: lineBot,
       barTop: barTop,
@@ -507,12 +558,23 @@
   function present(input) {
     input = input || {};
     if (input.error) {
+      var code = errorCode(input.error);
+      if (code === "too_many_buckets") return { mode: "blocked", controls: true, message: RANGE_TEXT, chart: null };
+      if (code === "invalid_range") return { mode: "blocked", controls: true, message: INVALID_TEXT, chart: null };
       var status = input.error.status;
       if (!input.hadSuccess || status === 404) return { mode: "legacy", controls: false, message: "", chart: null };
       return { mode: "error", controls: true, message: ERROR_TEXT, chart: null };
     }
     if (!looksLikePayload(input.payload)) return { mode: "legacy", controls: false, message: "", chart: null };
-    var chart = bucketChart(input.payload, { granularity: input.granularity, tz: input.tz || input.payload.tz, width: input.width, height: input.height });
+    if (noEquity(input.payload)) return { mode: "empty", controls: true, message: EMPTY_TEXT, chart: null };
+    var chart = bucketChart(input.payload, {
+      granularity: input.granularity || input.payload.granularity,
+      tz: input.tz || input.payload.tz,
+      scope: input.scope || input.payload.scope,
+      from: input.from,
+      width: input.width,
+      height: input.height
+    });
     if (!chart.drawn) return { mode: "empty", controls: true, message: EMPTY_TEXT, chart: chart };
     return { mode: "chart", controls: true, message: "", chart: chart };
   }
@@ -546,7 +608,9 @@
     EMPTY_TEXT: EMPTY_TEXT,
     ERROR_TEXT: ERROR_TEXT,
     RANGE_TEXT: RANGE_TEXT,
+    INVALID_TEXT: INVALID_TEXT,
     FEE_TEXT: FEE_TEXT,
+    PARTIAL_TEXT: PARTIAL_TEXT,
     zoneOf: zoneOf,
     todayISO: todayISO,
     dateISO: dateISO,
@@ -564,6 +628,7 @@
     tooltipHtml: tooltipHtml,
     present: present,
     initialState: initialState,
-    clipText: clipText
+    clipText: clipText,
+    unchargedFees: unchargedFees
   };
 })(typeof window !== "undefined" ? window : globalThis);

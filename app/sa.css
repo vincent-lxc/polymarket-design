@@ -120,7 +120,7 @@
 .sa-dates{display:flex;align-items:center;gap:6px;min-width:0}
 .sa-dates input{color-scheme:dark;background:var(--bg);color:var(--tx);border:0;border-radius:8px;padding:4px 8px;font:inherit;font-size:12px;font-variant-numeric:tabular-nums;width:auto;min-width:0}
 .sa-dates span{color:var(--mu)}
-.sa-clip{margin:0 0 8px;font-size:12px;color:var(--mu)}
+.sa-clip,.sa-fees{margin:0 0 8px;font-size:12px;color:var(--mu)}
 .sa-zero{stroke:#2a2a30;stroke-width:1}
 .sa-pnl-svg{width:100%;height:auto;display:block;touch-action:pan-y;animation:rise .45s var(--ease) both}
 .sa-pnl-loading{min-height:220px}
