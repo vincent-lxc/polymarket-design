@@ -192,4 +192,105 @@ assert.match(skelOff.innerHTML, /连不上接口/);
 assert.match(skelOff.innerHTML, /id="ac-list-retry"/);
 assert.equal(skel.innerHTML.replace(/<button[\s\S]*$/, ""), skelOff.innerHTML.replace(/<button[\s\S]*$/, ""));
 
+function armSession(box, tokenValue) {
+  const store = { pm_bff_token: tokenValue || "" };
+  let cleared = false;
+  let replaced = false;
+  box.sandbox.localStorage.getItem = (k) => (k === "pm_bff_token" ? (store.pm_bff_token || "") : "");
+  box.sandbox.localStorage.setItem = (k, v) => { store[k] = String(v); };
+  box.sandbox.localStorage.removeItem = (k) => { if (k === "pm_bff_token") { cleared = true; store.pm_bff_token = ""; } };
+  box.sandbox.location.replace = () => { replaced = true; };
+  return {
+    store,
+    replaced: () => replaced,
+    cleared: () => cleared
+  };
+}
+
+function expiredBar(main) {
+  return walk(main).find((el) => el.id === "auth-expired") || null;
+}
+
+const health = load("health", "", async () => ({ ok: false, status: 401, json: async () => ({ message: "token rejected raw" }) }));
+const healthTok = armSession(health, "tok-health");
+const kept = node();
+kept.id = "kept-row";
+kept.textContent = "已显示的净值";
+health.main.appendChild(kept);
+await assert.rejects(() => health.sandbox.PM.api("/v1/health"), (e) => e && e.status === 401);
+const healthBar = expiredBar(health.main);
+assert.ok(healthBar, "各页共用的失效提示");
+assert.match(healthBar.innerHTML, /登录已失效，请重新登录/);
+assert.match(healthBar.innerHTML, /id="auth-relogin"/);
+assert.match(healthBar.innerHTML, />重新登录</);
+assert.match(healthBar.innerHTML, /href="\/login\?next=/);
+assert.equal(healthBar.innerHTML.includes("token rejected raw"), false);
+assert.equal(healthTok.store.pm_bff_token, "tok-health");
+assert.equal(healthTok.cleared(), false);
+assert.equal(healthTok.replaced(), false);
+assert.equal(health.root.style.display, undefined);
+assert.equal(kept.textContent, "已显示的净值");
+assert.equal(walk(health.main).filter((el) => el.id === "auth-expired").length, 1);
+await assert.rejects(() => health.sandbox.PM.api("/v1/overview"), (e) => e && e.status === 401);
+assert.equal(walk(health.main).filter((el) => el.id === "auth-expired").length, 1);
+
+const anon = load("overview", "", async () => ({ ok: false, status: 401, json: async () => ({ message: "no" }) }));
+await assert.rejects(() => anon.sandbox.PM.api("/v1/overview"), (e) => e && e.status === 401);
+assert.equal(expiredBar(anon.main), null);
+
+const logout = load("config", "", async () => ({ ok: false, status: 401, json: async () => ({}) }));
+armSession(logout, "tok-out");
+await assert.rejects(() => logout.sandbox.PM.api("/v1/auth/logout", { method: "POST" }), (e) => e && e.status === 401);
+assert.equal(expiredBar(logout.main), null, "登出接口的 401 不当成会话失效条");
+
+const leader401 = load("leader", "?addr=0xabc", async () => ({ ok: false, status: 401, json: async () => ({ message: "expired bearer" }) }));
+const leaderTok = armSession(leader401, "tok-leader");
+const shown = node();
+shown.id = "shown-trade";
+shown.textContent = "已显示的成交";
+leader401.main.appendChild(shown);
+await leader401.boots[0]();
+const leaderBar = expiredBar(leader401.main);
+assert.ok(leaderBar);
+assert.match(leaderBar.innerHTML, /登录已失效，请重新登录/);
+assert.match(leaderBar.innerHTML, /重新登录/);
+assert.equal(leaderBar.innerHTML.includes("expired bearer"), false);
+assert.equal(leaderBar.innerHTML.includes("需登录"), false);
+assert.equal(shown.textContent, "已显示的成交");
+assert.equal(leaderTok.store.pm_bff_token, "tok-leader");
+assert.equal(leaderTok.cleared(), false);
+assert.equal(leaderTok.replaced(), false);
+assert.equal(leader401.body.classList.contains("live"), false);
+assert.equal(walk(leader401.main).some((el) => el.id === "ld-fail"), false);
+
+const overview401 = load("overview", "", async () => ({ ok: false, status: 401, json: async () => ({ message: "overview down raw" }) }));
+const ovTok = armSession(overview401, "tok-ov");
+await overview401.boots[0]();
+const ovBar = expiredBar(overview401.main);
+assert.ok(ovBar, "总览同样出失效提示");
+assert.match(ovBar.innerHTML, /登录已失效，请重新登录/);
+assert.equal(ovBar.innerHTML.includes("overview down raw"), false);
+assert.equal(ovTok.cleared(), false);
+assert.equal(ovTok.replaced(), false);
+assert.equal(overview401.body.classList.contains("live"), false);
+assert.equal(overview401.root.style.display, undefined);
+
+const account401 = load("account", "", async () => ({ ok: false, status: 401, json: async () => ({ message: "account raw" }) }));
+const acTok = armSession(account401, "tok-ac");
+const skel401 = node();
+skel401.id = "ac-list-skel";
+skel401.classList.add("sa");
+skel401._html = '<div class="top"><h1>账户</h1><span class="mu">已显示的列表</span></div>';
+skel401._text = "已显示的列表";
+account401.sandbox.document.getElementById = (id) => (id === "ac-list-skel" ? skel401 : walk(skel401).find((el) => el.id === id) || walk(account401.main).find((el) => el.id === id) || null);
+await account401.sandbox.PM.renderAccount();
+assert.match(skel401.innerHTML, /已显示的列表/);
+assert.equal(skel401.innerHTML.includes("连不上接口"), false);
+assert.equal(skel401.innerHTML.includes("account raw"), false);
+const acBar = expiredBar(account401.main);
+assert.ok(acBar);
+assert.match(acBar.innerHTML, /登录已失效，请重新登录/);
+assert.equal(acTok.cleared(), false);
+assert.equal(acTok.replaced(), false);
+
 console.log("load-error tests ok");

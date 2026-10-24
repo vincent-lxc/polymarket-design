@@ -134,9 +134,24 @@ function toLogin(){
   location.replace("/login?next="+encodeURIComponent(next));
 }
 class ApiError extends Error{constructor(status,body,offline){super((body&&body.message)||("HTTP "+status));this.status=status;this.body=body;this.offline=!!offline}}
+function isAuthPath(path){ return /^\/v1\/auth(\/|$|\?)/.test(String(path||"")); }
+/* 已登录请求 401：顶部一行 + 去登录页的链接。不跳转、不清 token、不改已画出的数据。 */
+function noteSessionExpired(){
+  if(document.getElementById("auth-expired")) return;
+  const bar=document.createElement("div");
+  bar.id="auth-expired";
+  bar.className="ndbox";
+  bar.setAttribute("role","status");
+  const next=pageBase()+location.search+location.hash;
+  bar.innerHTML='<span class="nd">登录已失效，请重新登录</span><a class="btn sm" id="auth-relogin" href="/login?next='+encodeURIComponent(next)+'">重新登录</a>';
+  const main=document.querySelector("main.main")||document.querySelector(".main")||document.body;
+  if(main&&main.prepend) main.prepend(bar);
+  else if(main&&main.appendChild) main.appendChild(bar);
+}
 async function api(path,{method="GET",body,auth=true,confirm,headers}={}){
+  const bearer=!!(auth&&token.get());
   const h={"Accept":"application/json"};
-  if(auth&&token.get())h.Authorization="Bearer "+token.get();
+  if(bearer)h.Authorization="Bearer "+token.get();
   if(body!==undefined)h["Content-Type"]="application/json";
   if(headers)Object.assign(h,headers);
   if(confirm!=null){h["X-Confirm-Phrase"]=encodeURIComponent(confirm);body=Object.assign({},body,{confirm});}
@@ -144,7 +159,10 @@ async function api(path,{method="GET",body,auth=true,confirm,headers}={}){
   catch(e){throw new ApiError(0,null,true);}
   let j=null; try{j=await res.json();}catch(e){}
   /* 401 只抛错，不清 token、不跳登录。测试期 impersonate 写入的 Bearer 必须留在深路径；登出仍走 token.clear()。 */
-  if(res.status===401&&auth)throw new ApiError(401,j);
+  if(res.status===401&&auth){
+    if(bearer&&!isAuthPath(path)) noteSessionExpired();
+    throw new ApiError(401,j);
+  }
   if(!res.ok)throw new ApiError(res.status,j);
   return j;
 }
@@ -727,6 +745,7 @@ async function renderAccount(){
   let list;
   try{ list=await api("/v1/accounts"); }
   catch(e){
+    if(e&&e.status===401) return;
     if(!wantId&&!wantName&&paintAccountListWait(e)) return;
     if(e&&e.status===404){ paintAccountEmpty(); return; }
     paintAccountError(e);
@@ -763,6 +782,7 @@ async function renderAccount(){
   let d;
   try{ d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); }
   catch(e){
+    if(e&&e.status===401) return;
     if(e&&e.status===404){ paintAccountMissing(); return; }
     paintAccountError(e);
     return;
@@ -1159,6 +1179,7 @@ async function renderLeaders(){
       ldAccountKey=ldStrategy?await leadersRequestKey(accounts, ldStrategy):"";
     }
   }catch(e){
+    if(e&&e.status===401) return "error";
     leadersFail(e);
     return "error";
   }
@@ -1186,6 +1207,7 @@ async function renderLeaders(){
       }catch(e){}
     }
   }catch(e){
+    if(e&&e.status===401) return "error";
     leadersFail(e);
     return "error";
   }
@@ -1636,36 +1658,131 @@ function leaderPositionBody(detail){
     return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td>${leaderMarketCell(title, src, outcome)}</td><td class="r num hm">${size==null?NA:shareCount(size)}</td><td class="r num hm">${px}</td><td class="r ${pnl==null?"na":"num "+cls(pnl)}">${pnl==null?LEADER_DASH:usd(pnl,true)}</td><td class="r ${mine==null?"na":"num"}">${mineHtml}</td></tr>`;
   }).join("");
 }
+function reasonText(reasons){
+  if(reasons==null||reasons==="") return "";
+  if(typeof reasons==="string") return reasons;
+  if(typeof reasons!=="object") return "";
+  return String(reasons.total||reasons.by_strategy||reasons.pnl||"");
+}
+function reasonField(reasons, key){
+  if(!reasons||typeof reasons!=="object"||reasons[key]==null||reasons[key]==="") return "";
+  return String(reasons[key]);
+}
 function leaderPnlBag(detail){
   const d=detail&&typeof detail==="object"?detail:{};
   const pnl=d.pnl&&typeof d.pnl==="object"&&!Array.isArray(d.pnl)?d.pnl:{};
+  const pnlReasons=pnl.reasons&&typeof pnl.reasons==="object"?pnl.reasons:null;
+  const top=d.reasons&&typeof d.reasons==="object"?d.reasons:null;
+  const fromPnl=reasonText(pnl.reasons);
+  const fromTop=typeof (top&&top.pnl)==="string"?top.pnl:reasonText(top&&top.pnl);
   return {
     by:bagList(pnl.by_strategy!=null?pnl.by_strategy:d.by_strategy),
+    total:pnl.total&&typeof pnl.total==="object"&&!Array.isArray(pnl.total)?pnl.total:null,
     copy_rate:pnl.copy_rate!=null?pnl.copy_rate:d.copy_rate,
     share:pnl.our_share!=null?pnl.our_share:(pnl.share!=null?pnl.share:d.our_share),
     recent:pnl.recent_closed!=null?pnl.recent_closed:d.recent_closed,
     n:pnl.recent_n!=null?pnl.recent_n:(d.recent_n!=null?d.recent_n:null),
-    reason:(d.reasons&&d.reasons.pnl)||pnl.reason||null
+    reason:fromPnl||fromTop||(typeof pnl.reason==="string"?pnl.reason:""),
+    recentReason:reasonField(top,"recent_closed")||reasonField(pnlReasons,"recent_closed"),
+    copyReason:reasonField(pnlReasons,"copy_rate")||reasonField(top,"copy_rate")
   };
 }
 function moneyTd(x, reason){
-  if(x==null||!isFinite(x)) return `<td class="r">${nd(reason||"not_yet_aggregated")}</td>`;
+  if(x==null||!isFinite(x)){
+    const why=reason?` title="${esc(reason)}"`:"";
+    return `<td class="r"><span class="na"${why}>—</span></td>`;
+  }
   return `<td class="r num ${cls(x)}">${usd(x,true)}</td>`;
 }
-function leaderPnlBody(detail){
+function strategyPnlNums(row){
+  const realized=numOrNull(pick(row,["realized_usd","realized","realized_pnl"]));
+  const unrealized=numOrNull(pick(row,["unrealized_usd","unrealized","unrealized_pnl","floating_usd"]));
+  let total=numOrNull(pick(row,["total_usd","total","net_usd","net_pnl_usd"]));
+  if(total==null&&realized!=null&&unrealized!=null) total=realized+unrealized;
+  return {realized, unrealized, total, reason:row&&row.reasons&&(row.reasons.realized_usd||row.reasons.unrealized_usd||row.reasons.total)};
+}
+function leaderPnlRows(detail){
+  return leaderPnlBag(detail).by.map(row=>Object.assign({name:String(pick(row,["strategy","name","account"])||"—")}, strategyPnlNums(row)));
+}
+function totalNumber(total, keys){
+  if(!total||typeof total!=="object") return undefined;
+  for(const k of keys){
+    if(Object.prototype.hasOwnProperty.call(total, k)) return numOrNull(total[k]);
+  }
+  return undefined;
+}
+function sumKey(rows, key){
+  if(!rows.length||rows.some(r=>r[key]==null)) return null;
+  return rows.reduce((s,r)=>s+r[key],0);
+}
+function leaderPnlSums(detail){
   const bag=leaderPnlBag(detail);
-  const rows=bag.by.map(row=>{
-    const name=String(pick(row,["strategy","name","account"])||"—");
-    const realized=numOrNull(pick(row,["realized_usd","realized","realized_pnl"]));
-    const unrealized=numOrNull(pick(row,["unrealized_usd","unrealized","unrealized_pnl","floating_usd"]));
-    let total=numOrNull(pick(row,["total_usd","total","net_usd","net_pnl_usd"]));
-    if(total==null&&realized!=null&&unrealized!=null) total=realized+unrealized;
-    return {name, realized, unrealized, total, reason:row.reasons&&(row.reasons.realized_usd||row.reasons.total)};
-  });
-  const sum=key=>rows.length&&rows.every(r=>r[key]!=null)?rows.reduce((s,r)=>s+r[key],0):null;
-  const foot=`<tr><td><b>合计</b></td>${moneyTd(sum("realized"), bag.reason)}${moneyTd(sum("unrealized"), bag.reason)}${moneyTd(sum("total"), bag.reason)}</tr>`;
-  if(!rows.length) return `<tr><td colspan="4">${LEADER_EMPTY}</td></tr>`+foot;
-  return rows.map(r=>`<tr><td>${esc(r.name)}</td>${moneyTd(r.realized,r.reason)}${moneyTd(r.unrealized,r.reason)}${moneyTd(r.total,r.reason)}</tr>`).join("")+foot;
+  const rows=leaderPnlRows(detail);
+  const pick=(keys, rowKey)=>{
+    const from=totalNumber(bag.total, keys);
+    return from===undefined?sumKey(rows, rowKey):from;
+  };
+  return {
+    rows,
+    reason:bag.reason,
+    realized:pick(["realized_usd","realized","realized_pnl"], "realized"),
+    unrealized:pick(["unrealized_usd","unrealized","unrealized_pnl","floating_usd"], "unrealized"),
+    total:pick(["total_usd","total","net_usd","net_pnl_usd"], "total")
+  };
+}
+function leaderPnlVacant(detail){
+  const rows=leaderPnlBag(detail).by;
+  if(!rows.length) return true;
+  return rows.every(row=>{ const n=strategyPnlNums(row); return n.realized==null&&n.unrealized==null&&n.total==null; });
+}
+function leaderNotFollowed(detail){
+  const reason=String(leaderPnlBag(detail).reason||"");
+  if(/(^|,)\s*no_fills\s*(,|$)/.test(reason)) return true;
+  if(/copy_db|no_strategies/.test(reason)) return false;
+  return leaderPnlVacant(detail);
+}
+function leaderCombinedTotal(detail){
+  return leaderPnlSums(detail).total;
+}
+function leaderPnlBody(detail){
+  if(leaderNotFollowed(detail)) return `<tr><td colspan="4"><span class="nd">未跟过</span></td></tr>`;
+  const sums=leaderPnlSums(detail);
+  if(!sums.rows.length) return `<tr><td colspan="4">${LEADER_EMPTY}</td></tr>`;
+  const foot=`<tr><td><b>合计</b></td>${moneyTd(sums.realized, sums.reason)}${moneyTd(sums.unrealized, sums.reason)}${moneyTd(sums.total, sums.reason)}</tr>`;
+  return sums.rows.map(r=>`<tr><td>${esc(r.name)}</td>${moneyTd(r.realized,r.reason)}${moneyTd(r.unrealized,r.reason)}${moneyTd(r.total,r.reason)}</tr>`).join("")+foot;
+}
+function hasOwn(obj, key){
+  return !!obj&&typeof obj==="object"&&Object.prototype.hasOwnProperty.call(obj, key);
+}
+/* 利润占比只读 profit_share，不拿 our_share 代替，也不在前端除总盈利。字段还没上线时整项不显示。 */
+function readProfitShare(detail){
+  const d=detail&&typeof detail==="object"?detail:{};
+  const pnl=d.pnl&&typeof d.pnl==="object"&&!Array.isArray(d.pnl)?d.pnl:{};
+  const pnlReasons=pnl.reasons&&typeof pnl.reasons==="object"?pnl.reasons:null;
+  const top=d.reasons&&typeof d.reasons==="object"?d.reasons:null;
+  const has=hasOwn(pnl,"profit_share")||hasOwn(d,"profit_share")||hasOwn(pnlReasons,"profit_share")||hasOwn(top,"profit_share");
+  const raw=hasOwn(pnl,"profit_share")?pnl.profit_share:(hasOwn(d,"profit_share")?d.profit_share:undefined);
+  const reason=reasonField(pnlReasons,"profit_share")||reasonField(top,"profit_share");
+  return {has, value:raw===undefined?undefined:numOrNull(raw), reason};
+}
+function leaderProfitShare(detail){
+  if(leaderNotFollowed(detail)) return {show:true, text:"未跟过", hover:""};
+  const ps=readProfitShare(detail);
+  if(!ps.has) return {show:false, text:"", hover:""};
+  const total=leaderCombinedTotal(detail);
+  if(total!=null&&isFinite(total)&&total<=0){
+    const money=total<0?usd(total,true):"−$0.00";
+    return {show:true, text:"亏损 "+money, hover:""};
+  }
+  if(ps.value!=null) return {show:true, text:pct(ps.value,false,1)||"", hover:""};
+  return {show:true, text:"—", hover:ps.reason||""};
+}
+function recentWindowTitle(n){
+  const v=numOrNull(n);
+  if(v==null||v<=0) return "他近期输赢";
+  const rounded=Math.round(v);
+  if(!isFinite(rounded)||rounded<=0) return "他近期输赢";
+  return "他近 "+rounded+" 笔输赢";
 }
 function copyRateText(v){
   if(v==null) return null;
@@ -1812,14 +1929,36 @@ function paintLeaderTable(sel, head, body){
   dropExpander(sec);
   if(sel==="#ld-trades"||sel==="#ld-pos") bindLeaderPager(sec);
 }
+function dashSpan(reason){
+  const why=reason?` title="${esc(String(reason))}"`:"";
+  return `<span class="na"${why}>—</span>`;
+}
 function paintLeaderPnl(detail){
   paintLeaderTable("#ld-pnl", PNL_HEAD, leaderPnlBody(detail));
   const box=$("#ld-pnl"); if(!box) return;
   const bag=leaderPnlBag(detail||{});
-  const bs=box.querySelectorAll(".kv > div > b");
-  if(bs[0]) bs[0].innerHTML=recentText(bag.recent)||nd(bag.reason||"no_recent_closed");
-  if(bs[1]) bs[1].innerHTML=bag.share==null?nd(bag.reason||"no_share"):(pct(Number(bag.share),false,0)||nd("no_share"));
-  if(bs[2]) bs[2].innerHTML=copyRateText(bag.copy_rate)||nd(bag.reason||"no_copy_rate");
+  const followed=!leaderNotFollowed(detail);
+  const recentLbl=box.querySelector("#ld-recent-lbl")||box.querySelector('[data-k="recent"] .lbl');
+  if(recentLbl) recentLbl.textContent=recentWindowTitle(bag.n);
+  const shareLbl=box.querySelector('[data-k="share"] .lbl');
+  if(shareLbl&&shareLbl.setAttribute) shareLbl.setAttribute("title","占所有赚钱 leader 盈利之和");
+  const cellOf=key=>box.querySelector?box.querySelector('[data-k="'+key+'"]'):null;
+  const setCell=(key, html, show)=>{
+    const cell=cellOf(key);
+    if(!cell) return;
+    if(show!=null) cell.hidden=!show;
+    const b=cell.querySelector&&cell.querySelector("b");
+    if(b) b.innerHTML=html;
+  };
+  const recent=recentText(bag.recent);
+  const recentHtml=recent?esc(recent):dashSpan(bag.recentReason);
+  setCell("recent", recentHtml, true);
+  const share=leaderProfitShare(detail);
+  const shareHtml=share.text==="—"?dashSpan(share.hover):(share.text==="未跟过"?`<span class="nd">未跟过</span>`:esc(share.text));
+  setCell("share", shareHtml, share.show);
+  const rate=copyRateText(bag.copy_rate);
+  const rateHtml=!followed&&rate==null?`<span class="nd">未跟过</span>`:(rate?esc(rate):dashSpan(bag.copyReason));
+  setCell("copy", rateHtml, true);
 }
 function paintLeaderTrades(detail){ paintLeaderTable("#ld-trades", TRADE_HEAD, leaderTradeBody(detail)); }
 function paintLeaderPositions(detail){ paintLeaderTable("#ld-pos", POS_HEAD, leaderPositionBody(detail)); }
@@ -2081,6 +2220,10 @@ window.PM.marketSwitcherPlan=marketSwitcherPlan;
 window.PM.marketSwitcherHtml=marketSwitcherHtml;
 window.PM.marketSwitcherSlice=marketSwitcherSlice;
 window.PM.leaderRevealCount=leaderRevealCount;
+window.PM.leaderPnlVacant=leaderPnlVacant;
+window.PM.leaderNotFollowed=leaderNotFollowed;
+window.PM.leaderProfitShare=leaderProfitShare;
+window.PM.recentWindowTitle=recentWindowTitle;
 async function paintLeaderPrices(detail, addr){
   leaderDetail=detail;
   const markets=leaderMarkets(detail||{});
@@ -2139,8 +2282,8 @@ function bindLeaderChrome(){
     pnl.dataset.nbound="1";
     pnl.addEventListener("click", ev=>{
       const s=ev.target.closest&&ev.target.closest(".seg span"); if(!s) return;
-      const t=(s.textContent||"").trim();
-      const n=t==="50"?50:(t==="N=20"?20:0);
+      const raw=(s.getAttribute&&(s.getAttribute("data-n")||(s.dataset&&s.dataset.n)))||(s.textContent||"").trim();
+      const n=raw==="20"||raw==="50"?Number(raw):0;
       if(!n||n===leaderN) return;
       leaderN=n;
       pnl.querySelectorAll(".seg span").forEach(x=>x.classList.toggle("on", x===s));
@@ -2346,10 +2489,12 @@ async function renderLeader(opts){
   leaderAddr=addr;
   clearLeaderDemoTags();
   document.title="Leader · Wakeloom 织迹";
-  const h0=document.querySelector(".top h1");
-  if(h0){ const av=h0.querySelector(".av"); if(av) av.textContent=""; [...h0.childNodes].forEach(n=>{ if(n.nodeType===3) n.textContent=""; }); }
-  const idl0=$("#ld-idl"); if(idl0) idl0.innerHTML=`<a href="/leaders" class="dim">Leaders</a> / <span class="nd">…</span>`;
-  const shellAsOf=$("#ld-perf .hd .r"); if(shellAsOf&&!(opts&&opts.keepChart)) shellAsOf.textContent="";
+  if(!(opts&&opts.keepChart)){
+    const h0=document.querySelector(".top h1");
+    if(h0){ const av=h0.querySelector(".av"); if(av) av.textContent=""; [...h0.childNodes].forEach(n=>{ if(n.nodeType===3) n.textContent=""; }); }
+    const idl0=$("#ld-idl"); if(idl0) idl0.innerHTML=`<a href="/leaders" class="dim">Leaders</a> / <span class="nd">…</span>`;
+    const shellAsOf=$("#ld-perf .hd .r"); if(shellAsOf) shellAsOf.textContent="";
+  }
   bindLeaderChrome();
   if(Q.get("fixture")==="1"){
     leaderFixture=true;
@@ -2360,7 +2505,7 @@ async function renderLeader(opts){
   if(token.get()){
     try{ await hydrateLeader(addr, opts); }
     catch(e){
-      if(e&&e.status===401){ lockPrivateBlocks(addr); return "locked"; }
+      if(e&&e.status===401) return "expired";
       console.warn(e);
       paintLeaderFailure(e);
       return "error";
@@ -2587,7 +2732,7 @@ async function boot(){
       stripDemo();
       if(r==="fixture") return badge("demo","本地 fixture（?fixture=1），形状对齐 0x12d6…f2a8，未请求 BFF");
       if(r==="locked"){ revealMetrics(); return; }
-      if(r==="error") return;
+      if(r==="expired"||r==="error") return;
       return badge("live");
     }
     if(!R[PAGE])return;

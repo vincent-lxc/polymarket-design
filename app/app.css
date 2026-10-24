@@ -51,7 +51,9 @@ body[data-page="leader"] svg[data-empty="1"]{position:absolute;left:0;top:0;widt
 html.leader-failed .sk{animation:none!important}
 html.leader-failed .top h1,html.leader-failed #ld-idl{background:transparent!important;color:inherit!important}
 html.leader-failed .top h1 .sk,html.leader-failed .top h1 .av,html.leader-failed #ld-idl .sk,html.leader-failed #ld-perf .kv .sk,html.leader-failed #ld-perf .lgrid .sk,html.leader-failed .ld-curve,html.leader-failed .ld-curve-skel{display:none!important}
-#ld-fail{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+#ld-fail,#auth-expired{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+#auth-expired .btn{flex:none}
+#ld-pnl .lbl-note{display:block;margin-top:2px;font-size:11px;line-height:1.35;color:var(--dim);white-space:normal;overflow:visible;text-overflow:clip;max-width:100%}
 /* 账户列表默认只露灰骨架。?id= / ?s= 才露出详情壳。hidden 挡住样式表还没到时的详情闪现。 */
 html:not(.account-detail) #ac-legacy{display:none!important}
 html.account-detail #ac-legacy{display:block!important}
@@ -209,7 +211,7 @@ tr.rl{cursor:pointer;transition:opacity .2s}tr.rl:hover{opacity:.8}tr.rl a{color
 .fi:hover::after,.fi:focus::after{opacity:1;transform:none}
 .r.fi::after{left:auto;right:0}
 .pchart{min-height:220px}
-@media(max-width:900px){.kv .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.f label{white-space:nowrap}}
+@media(max-width:900px){.kv .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}#ld-pnl .kv .lbl,#ld-pnl .lbl-note,#ld-pnl .kv b{white-space:normal;overflow:visible;text-overflow:clip}}.f label{white-space:nowrap}}
 .kv .lbl.fi:focus,.kv .lbl.fi:hover{overflow:visible}
 /* v4.6 chart hover */
 .hv-l,.hv-d,.hv-t{position:absolute;left:0;top:0;pointer-events:none;opacity:0;transition:opacity .18s,transform .35s var(--ease);z-index:5}
@@ -401,6 +403,26 @@ body[data-page="leader"] .live-badge.inflow{position:static;display:inline-flex;
 body[data-page="leader"] .mkt-line{display:flex;align-items:center;gap:6px;min-width:0;max-width:280px}
 body[data-page="leader"] .mkt-ell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-page="leader"] .mkt-ell .mkt{white-space:nowrap}
+/* 1280 三栏时「他的交易」装进 .tw，不再靠框内横滚。390 仍走下面的 min-width:640。 */
+@media(min-width:901px){
+ body[data-page="leader"] #ld-trades table{table-layout:fixed;width:100%;min-width:0}
+ body[data-page="leader"] #ld-trades th,
+ body[data-page="leader"] #ld-trades td{overflow:hidden;text-overflow:ellipsis}
+ body[data-page="leader"] #ld-trades th:nth-child(1),
+ body[data-page="leader"] #ld-trades td:nth-child(1){width:112px}
+ body[data-page="leader"] #ld-trades th:nth-child(3),
+ body[data-page="leader"] #ld-trades td:nth-child(3){width:52px}
+ body[data-page="leader"] #ld-trades th:nth-child(4),
+ body[data-page="leader"] #ld-trades td:nth-child(4){width:154px}
+ body[data-page="leader"] #ld-trades th:nth-child(5),
+ body[data-page="leader"] #ld-trades td:nth-child(5){width:132px}
+ body[data-page="leader"] #ld-trades th:nth-child(6),
+ body[data-page="leader"] #ld-trades td:nth-child(6){width:72px}
+ body[data-page="leader"] #ld-trades .mkt-line{display:flex;max-width:100%;width:100%;min-width:0}
+ body[data-page="leader"] #ld-trades .mkt-ell{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+ body[data-page="leader"] #ld-trades .fk{flex:none}
+ body[data-page="leader"] #ld-trades .sk.l{min-width:0;max-width:100%}
+}
 body[data-page="leader"] .app{min-width:0;max-width:100%}
 @media(max-width:900px){
  .pc-pill{max-width:none}

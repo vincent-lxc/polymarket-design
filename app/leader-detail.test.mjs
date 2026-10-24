@@ -124,10 +124,74 @@ assert.equal(book.marks[1].who, "M");
 assert.equal(book.marks[1].notional, 969);
 
 const emptyPnl = PM.leaderPnlBody({});
-assert.match(emptyPnl, /合计/);
-assert.match(emptyPnl, /暂无数据/);
-assert.match(emptyPnl, /—/);
+assert.match(emptyPnl, /未跟过/);
+assert.doesNotMatch(emptyPnl, /合计/);
+assert.doesNotMatch(emptyPnl, /—/);
 assert.doesNotMatch(emptyPnl, /暂未汇总|待新增只读接口|未命名市场|需后端按市场汇总/);
+assert.equal(PM.leaderPnlVacant({}), true);
+assert.equal(PM.leaderNotFollowed({}), true);
+const nullPnl = PM.leaderPnlBody({ pnl: { by_strategy: [{ strategy: "paper", realized_usd: null, unrealized_usd: null, total_usd: null }] } });
+assert.match(nullPnl, /未跟过/);
+assert.doesNotMatch(nullPnl, /paper/);
+assert.doesNotMatch(nullPnl, /—/);
+const noFills = PM.leaderPnlBody({ pnl: { by_strategy: null, reasons: { by_strategy: "no_fills", total: "no_fills" } }, reasons: { pnl: "copy_db_unavailable" } });
+assert.match(noFills, /未跟过/);
+assert.doesNotMatch(noFills, /合计|—/);
+assert.equal(PM.leaderPnlBag({ pnl: { reasons: { total: "no_fills" } }, reasons: { pnl: "copy_db_unavailable" } }).reason, "no_fills");
+assert.equal(PM.leaderPnlBag({ pnl: { reasons: {} }, reasons: { pnl: "copy_db_unavailable" } }).reason, "copy_db_unavailable");
+const dbDown = PM.leaderPnlBody({ pnl: { by_strategy: null }, reasons: { pnl: "copy_db_unavailable" } });
+assert.match(dbDown, /暂无数据/);
+assert.doesNotMatch(dbDown, /未跟过|合计/);
+assert.equal(PM.leaderPnlVacant({ pnl: { by_strategy: [{ strategy: "paper", realized_usd: 4 }] } }), false);
+const partialPnl = PM.leaderPnlBody({ pnl: { by_strategy: [{ strategy: "paper", realized_usd: 4, unrealized_usd: null, total_usd: null }] } });
+assert.match(partialPnl, /paper/);
+assert.match(partialPnl, /合计/);
+assert.match(partialPnl, /\+\$4\.00/);
+const withTotal = PM.leaderPnlBody({ pnl: {
+  by_strategy: [
+    { strategy: "a", realized_usd: 1, unrealized_usd: 1, total_usd: 2 },
+    { strategy: "b", realized_usd: 1, unrealized_usd: 1, total_usd: 2 }
+  ],
+  total: { realized_usd: 10, unrealized_usd: 3, total_usd: 13 }
+}});
+const withFoot = withTotal.split("合计")[1];
+assert.match(withFoot, /\+\$10\.00/);
+assert.match(withFoot, /\+\$3\.00/);
+assert.match(withFoot, /\+\$13\.00/);
+assert.doesNotMatch(withFoot, /\+\$4\.00|\+\$2\.00/);
+const summed = PM.leaderPnlBody({ pnl: {
+  by_strategy: [
+    { strategy: "a", realized_usd: 10, unrealized_usd: 1, total_usd: 11 },
+    { strategy: "b", realized_usd: -3, unrealized_usd: 2, total_usd: -1 }
+  ]
+}});
+const sumFoot = summed.split("合计")[1];
+assert.match(sumFoot, /\+\$7\.00/);
+assert.match(sumFoot, /\+\$3\.00/);
+assert.match(sumFoot, /\+\$10\.00/);
+const followed = { pnl: { by_strategy: [{ strategy: "paper", realized_usd: 5, unrealized_usd: 1, total_usd: 6 }], total: { total_usd: 6 } } };
+const absent = PM.leaderProfitShare(followed);
+assert.equal(absent.show, false);
+assert.equal(absent.text, "");
+assert.equal(absent.hover, "");
+assert.equal(PM.leaderProfitShare(Object.assign({ pnl: Object.assign({ profit_share: 0.579 }, followed.pnl) }, { reasons: {} })).text, "57.9%");
+const loss = { pnl: { by_strategy: [{ strategy: "paper", realized_usd: -8, unrealized_usd: -2, total_usd: -10 }], total: { total_usd: -10 }, profit_share: 0.2 } };
+assert.equal(PM.leaderProfitShare(loss).text, "亏损 −$10.00");
+assert.equal(PM.leaderProfitShare(loss).show, true);
+const zero = { pnl: { by_strategy: [{ strategy: "paper", realized_usd: 0, unrealized_usd: 0, total_usd: 0 }], total: { total_usd: 0 }, profit_share: 0.2 } };
+assert.equal(PM.leaderProfitShare(zero).text, "亏损 −$0.00");
+const missing = { pnl: { by_strategy: [{ strategy: "paper", realized_usd: 4, unrealized_usd: 1, total_usd: 5 }], total: { total_usd: 5 }, profit_share: null }, reasons: { profit_share: "no_base" } };
+const missView = PM.leaderProfitShare(missing);
+assert.equal(missView.show, true);
+assert.equal(missView.text, "—");
+assert.equal(missView.hover, "no_base");
+assert.equal(PM.leaderProfitShare({ pnl: { by_strategy: null, reasons: { by_strategy: "no_fills" }, profit_share: 0.4 } }).text, "未跟过");
+assert.equal(PM.leaderProfitShare({ pnl: { by_strategy: [{ strategy: "paper", realized_usd: 3, unrealized_usd: 1, total_usd: 4 }], our_share: 0.35 } }).show, false);
+assert.equal(PM.recentWindowTitle(20), "他近 20 笔输赢");
+assert.equal(PM.recentWindowTitle("50"), "他近 50 笔输赢");
+assert.equal(PM.recentWindowTitle(null), "他近期输赢");
+assert.equal(PM.recentWindowTitle(0), "他近期输赢");
+assert.equal(/\bN\b/.test(PM.recentWindowTitle(20) + PM.recentWindowTitle(null)), false);
 
 const slugTrade = PM.leaderTradeBody({
   trades: [{ id: "s", token_id: "slug-tok", market: "will-the-fed-cut-rates-in-december", slug: "will-the-fed-cut-rates-in-december", outcome: "Yes", side: "BUY", notional_usd: 15, price: 0.37, t: 1 }]
@@ -164,6 +228,19 @@ assert.match(html, /我方镜像/);
 assert.match(html, /需要注意/);
 assert.match(html, /持仓占用 Top/);
 assert.match(html, /我方对他的累计盈亏/);
+assert.match(html, /他近期输赢/);
+assert.match(html, /data-n="20"/);
+assert.match(html, /data-k="share" hidden/);
+assert.match(html, /占所有赚钱 leader 盈利之和/);
+assert.match(html, /title="已跟 \/ 信号"/);
+assert.match(html, /class="lbl-note">已跟 \/ 信号</);
+assert.doesNotMatch(html, /他近 N 笔|N=20|跟单率（已跟|title="our_share"/);
+for (const name of ["leader-5c1e.html", "leader-91d4.html", "leader-avalon.html", "leader-lunadegen.html"]) {
+  const wire = fs.readFileSync(new URL("./" + name, import.meta.url), "utf8");
+  assert.doesNotMatch(wire, /他近 N 笔|N=20|跟单率（已跟/, name);
+  assert.match(wire, /他近期输赢/, name);
+  assert.match(wire, /class="lbl-note">已跟 \/ 信号</, name);
+}
 assert.match(html, /他的交易 · 我方镜像/);
 assert.match(html, /他的当前持仓/);
 assert.match(html, /市场价格 · 买卖点/);

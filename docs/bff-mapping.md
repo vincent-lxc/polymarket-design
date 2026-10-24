@@ -67,8 +67,10 @@
 | 全期胜 / 负 / 已实现 | `settled` | ✅ |
 | 按品类 | `categories` | ⚠ 结构文档没写 |
 | 按市场分布 | `markets[]`（前 20 加「其他」） | ✅（以前是「待后端」） |
-| 近 N 笔输赢 | `recent_closed`、`recent_n` | ✅ |
-| 我方累计（按策略加合计） | `pnl.by_strategy[]`、`pnl.copy_rate`；利润占比用 `pnl.our_share` 或 `pnl.share` | ✅ 按策略已有。`our_share` / `recent_closed` 不在 Blake 最新字段清单里，缺了显示无数据 |
+| 近 N 笔输赢 | 标题用 `recent_n`（没有则「他近期输赢」）。值读 `recent_closed`；缺数时「—」，悬停 `reasons.recent_closed` | ⚠ `recent_closed` 仍可能为 null |
+| 我方累计（按策略加合计） | `pnl.by_strategy[]`。合计优先 `pnl.total`，没有再前端加总。原因先读 `pnl.reasons`，再读 `reasons.pnl`。`no_fills` 或没有成交行时整块「未跟过」 | ✅ |
+| 利润占比 | `profit_share`（比例，前端只格式化成百分比，不自己除）。null 时原因 `reasons.profit_share`，显示「—」并悬停原因。该 leader 合计 ≤ 0 显示「亏损 −$X」。没跟过显示「未跟过」。响应里没有该字段则整项不显示。悬停标签「占所有赚钱 leader 盈利之和」 | ⚠ 后端字段尚未上线 |
+| 跟单率 | `pnl.copy_rate` | ✅ 短标签「跟单率」，口径在 title 和第二行 |
 | 风险标记 | `flags`、`flag_labels`、`flag_notes` | ✅ |
 | 持仓占用 Top | 详情上的 `position_usage` / `occupancy` / `accounts` | ⚠ 没有单独接口。没有这些字段时显示「暂未汇总」，不留示例数字 |
 | 价格买卖点 | `GET /v1/markets/{token_id}/prices?range=&bucket=&leader=` → `history` / `ohlc` / `leader_trades` / `our_fills` | ✅ 已上线。`token_id` 从详情 `trades` 取。缺 `ohlc` 时用 `history` 采样，并标出高低点为采样 |
