@@ -87,22 +87,22 @@ const pos = PM.leaderPositionBody(detail);
 assert.match(pos, /4,410/);
 assert.match(pos, /42¢ \/ 44¢/);
 assert.match(pos, /\+\$88\.20/);
-assert.match(pos, /120 股/);
+assert.match(pos, /120<span class="q-unit"> 股<\/span>/);
 assert.match(pos, /class="k-name"/);
-assert.match(pos, /k-amt"><span class="q-amt">120 股<\/span>/);
+assert.match(pos, /k-amt"><span class="q-amt">120<span class="q-unit"> 股<\/span><\/span>/);
 assert.match(pos, /data-k="浮动"[^>]*>\+\$88\.20/);
 const shareCard = PM.leaderPositionBody({
   open_positions: [{ token_id: "big", question: "Big book", outcome: "Yes", current_size: 5441.15, avg_price: 0.42, last_mark: 0.44, unrealized_pnl: 10 }]
 });
-assert.match(shareCard, /q-amt">5,441\.15 股</);
-assert.doesNotMatch(shareCard, /q-amt">5,441\.15</);
+assert.match(shareCard, /q-amt">5,441\.15<span class="q-unit"> 股<\/span>/);
+assert.doesNotMatch(shareCard, /q-amt">5,441\.15 股</);
 const valued = PM.leaderPositionBody({
   open_positions: [{ token_id: "big", question: "Big book", outcome: "Yes", current_size: 5441.15, current_value_usd: 2394.1, avg_price: 0.42, last_mark: 0.44, unrealized_pnl: 88.2 }],
   our_positions: [{ token_id: "big", outcome: "Yes", current_size: 120, currentValue: 52.8 }]
 });
 assert.match(valued, /q-usd q-amt">\$2,394\.10</);
-assert.match(valued, /q-shares">5,441\.15 股</);
-assert.match(valued, /data-k="我方"[^>]*>120 股</);
+assert.match(valued, /q-shares">5,441\.15<span class="q-unit"> 股<\/span>/);
+assert.match(valued, /data-k="我方"[^>]*>120<span class="q-unit"> 股<\/span>/);
 assert.doesNotMatch(valued, /q-amt">5,441\.15/);
 assert.doesNotMatch(valued, /q-amt">\$52\.80/);
 const ourValue = PM.leaderPositionBody({
@@ -110,7 +110,7 @@ const ourValue = PM.leaderPositionBody({
   our_positions: [{ token_id: "p", outcome: "Yes", current_size: 12.5, market_value_usd: 6.4 }]
 });
 assert.match(ourValue, /q-usd q-amt">\$6\.40</);
-assert.match(ourValue, /q-shares">12\.5 股</);
+assert.match(ourValue, /q-shares">12\.5<span class="q-unit"> 股<\/span>/);
 
 const pnl = PM.leaderPnlBody(detail);
 assert.match(pnl, /catsports20000/);
@@ -206,6 +206,10 @@ assert.match(css, /@media\(max-width:480px\)\{[\s\S]*\.pc-pill\{flex:1 1 auto;ma
 assert.match(api, /显示更多/);
 assert.match(css, /@media\(max-width:900px\)\{[\s\S]*\.rowcards tr:has\(\.k-name\)\{/);
 assert.equal(css.includes("min-width:640px"), false);
+const unitAt = css.indexOf(".q-unit{display:none}");
+const cardAt = css.indexOf("这些表改成一行一卡");
+assert.ok(unitAt > 0 && unitAt < cardAt);
+assert.match(css.slice(cardAt), /\.rowcards \.q-unit\{display:inline\}/);
 assert.match(html, /class="card rowcards" id="ld-trades"/);
 assert.match(html, /class="card rowcards" id="ld-pos"/);
 assert.match(html, /class="card rowcards" id="ld-pnl"/);

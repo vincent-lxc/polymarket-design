@@ -170,6 +170,7 @@ td.r,th.r{text-align:right}
 #ov-mirrors td:first-child{white-space:normal;min-width:10em}
 .q-br{display:none}
 .q-usd{display:none}
+.q-unit{display:none}
 /* v4.3 collapse */
 tr.more{display:none}
 .tw.open tr.more{display:table-row;animation:rowin .5s var(--ease) both}
@@ -434,6 +435,7 @@ body[data-page="leader"] .app{min-width:0;max-width:100%}
  .rowcards td.k-res,
  .rowcards td.k-sub{order:4;margin-top:4px}
  .rowcards .q-usd{display:block}
+ .rowcards .q-unit{display:inline}
  .rowcards .q-shares{color:var(--mu);font-size:12px;font-weight:500;white-space:nowrap}
  .rowcards td.k-side,
  .rowcards td.k-side.hm{display:inline;color:var(--mu);font-size:12px;white-space:nowrap}

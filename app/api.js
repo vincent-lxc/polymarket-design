@@ -1545,7 +1545,7 @@ function normPx(v){
 }
 function cent(p){ const n=normPx(p); return n==null?null:Math.round(n*100)+"¢"; }
 function shareCount(n){ const x=numOrNull(n); return x==null?null:x.toLocaleString("en-US",{maximumFractionDigits:2}); }
-function shareLabel(n){ const s=shareCount(n); return s==null?null:s+" 股"; }
+function shareLabel(n){ const s=shareCount(n); return s==null?null:s+'<span class="q-unit"> 股</span>'; }
 function posMarketValue(p){
   if(!p) return null;
   return numOrNull(pick(p,["current_value_usd","current_value","currentValue","market_value_usd","market_value","marketValue","position_value_usd","value_usd"]));
