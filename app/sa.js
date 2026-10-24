@@ -99,6 +99,22 @@
     form.addEventListener("change", function () { attempt.noteChange(); publish(); });
     return attempt;
   }
+  var feeFixtureCache = {};
+  function feeFixtureJson(name) {
+    if (!feeFixtureCache[name]) {
+      feeFixtureCache[name] = fetch("fixtures/fee-line/" + encodeURIComponent(name)).then(function (r) {
+        if (!r.ok) throw new Error(name);
+        return r.json();
+      });
+    }
+    return feeFixtureCache[name];
+  }
+  var FEE_DETAIL = {
+    "7cd31570-39a5-47ea-aa0d-1b49d90acad4": "paper20000-uuid-detail.json",
+    "d9e9f8b4-6d94-4478-af61-7907a148fca2": "paper20000fees-uuid-detail.json",
+    paper20000: "paper20000-legacy-detail.json",
+    paper20000fees: "paper20000fees-legacy-detail.json"
+  };
   function mockKey() { return "sa_mock_v1"; }
   function mockList() {
     try {
@@ -190,7 +206,14 @@
   }
 
   async function fetchAccounts(query) {
-    if (mockMode()) return SA.mockPage(mockList(), query);
+    if (mockMode()) {
+      try {
+        var listed = await feeFixtureJson("paper20000-list.json");
+        var items = (listed && (listed.items || listed.accounts)) || [];
+        if (items.length) return SA.mockPage(items, query);
+      } catch (err) {}
+      return SA.mockPage(mockList(), query);
+    }
     return SA.normalizeAccountPage(await api("/v1/accounts?" + SA.accountListQuery(query)));
   }
   function dropLegacy(page) {
@@ -295,6 +318,19 @@
     }
     id = key;
     if (mockMode()) {
+      var fixtureName = FEE_DETAIL[id];
+      if (fixtureName) {
+        try {
+          var raw = await feeFixtureJson(fixtureName);
+          var fx = raw && raw.account && !raw.metrics ? unwrapAccount(raw) : raw;
+          if (fx) {
+            fx = JSON.parse(JSON.stringify(fx));
+            if (scope === "current_segment" && fx.metrics && fx.metrics.return_pct != null) fx.metrics.return_pct = fx.metrics.return_pct * 0.35;
+            if (viaStrategy) markLegacy(fx, id);
+            return fx;
+          }
+        } catch (err) {}
+      }
       var a = findMock(id);
       if (!a) { var e = new Error("missing"); e.status = 404; e.body = { error: "account_not_found" }; throw e; }
       a = JSON.parse(JSON.stringify(a));
@@ -406,15 +442,18 @@
 
   function accountCells(a, schema) {
     var m = a.metrics || {};
+    var line = SA.feeCopy(a, "metrics");
     var on = SA.engineOnboarding(a);
+    var netCls = line.net_pnl_usd > 0 ? "up" : line.net_pnl_usd < 0 ? "dn" : "";
+    var pctCls = line.pct_value > 0 ? "up" : line.pct_value < 0 ? "dn" : "";
     return [
       esc(SA.strategyCaption(a)),
       '<b>' + esc(a.name) + "</b>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a),
       esc(SA.formatUsd(a.capital_usd, false)),
-      on ? onboardHtml() : '<span class="' + (m.net_pnl_usd > 0 ? "up" : m.net_pnl_usd < 0 ? "dn" : "") + '">' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span>",
-      on ? onboardHtml() : '<span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + "</span>",
+      on ? onboardHtml() : '<span class="' + netCls + ' sa-fee-note">' + esc(line.net_text.replace(/^净收益 /, "")) + "</span>",
+      on ? onboardHtml() : '<span class="' + pctCls + '">' + esc(line.pct_text) + "</span>",
       esc(m.trades == null ? "—" : Number(m.trades).toLocaleString("en-US")),
-      esc(SA.formatUsd(m.fees_usd, false)),
+      line.estimated ? "估算" : esc(SA.formatUsd(line.fees_usd, false)),
       on ? onboardHtml() : esc(SA.formatDrawdown(m.max_drawdown_pct)),
       esc(SA.formatRuntime(m.runtime_sec)),
       esc(a.current_segment == null ? "—" : String(a.current_segment)),
@@ -429,11 +468,24 @@
   }
   function cardHtml(a, schema) {
     var m = a.metrics || {};
+    var line = SA.feeCopy(a, "metrics");
     var pick = SA.selectionId(a);
     var on = SA.engineOnboarding(a);
-    var ret = on ? '<div class="ret sa-onboard">' + esc(onboardPhrase()) + "</div>" : '<div class="ret ' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + "</div>";
-    var dd = on ? esc(onboardPhrase()) : esc(SA.formatDrawdown(m.max_drawdown_pct));
-    return '<article class="sa-acard"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + "</div>" + ret + '<div class="sa-meta">' + esc(SA.strategyCaption(a)) + " · 资金 " + esc(SA.formatUsd(a.capital_usd, false)) + " · 手续费 " + esc(SA.formatUsd((a.metrics || {}).fees_usd, false)) + " · 回撤 " + dd + " · 第 " + esc(a.current_segment == null ? "—" : a.current_segment) + " 段</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
+    var tone = line.net_pnl_usd > 0 ? "up" : line.net_pnl_usd < 0 ? "dn" : "";
+    var ret = on ? '<div class="ret sa-onboard">' + esc(onboardPhrase()) + "</div>" : '<div class="ret ' + tone + '">' + esc(line.equity_text) + "</div>";
+    var dd = on ? onboardPhrase() : SA.formatDrawdown(m.max_drawdown_pct);
+    var bits = [SA.strategyCaption(a)];
+    if (on) bits.push(onboardPhrase());
+    else {
+      bits.push(line.pct_text);
+      bits.push(line.net_text);
+    }
+    if (line.estimated) bits.push("估算");
+    else if (line.fee_text) bits.push(line.fee_text);
+    bits.push("资金 " + SA.formatUsd(a.capital_usd, false));
+    bits.push("回撤 " + dd);
+    bits.push("第 " + (a.current_segment == null ? "—" : a.current_segment) + " 段");
+    return '<article class="sa-acard" data-name="' + esc(a.name) + '"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + "</div>" + ret + '<div class="sa-meta">' + bits.map(esc).join(" · ") + "</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
   }
   var HEAD = "<tr><th></th><th>账户</th><th>策略</th><th class='r'>资金</th><th class='r'>净收益</th><th class='r'>收益率</th><th class='r'>成交</th><th class='r'>手续费</th><th class='r'>回撤</th><th class='r'>运行时长</th><th class='r'>分段</th><th>状态</th><th class='r'>操作</th></tr>";
 
@@ -441,7 +493,7 @@
     var schema = g.schema || [];
     var note = SA.pagerNote(g.pager, g.total, g.items.length);
     var more = SA.loadMoreState(g.mobile.length, g.total, g.mobileNext);
-    return '<section class="sa-group" id="grp-' + esc(g.id) + '"><div class="hd"><h2>' + esc(g.label) + " <span>" + esc(String(g.total)) + '</span></h2></div><div class="tw sa-table"><table>' + HEAD + g.items.map(function (a) { return rowHtml(a, schema); }).join("") + '</table></div><div class="sa-cards">' + g.mobile.map(function (a) { return cardHtml(a, schema); }).join("") + "</div>" + pagerBox(note, g.pager.limit, g.id) + moreBox(more, g.id) + "</section>";
+    return '<section class="sa-group" id="grp-' + esc(g.id) + '"><div class="hd"><h2>' + esc(g.label) + " <span>" + esc(String(g.total)) + '</span></h2></div><div class="sa-cards">' + g.mobile.map(function (a) { return cardHtml(a, schema); }).join("") + '</div><div class="tw sa-table"><table>' + HEAD + g.items.map(function (a) { return rowHtml(a, schema); }).join("") + "</table></div>" + pagerBox(note, g.pager.limit, g.id) + moreBox(more, g.id) + "</section>";
   }
   function selectedIds() {
     return Array.from(selected.keys());
@@ -842,7 +894,6 @@
   function paintDetail() {
     var mount = document.getElementById("sa-mount");
     var a = detailState.account;
-    var m = a.metrics || {};
     var act = SA.rowActions(a);
     var schema = detailState.schema || [];
     var scope = detailState.scope;
@@ -865,9 +916,13 @@
     } else {
       chart = emptyCurve;
     }
+    var line = SA.feeCopy(a, "metrics");
+    var pctCls = line.pct_value > 0 ? "up" : line.pct_value < 0 ? "dn" : "";
+    var feeSpan = line.fee_text ? "<span>" + esc(line.fee_text) + "</span>" : "";
+    var estSpan = line.estimated ? "<span>估算</span>" : "";
     var eqBlock = on
-      ? '<section class="card" id="sa-eq"><div class="sa-big sa-onboard">' + esc(onboardPhrase()) + '</div><div class="sa-sub"><span class="sa-onboard">' + esc(onboardPhrase()) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>"
-      : '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(SA.formatUsd(m.equity_usd, false)) + '</div><div class="sa-sub"><span class="' + (m.return_pct > 0 ? "up" : m.return_pct < 0 ? "dn" : "") + '">' + esc(SA.formatPct(m.return_pct)) + '</span><span>净收益 ' + esc(SA.formatUsd(m.net_pnl_usd, true)) + "</span><span>手续费 " + esc(SA.formatUsd(m.fees_usd, false)) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>";
+      ? '<section class="card" id="sa-eq"><div class="sa-big sa-onboard">' + esc(onboardPhrase()) + '</div><div class="sa-sub"><span class="sa-onboard">' + esc(onboardPhrase()) + "</span><span class=\"sa-fee-note\">" + esc(line.card_fee_text) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>"
+      : '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(line.equity_text) + '</div><div class="sa-sub"><span class="' + pctCls + '">' + esc(line.pct_text) + '</span><span class="sa-fee-note">' + esc(line.net_text) + "</span>" + feeSpan + estSpan + "<span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>";
     var segList = (a.segments || []).map(function (seg) {
       var diff = seg.params_diff_vs_prev ? SA.diffText(seg.params_diff_vs_prev, schema) : "";
       return "<li>第 " + esc(seg.segment) + " 段" + (diff ? " · " + esc(diff) : "") + "</li>";

@@ -529,6 +529,81 @@ async function loadOverview(range){
   setOverviewRangeUi(r, sliced.mode);
   await renderOverview(Object.assign({}, d, {equity_curve:sliced.curve}), still);
 }
+/* 净收益、收益率只读接口，不拿净值减资金。
+   overview：总览 accounts[] 与 totals 的 net_pnl_usd / net_pct。
+   legacy：旧详情 account.net_pnl_usd / account.net_pct。
+   metrics 口径在 sa-core.feeLine。估算手续费金额只读 fees_uncharged_usd。 */
+function feeBag(source, place){
+  if(place==="metrics"){
+    if(source&&source.metrics&&typeof source.metrics==="object") return source.metrics;
+    return null;
+  }
+  if(source&&typeof source==="object") return source;
+  return null;
+}
+function feePctKey(place){ return place==="metrics"?"return_pct":"net_pct"; }
+function feeNum(bag, key){
+  if(!bag||!Object.prototype.hasOwnProperty.call(bag, key)) return null;
+  const n=Number(bag[key]);
+  return isFinite(n)?n:null;
+}
+function feeLine(source, place){
+  const bag=feeBag(source, place);
+  const estimated=!!(bag&&bag.fees_estimated===true);
+  const uncharged=estimated?feeNum(bag, "fees_uncharged_usd"):null;
+  return {
+    place:place==="metrics"?"metrics":(place==="legacy"?"legacy":"overview"),
+    pct_field:feePctKey(place),
+    estimated,
+    show_paren:estimated&&uncharged!=null,
+    equity_usd:feeNum(bag, "equity_usd"),
+    net_pnl_usd:feeNum(bag, "net_pnl_usd"),
+    pct_value:feeNum(bag, feePctKey(place)),
+    fees_uncharged_usd:uncharged,
+    fees_usd:estimated?null:feeNum(bag, "fees_usd")
+  };
+}
+function feeParen(line){
+  return line.show_paren?`（已扣估算手续费 ${usd(line.fees_uncharged_usd)}）`:"";
+}
+/* 总览合计只标「含估算手续费」，不把未扣金额再写一遍。fees_estimated 不是严格 true 时不标。 */
+function overviewHeadline(totals){
+  const line=feeLine(totals, "overview");
+  const money=M(line.net_pnl_usd,x=>usd(x,true));
+  const rate=M(line.pct_value,x=>pct(x,true,2));
+  if(line.estimated) return `净收益 ${money}（含估算手续费） · ${rate}`;
+  return `扣费净盈亏 ${money} · ${rate}`;
+}
+function overviewNetCell(row){
+  const line=feeLine(row, "overview");
+  const reason=row&&row.reasons;
+  const net=M(line.net_pnl_usd,x=>usd(x,true),reason&&reason.net_pnl_usd);
+  const paren=line.show_paren?`<span class="fee-note">${feeParen(line)}</span>`:"";
+  const tag=line.estimated?`<span class="fee-note">估算</span>`:"";
+  return {line, html:net+paren+tag, pct:M(line.pct_value,x=>pct(x,true,2),reason&&reason.net_pct)};
+}
+function legacyFeeSpan(account){
+  const line=feeLine(account, "legacy");
+  const R=(account&&account.reasons)||{};
+  if(line.estimated) return `<span class="${cls(line.net_pnl_usd)} num fee-note">净收益 ${M(line.net_pnl_usd,x=>usd(x,true),R.net_pnl_usd)}${feeParen(line)} · ${M(line.pct_value,x=>pct(x,true,2),R.net_pct)} · 估算</span>`;
+  return `<span class="${cls(line.net_pnl_usd)} num">扣费净盈亏 ${M(line.net_pnl_usd,x=>usd(x,true),R.net_pnl_usd)} · ${M(line.pct_value,pct,R.net_pct)}</span>`;
+}
+async function loadFeeFixture(name){
+  const res=await fetch("fixtures/fee-line/"+encodeURIComponent(name));
+  if(!res.ok) throw new Error("fixture "+name);
+  return res.json();
+}
+function stampOverviewIds(overview, list){
+  const by={};
+  ((list&&(list.items||list.accounts))||[]).forEach(a=>{
+    const name=a&&(a.name||a.strategy);
+    if(name&&a.id) by[name]=a.id;
+  });
+  (overview&&overview.accounts||[]).forEach(a=>{
+    if(a&&!a.id&&by[a.strategy]) a.id=by[a.strategy];
+  });
+  return overview;
+}
 async function renderOverview(d, still){
   if(still&&!still()) return;
   applyCurveNote(d&&d.reasons);
@@ -542,13 +617,14 @@ async function renderOverview(d, still){
   else{
     const miss=acc.filter(a=>a.equity_usd==null).map(a=>a.strategy);
     const ok=acc.filter(a=>a.equity_usd!=null);
-    /* 前端口径：Σ equity（不含缺标记价的实例）；BFF 合计在缺失时为 null，故前端自行加总 */
+    /* 大数字仍是各实例 equity_usd 加总。净收益和收益率只读 totals，不拿净值减资金。 */
     const eq=ok.length?ok.reduce((s,a)=>s+a.equity_usd,0):null;
     const cap=ok.reduce((s,a)=>s+(a.capital_usd||0),0);
-    const pnl=eq==null?null:eq-cap, p=pnl!=null&&cap>0?pnl/cap:null;
+    const line=feeLine(t, "overview");
+    const pnl=line.net_pnl_usd, p=line.pct_value;
     $("#ov-eq").innerHTML=V(eq,usd,"no_equity");
     $("#ov-note").textContent=`= ${ok.length} 个策略实例合计`+(miss.length?`（不含 ${miss.join("、")}）`:"");
-    $("#ov-sub").innerHTML=`<span class="${cls(pnl)} num">扣费净盈亏 ${M(pnl,x=>usd(x,true))} · ${M(p,pct)}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span${todayTitle(t)}>今日盈亏 ${V(t.today_pnl_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,"no_daily_baseline")}${todayMiss(t)}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString(),R.fills)}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString(),R.open_positions)}</b></span>`;
+    $("#ov-sub").innerHTML=`<span class="${cls(pnl)} num fee-note">${overviewHeadline(t)}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span${todayTitle(t)}>今日盈亏 ${V(t.today_pnl_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,"no_daily_baseline")}${todayMiss(t)}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString(),R.fills)}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString(),R.open_positions)}</b></span>`;
     const kv=(l,x,s,r)=>`<div><span class="lbl">${l}</span><b class="${s?cls(x):""}">${V(x,v=>usd(v,s),r)}</b></div>`;
     $("#ov-kv").innerHTML=kv("现金合计",t.cash_usd,0,R.cash_usd)+kv("持仓市值合计",t.positions_value_usd,0,R.positions_value_usd)+kv("浮动盈亏合计",t.unrealized_usd,1,R.unrealized_usd)+kv("已实现盈亏合计",t.realized_usd,1,R.realized_usd);
     paintShareCard(shareCardFromTotals(eq,pnl,p,d.equity_curve,$("#ov-note").textContent));
@@ -559,7 +635,7 @@ async function renderOverview(d, still){
     const hrefs=await overviewInstanceHrefs(acc);
     if(still&&!still()) return;
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
-      acc.map((a,i)=>`<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(a.net_pnl_usd)}">${M(a.net_pnl_usd,x=>usd(x,true),a.reasons&&a.reasons.net_pnl_usd)}</td><td class="r num ${cls(a.net_pct)}">${M(a.net_pct,x=>pct(x,true,1))}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`).join(""));
+      acc.map((a,i)=>{ const cell=overviewNetCell(a); return `<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(cell.line.net_pnl_usd)}">${cell.html}</td><td class="r num ${cls(cell.line.pct_value)}">${cell.pct}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`; }).join(""));
   }
   if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
   fillAttr(d);
@@ -593,8 +669,9 @@ async function renderAccount(){
   if(!id){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
   const d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+label;
-  const m=$("#ac-main"); m.querySelector(".big").innerHTML=V(a.equity_usd,usd,R.equity_usd);
-  m.querySelector(".sub").innerHTML=`<span class="${cls(a.net_pnl_usd)} num">扣费净盈亏 ${M(a.net_pnl_usd,x=>usd(x,true))} · ${M(a.net_pct,pct)}</span><span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
+  const m=$("#ac-main"); const leg=feeLine(a, "legacy");
+  m.querySelector(".big").innerHTML=V(leg.equity_usd,usd,R.equity_usd);
+  m.querySelector(".sub").innerHTML=legacyFeeSpan(a)+`<span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
   m.querySelector(".kv").innerHTML=[["现金",a.cash_usd,R.cash_usd],["持仓市值",a.positions_value_usd,R.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason||R.exposure_usd],["当日已实现",a.daily_realized_usd,R.daily_realized_usd],["浮动盈亏",a.unrealized_usd,R.unrealized_usd],["已实现盈亏",a.realized_usd,R.realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
   /* 持仓数用 open_positions（与 max_open_positions 同口径），不用 positions.length */
   const posLab=$("#ac-pos .hd .lbl");
@@ -1052,6 +1129,7 @@ async function renderStrategies(){
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
 window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,mirrorMarketName,formatShares,leaderIdentity,
   accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
+  feeLine,overviewHeadline,overviewNetCell,legacyFeeSpan,
   heartbeatLabel,normalizeOverviewRange,overviewRangeEcho,sliceOverviewCurve,shareCardFromTotals,loadOverview,
   leadersReadPath,leadersWritePath,leadersRequestKey,leadersCurrentKey,renderLeaders,writeLeader,
   leaderPriceQuery,leaderMarkets,leaderTradeBody,leaderPositionBody,leaderPnlBody,leaderPnlBag,normalizePriceBook,dominantSide,tokenFor,marketLabel,
@@ -2326,8 +2404,50 @@ async function boot(){
       catch(e){ console.warn(e); return; }
     }
     if(Q.get("sa")==="1" && window.PMSA_UI && (PAGE==="strategies"||PAGE==="account"||PAGE==="compare")){
-      try{ await PMSA_UI.renderMock(); badge("demo","策略与账户示例（?mock=1&sa=1）"); keepMock(); return; }
+      try{ await PMSA_UI.renderMock(); badge("demo","策略与账户示例（?mock=1&sa=1）。列表和 uuid 详情读 fixtures/fee-line，不是实时账户"); keepMock(); return; }
       catch(e){ console.warn(e); return fallback("?mock=1"); }
+    }
+    if(PAGE==="overview"){
+      try{
+        const overview=await loadFeeFixture("paper20000-overview.json");
+        try{ stampOverviewIds(overview, await loadFeeFixture("paper20000-list.json")); }catch(e){}
+        /* 利润归属还没画真实分段。留着静态壳会带出「示意」。 */
+        overview.attribution=null;
+        await renderOverview(overview);
+        stripDemo();
+        badge("demo","总览示例（?mock=1）。数字来自 fixtures/fee-line/paper20000-overview.json，不是实时账户");
+        keepMock();
+        return;
+      }
+      catch(e){ console.warn(e); return fallback("?mock=1"); }
+    }
+    if(PAGE==="account"){
+      try{
+        const fx=await loadFeeFixture("paper20000-legacy-detail.json");
+        const a=fx.account||{};
+        const title=document.querySelector(".top h1"); if(title) title.textContent="账户 · "+(a.strategy||"");
+        const m=$("#ac-main");
+        if(m&&m.querySelector(".big")){
+          const R=a.reasons||{};
+          m.querySelector(".big").innerHTML=V(feeLine(a,"legacy").equity_usd,usd,R.equity_usd);
+          m.querySelector(".sub").innerHTML=legacyFeeSpan(a)+`<span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(fx.max_drawdown_pct,x=>pct(-Math.abs(x)),fx.reasons&&fx.reasons.max_drawdown_pct)}</b></span>`;
+          const kv=m.querySelector(".kv");
+          if(kv){
+            kv.innerHTML=[["现金",a.cash_usd,R.cash_usd],["持仓市值",a.positions_value_usd,R.positions_value_usd],["敞口",a.exposure_usd,a.exposure_reason||R.exposure_usd],["当日已实现",a.daily_realized_usd,R.daily_realized_usd]].map(([l,x,r])=>`<div><span class="lbl">${l}</span><b>${V(x,usd,r)}</b></div>`).join("");
+            if(kv.nextElementSibling) kv.nextElementSibling.remove();
+          }
+        }
+        const steps=document.querySelector(".steps");
+        if(steps) steps.innerHTML=`<span class="on">${esc(a.strategy||"")}</span>`;
+        ["#ac-pos","#ac-act"].forEach(sel=>{
+          const sec=$(sel); if(!sec) return;
+          const hd=sec.querySelector(".hd"); const h=hd?hd.outerHTML:"";
+          sec.innerHTML=h+'<div class="ndbox"><span class="nd">无数据</span><span>这页只核对顶部净值，持仓和成交不在这张示例里展开。</span></div>';
+        });
+        badge("demo","旧账户详情示例（?mock=1）。数字来自 fixtures/fee-line/paper20000-legacy-detail.json，不是实时账户");
+        keepMock();
+        return;
+      }catch(e){ console.warn(e); return fallback("?mock=1"); }
     }
     return fallback("?mock=1");
   }

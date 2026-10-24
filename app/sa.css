@@ -17,7 +17,7 @@
 .sa-group{background:var(--card);border-radius:var(--r-lg);padding:16px 16px 12px}
 .sa-group h2{font-size:16px}
 .sa-group h2 span{color:var(--mu);font-weight:500;font-size:13px;margin-left:6px}
-.sa-meta{color:var(--mu);font-size:12px;margin-top:3px;max-width:36ch;white-space:normal}
+.sa-meta{color:var(--mu);font-size:12px;margin-top:3px;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .sa-status{font-size:12px;font-weight:600}
 .sa-status.run{color:var(--gr)}
 .sa-status.stop,.sa-status.wait{color:var(--mu)}
@@ -32,6 +32,7 @@
 .sa-pager .range{margin-right:auto;color:var(--mu);font-size:12px;font-variant-numeric:tabular-nums}
 .sa-more{display:none;margin:12px auto 0}
 .sa-cards{display:none;gap:10px}
+.sa-group>.sa-cards{display:grid;margin-bottom:12px}
 .sa-acard{background:var(--bg);border-radius:var(--r-md);padding:12px;display:flex;flex-direction:column;gap:8px}
 .sa-acard .toprow{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
 .sa-acard .ret{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -94,7 +95,9 @@
 .btn[disabled],.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
 .sa-schema td{white-space:normal}
 .sa-big{font-size:52px;font-weight:600;letter-spacing:-.03em;line-height:1.05;font-variant-numeric:tabular-nums}
-.sa-sub{display:flex;gap:12px;flex-wrap:wrap;color:var(--mu);font-size:13px}
+.sa-sub{display:flex;gap:12px;flex-wrap:wrap;color:var(--mu);font-size:13px;min-width:0;max-width:100%}
+.sa-sub>span,.sa-fee-note{min-width:0;white-space:normal;overflow-wrap:anywhere}
+#sa-eq{min-width:0;max-width:100%}
 @media(max-width:900px){
   .sa-kpis,.sa-grid,.sa-form{grid-template-columns:1fr}
   .sa-kpi.lead b,.sa-big{font-size:40px}
