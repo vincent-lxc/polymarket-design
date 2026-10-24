@@ -199,8 +199,8 @@ assert.equal(PM.marketHtml("Ipswich O/U", { market: "Ipswich O/U" }).includes("I
 await PM.renderOverview(Object.assign({}, overview, {
   recent_mirrors: [
     { market: "市场", title: "Fed decision", slug: "fed-decision", side: "BUY", leader_notional_usd: 12, leader_price: 0.42, fill_usd: null, slippage_bps: null, decision: "copied" },
-    { market: null, title: "市场", slug: "ipswich-ou", side: "SELL", fill_usd: null },
-    { market: "市场", title: "", condition_id: "0xabc123def4567890abcd", side: "BUY", fill_usd: null }
+    { market: null, title: "市场", slug: "ipswich-ou", side: "SELL", fill_usd: null, decision: "copied" },
+    { market: "市场", title: "", condition_id: "0xabc123def4567890abcd", side: "BUY", fill_usd: null, decision: "copied" }
   ]
 }));
 const mirrorHtml = pm.store["#ov-mirrors"]._table.innerHTML;
