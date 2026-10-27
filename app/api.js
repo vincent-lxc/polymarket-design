@@ -207,9 +207,24 @@ function toLogin(){
   location.replace("/login?next="+encodeURIComponent(next));
 }
 class ApiError extends Error{constructor(status,body,offline){super((body&&body.message)||("HTTP "+status));this.status=status;this.body=body;this.offline=!!offline}}
+function isAuthPath(path){ return /^\/v1\/auth(\/|$|\?)/.test(String(path||"")); }
+/* 已登录请求 401：顶部一行 + 去登录页的链接。不跳转、不清 token、不改已画出的数据。 */
+function noteSessionExpired(){
+  if(document.getElementById("auth-expired")) return;
+  const bar=document.createElement("div");
+  bar.id="auth-expired";
+  bar.className="ndbox";
+  bar.setAttribute("role","status");
+  const next=pageBase()+location.search+location.hash;
+  bar.innerHTML='<span class="nd">登录已失效，请重新登录</span><a class="btn sm" id="auth-relogin" href="/login?next='+encodeURIComponent(next)+'">重新登录</a>';
+  const main=document.querySelector("main.main")||document.querySelector(".main")||document.body;
+  if(main&&main.prepend) main.prepend(bar);
+  else if(main&&main.appendChild) main.appendChild(bar);
+}
 async function api(path,{method="GET",body,auth=true,confirm,headers}={}){
+  const bearer=!!(auth&&token.get());
   const h={"Accept":"application/json"};
-  if(auth&&token.get())h.Authorization="Bearer "+token.get();
+  if(bearer)h.Authorization="Bearer "+token.get();
   if(body!==undefined)h["Content-Type"]="application/json";
   if(headers)Object.assign(h,headers);
   if(confirm!=null){h["X-Confirm-Phrase"]=encodeURIComponent(confirm);body=Object.assign({},body,{confirm});}
@@ -217,7 +232,10 @@ async function api(path,{method="GET",body,auth=true,confirm,headers}={}){
   catch(e){throw new ApiError(0,null,true);}
   let j=null; try{j=await res.json();}catch(e){}
   /* 401 只抛错，不清 token、不跳登录。测试期 impersonate 写入的 Bearer 必须留在深路径；登出仍走 token.clear()。 */
-  if(res.status===401&&auth)throw new ApiError(401,j);
+  if(res.status===401&&auth){
+    if(bearer&&!isAuthPath(path)) noteSessionExpired();
+    throw new ApiError(401,j);
+  }
   if(!res.ok)throw new ApiError(res.status,j);
   return j;
 }
@@ -227,16 +245,32 @@ function revealMetrics(){
   const root=document.documentElement;
   if(root&&root.classList&&typeof root.classList.remove==="function"){ root.classList.remove("pending-metrics"); root.classList.remove("pending-leader"); }
 }
+function placeBadge(b){
+  b.classList.add("inflow");
+  if(PAGE==="account"){
+    const mount=document.getElementById("sa-mount");
+    if(mount&&mount.insertAdjacentElement){ mount.insertAdjacentElement("beforebegin", b); return; }
+    const detail=document.documentElement.classList.contains("account-detail");
+    const root=document.getElementById(detail?"ac-legacy":"ac-list-skel")||document.querySelector(".main");
+    const top=root&&root.querySelector&&root.querySelector(".top");
+    if(top&&top.insertAdjacentElement){ top.insertAdjacentElement("afterend", b); return; }
+    if(root&&root.prepend){ root.prepend(b); return; }
+  }
+  if(PAGE==="leader"||PAGE==="overview"){
+    const main=document.querySelector(".main");
+    if(main){
+      const top=main.querySelector(".top");
+      if(top&&top.insertAdjacentElement){ top.insertAdjacentElement("afterend", b); return; }
+      if(main.prepend){ main.prepend(b); return; }
+    }
+  }
+  document.body.appendChild(b);
+}
 function badge(kind,title){ revealMetrics(); document.querySelectorAll(".demo-badge,.live-badge,.demo-banner").forEach(e=>e.remove());
   const tr=(zh,en)=>window.PMLang?PMLang.t(zh,en):zh;
   const b=document.createElement("span"); b.className=kind==="demo"?"demo-badge":"live-badge"; b.textContent=kind==="demo"?tr("示例，不是你的账户","Sample, not your account"):tr("数据更新中","Data updating"); b.title=title||"";
-  const leaderMain=PAGE==="leader"?document.querySelector(".main"):null;
-  if(leaderMain){
-    b.classList.add("inflow");
-    const top=leaderMain.querySelector(".top");
-    if(top) top.insertAdjacentElement("afterend", b);
-    else leaderMain.prepend(b);
-  }else document.body.appendChild(b);
+  if(PAGE==="leader"||PAGE==="overview"||PAGE==="account") placeBadge(b);
+  else document.body.appendChild(b);
   document.body.classList.toggle("live",kind!=="demo");
   if(kind==="demo"){ const ban=document.createElement("div"); ban.className="demo-banner"; ban.setAttribute("role","status"); ban.textContent="示例，不是你的账户"; const main=document.querySelector(".main")||document.body; main.prepend(ban); document.documentElement.classList.add("mock-demo"); } }
 function keepMock(){ document.querySelectorAll("a[href]").forEach(a=>{const href=a.getAttribute("href"); if(!href||href.startsWith("#")||/^[a-z]+:/i.test(href))return; let u; try{u=new URL(href,location.href);}catch(e){return;} if(u.origin!==location.origin)return; u.searchParams.set("mock","1"); a.href=u.pathname+u.search+u.hash; }); }
@@ -848,7 +882,7 @@ async function renderOverview(d, still){
     const hrefs=await overviewInstanceHrefs(acc);
     if(still&&!still()) return;
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
-      acc.map((a,i)=>{ const cell=overviewNetCell(a); return `<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(cell.line.net_pnl_usd)}">${cell.html}</td><td class="r num ${cls(cell.line.pct_value)}">${cell.pct}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`; }).join(""));
+      acc.map((a,i)=>{ const cell=overviewNetCell(a); return `<tr><td class="k-name"><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td data-k="扣费净盈亏" class="r num k-sub ${cls(cell.line.net_pnl_usd)}">${cell.html}</td><td data-k="收益率" class="r num k-sub ${cls(cell.line.pct_value)}">${cell.pct}</td><td class="r num k-eq">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td data-k="持仓/上限" class="r num k-sub">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td class="k-res"><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`; }).join(""));
   }
   const mirrors=await loadVisibleMirrors(d, still);
   if(still&&!still()) return;
@@ -870,7 +904,22 @@ async function renderOverview(d, still){
   const ml=d.main_leader, lead=$("#ov-lead .h");
   if(lead) lead.innerHTML=ml?`${who(ml.user_name,ml.address)} <span class="tag live">${esc(ml.status_zh)}</span>`:nd(R.main_leader||"no_main_leader");
   fillLeadCard(ml,R);
+  const recentLbl=$("#ov-recent-lbl");
+  if(recentLbl) recentLbl.textContent=recentWindowTitle(overviewRecentWindow(d, ml), "overview");
   paintHeartbeat(d);
+}
+/* 近几笔是 leader 自己的成交。标题用 recent_closed.n，不写死 20，也不用 count / recent_n。 */
+function overviewRecentWindow(d, ml){
+  const pnl=ml&&ml.pnl&&typeof ml.pnl==="object"&&!Array.isArray(ml.pnl)?ml.pnl:null;
+  const page=d&&d.pnl&&typeof d.pnl==="object"&&!Array.isArray(d.pnl)?d.pnl:null;
+  const bags=[ml, pnl, page, d];
+  for(const src of bags){
+    const rc=src&&src.recent_closed;
+    if(!rc||typeof rc!=="object"||Array.isArray(rc)||!Object.prototype.hasOwnProperty.call(rc,"n")) continue;
+    const n=numOrNull(rc.n);
+    if(n!=null) return n;
+  }
+  return null;
 }
 
 /* ---------- 账户 / Leaders / 健康 / 配置 / 策略 ---------- */
@@ -987,19 +1036,46 @@ function accountStepHref(a){
   const name=presentAccountId(a&&a.strategy)||presentAccountId(a&&a.name)||accountRecordId(a);
   return name?appHref("/account",{id:name}):appHref("/account");
 }
+function showAccountDetailShell(){
+  const root=document.documentElement;
+  if(root&&root.classList&&root.classList.add) root.classList.add("account-detail");
+}
+/* 列表接口还没回来时，主区域停在灰骨架上，不切到详情壳。 */
+function paintAccountListWait(err){
+  const skel=document.getElementById("ac-list-skel");
+  /* 旧测试替身也会造出一个同 id 的空节点。只有真列表壳（class=sa）才接管错误态。 */
+  if(!skel||!skel.classList||typeof skel.classList.contains!=="function"||!skel.classList.contains("sa")) return false;
+  const missing=err&&err.status===404;
+  const msg=missing?"无数据":"连不上接口";
+  skel.removeAttribute("aria-busy");
+  skel.innerHTML='<div class="top"><h1>账户</h1></div><div class="ndbox"><span class="nd">'+esc(msg)+'</span></div>'+(missing?"":'<p style="margin-top:12px"><button type="button" class="btn sm" id="ac-list-retry">重试</button></p>');
+  const btn=document.getElementById("ac-list-retry");
+  if(btn&&btn.addEventListener) btn.addEventListener("click",()=>{
+    skel.setAttribute("aria-busy","true");
+    skel.innerHTML='<div class="top"><h1>账户</h1><span class="mu">加载中</span></div>';
+    renderAccount();
+  });
+  return true;
+}
 async function renderAccount(){
   const wantId=presentAccountId(Q.get("id"));
   const wantName=presentAccountId(Q.get("s"));
-  if(wantId||wantName) blankAccountShell();
+  if(wantId||wantName){
+    showAccountDetailShell();
+    blankAccountShell();
+  }
   let list;
   try{ list=await api("/v1/accounts"); }
   catch(e){
+    if(e&&e.status===401) return "error";
+    if(!wantId&&!wantName&&paintAccountListWait(e)) return "error";
     if(e&&e.status===404){ paintAccountEmpty(); return; }
     paintAccountError(e);
-    return;
+    return "error";
   }
   paintHeartbeat(list);
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
+  showAccountDetailShell();
   const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordId(a)||accountRecordUuid(a)));
   let id="";
   let current=null;
@@ -1028,6 +1104,7 @@ async function renderAccount(){
   let d;
   try{ d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); }
   catch(e){
+    if(e&&e.status===401) return;
     if(e&&e.status===404){ paintAccountMissing(); return; }
     paintAccountError(e);
     return;
@@ -1428,6 +1505,7 @@ async function renderLeaders(){
       ldAccountKey=ldStrategy?await leadersRequestKey(accounts, ldStrategy):"";
     }
   }catch(e){
+    if(e&&e.status===401) return "error";
     leadersFail(e);
     return "error";
   }
@@ -1455,6 +1533,7 @@ async function renderLeaders(){
       }catch(e){}
     }
   }catch(e){
+    if(e&&e.status===401) return "error";
     leadersFail(e);
     return "error";
   }
@@ -1950,59 +2029,258 @@ function leaderPositionBody(detail){
     return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td class="k-name">${leaderMarketCell(title, src, outcome)}</td>${sizeTd}${pxTd}${pnlTd}${mineTd}</tr>`;
   }).join("");
 }
+const PNL_REASON_ZH={
+  no_mark:"缺最新价",
+  no_fills:"未跟过",
+  no_closed:"暂无已平仓记录",
+  no_closed_at:"没有平仓时间",
+  no_signals:"没有信号",
+  not_followed:"未跟过",
+  no_profitable_leaders:"没有赚钱的 leader",
+  no_strategies:"暂无数据",
+  copy_db_unavailable:"暂无数据",
+  fees_not_recorded:"手续费还没记下",
+  analytics_unavailable:"分析库不可用",
+  not_yet_aggregated:"暂未汇总"
+};
+function reasonZh(code){
+  const raw=String(code||"").trim();
+  if(!raw) return "";
+  return PNL_REASON_ZH[raw]||raw;
+}
+function reasonText(reasons){
+  if(reasons==null||reasons==="") return "";
+  if(typeof reasons==="string") return reasons;
+  if(typeof reasons!=="object") return "";
+  return String(reasons.total||reasons.by_strategy||reasons.pnl||"");
+}
+function reasonField(reasons, key){
+  if(!reasons||typeof reasons!=="object"||reasons[key]==null||reasons[key]==="") return "";
+  return String(reasons[key]);
+}
+function fieldReason(reasons, keys){
+  for(const key of keys){
+    const hit=reasonField(reasons, key);
+    if(hit) return reasonZh(hit);
+  }
+  return "";
+}
 function leaderPnlBag(detail){
   const d=detail&&typeof detail==="object"?detail:{};
   const pnl=d.pnl&&typeof d.pnl==="object"&&!Array.isArray(d.pnl)?d.pnl:{};
+  const pnlReasons=pnl.reasons&&typeof pnl.reasons==="object"?pnl.reasons:null;
+  const top=d.reasons&&typeof d.reasons==="object"?d.reasons:null;
+  const fromPnl=reasonText(pnl.reasons);
+  const fromTop=typeof (top&&top.pnl)==="string"?top.pnl:reasonText(top&&top.pnl);
+  const recent=pnl.recent_closed!=null?pnl.recent_closed:d.recent_closed;
+  const recentObj=recent&&typeof recent==="object"&&!Array.isArray(recent)?recent:null;
   return {
     by:bagList(pnl.by_strategy!=null?pnl.by_strategy:d.by_strategy),
-    copy_rate:pnl.copy_rate!=null?pnl.copy_rate:d.copy_rate,
+    total:pnl.total&&typeof pnl.total==="object"&&!Array.isArray(pnl.total)?pnl.total:null,
+    copy_rate:pnl.copy_rate!=null?pnl.copy_rate:(d.copy_rate!=null?d.copy_rate:null),
+    copy_rate_detail:pnl.copy_rate_detail!=null?pnl.copy_rate_detail:(d.copy_rate_detail!=null?d.copy_rate_detail:null),
     share:pnl.our_share!=null?pnl.our_share:(pnl.share!=null?pnl.share:d.our_share),
-    recent:pnl.recent_closed!=null?pnl.recent_closed:d.recent_closed,
-    n:pnl.recent_n!=null?pnl.recent_n:(d.recent_n!=null?d.recent_n:null),
-    reason:(d.reasons&&d.reasons.pnl)||pnl.reason||null
+    recent,
+    n:recentObj&&recentObj.n!=null?recentObj.n:null,
+    loss_usd:hasOwn(pnl,"loss_usd")?pnl.loss_usd:(hasOwn(d,"loss_usd")?d.loss_usd:undefined),
+    reason:fromPnl||fromTop||(typeof pnl.reason==="string"?pnl.reason:""),
+    pnlReasons,
+    topReasons:top,
+    recentReason:reasonField(top,"recent_closed")||reasonField(pnlReasons,"recent_closed"),
+    copyReason:reasonField(pnlReasons,"copy_rate")||reasonField(top,"copy_rate")
   };
 }
 function moneyTd(x, reason, role, label){
   const missing=x==null||!isFinite(x);
-  const inner=missing?nd(reason||"not_yet_aggregated"):usd(x,true);
+  const why=missing&&reason?` title="${esc(reason)}"`:"";
+  const inner=missing?`<span class="na"${why}>—</span>`:usd(x,true);
   const tone=missing?"na":"num "+cls(x);
   if(role==="amt") return `<td class="r ${tone} k-amt"><span class="q-amt">${inner}</span><span class="q-br" aria-hidden="true"></span></td>`;
   const k=label?` data-k="${esc(label)}"`:"";
   return `<td class="r ${tone} k-sub"${k}>${inner}</td>`;
 }
-function leaderPnlBody(detail){
-  const bag=leaderPnlBag(detail);
-  const rows=bag.by.map(row=>{
-    const name=String(pick(row,["strategy","name","account"])||"—");
-    const realized=numOrNull(pick(row,["realized_usd","realized","realized_pnl"]));
-    const unrealized=numOrNull(pick(row,["unrealized_usd","unrealized","unrealized_pnl","floating_usd"]));
-    let total=numOrNull(pick(row,["total_usd","total","net_usd","net_pnl_usd"]));
-    if(total==null&&realized!=null&&unrealized!=null) total=realized+unrealized;
-    return {name, realized, unrealized, total, reason:row.reasons&&(row.reasons.realized_usd||row.reasons.total)};
-  });
-  const sum=key=>rows.length&&rows.every(r=>r[key]!=null)?rows.reduce((s,r)=>s+r[key],0):null;
-  const foot=`<tr><td class="k-name"><b>合计</b></td>${moneyTd(sum("realized"), bag.reason, "sub", "已实现")}${moneyTd(sum("unrealized"), bag.reason, "sub", "浮动")}${moneyTd(sum("total"), bag.reason, "amt")}</tr>`;
-  if(!rows.length) return `<tr><td colspan="4">${LEADER_EMPTY}</td></tr>`+foot;
-  return rows.map(r=>`<tr><td class="k-name">${esc(r.name)}</td>${moneyTd(r.realized, r.reason, "sub", "已实现")}${moneyTd(r.unrealized, r.reason, "sub", "浮动")}${moneyTd(r.total, r.reason, "amt")}</tr>`).join("")+foot;
+function strategyPnlNums(row){
+  const realized=numOrNull(pick(row,["realized_usd","realized","realized_pnl"]));
+  const unrealized=numOrNull(pick(row,["unrealized_usd","unrealized","unrealized_pnl","floating_usd"]));
+  const hasTotal=!!row&&["total_usd","total"].some(k=>Object.prototype.hasOwnProperty.call(row,k));
+  let total=numOrNull(pick(row,["total_usd","total"]));
+  if(!hasTotal&&realized!=null&&unrealized!=null) total=realized+unrealized;
+  const reasons=row&&row.reasons;
+  return {
+    realized, unrealized, total,
+    realizedReason:fieldReason(reasons,["realized_usd","realized"]),
+    unrealizedReason:fieldReason(reasons,["unrealized_usd","unrealized"]),
+    totalReason:fieldReason(reasons,["total_usd","total"])
+  };
 }
+function leaderPnlRows(detail){
+  return leaderPnlBag(detail).by.map(row=>Object.assign({name:String(pick(row,["strategy","name","account"])||"—")}, strategyPnlNums(row)));
+}
+function totalNumber(total, keys){
+  if(!total||typeof total!=="object") return undefined;
+  for(const k of keys){
+    if(Object.prototype.hasOwnProperty.call(total, k)) return numOrNull(total[k]);
+  }
+  return undefined;
+}
+function sumKey(rows, key){
+  if(!rows.length||rows.some(r=>r[key]==null)) return null;
+  return rows.reduce((s,r)=>s+r[key],0);
+}
+function leaderPnlSums(detail){
+  const bag=leaderPnlBag(detail);
+  const rows=leaderPnlRows(detail);
+  const pick=(keys, rowKey)=>{
+    const from=totalNumber(bag.total, keys);
+    return from===undefined?sumKey(rows, rowKey):from;
+  };
+  const fallback=bag.reason==="no_mark"||bag.reason==="fees_not_recorded"?reasonZh(bag.reason):"";
+  const realizedReason=fieldReason(bag.pnlReasons,["realized_usd","realized"])||fieldReason(bag.topReasons,["realized_usd","realized"])||fallback;
+  const unrealizedReason=fieldReason(bag.pnlReasons,["unrealized_usd","unrealized"])||fieldReason(bag.topReasons,["unrealized_usd","unrealized"])||fallback;
+  const totalReason=fieldReason(bag.pnlReasons,["total_usd","total"])||fieldReason(bag.topReasons,["total_usd","total"])||fallback;
+  return {
+    rows,
+    reason:bag.reason,
+    realized:pick(["realized_usd","realized","realized_pnl"], "realized"),
+    unrealized:pick(["unrealized_usd","unrealized","unrealized_pnl","floating_usd"], "unrealized"),
+    total:pick(["total_usd","total"], "total"),
+    realizedReason, unrealizedReason, totalReason
+  };
+}
+function leaderPnlVacant(detail){
+  const rows=leaderPnlBag(detail).by;
+  if(!rows.length) return true;
+  return rows.every(row=>{ const n=strategyPnlNums(row); return n.realized==null&&n.unrealized==null&&n.total==null; });
+}
+function leaderNotFollowed(detail){
+  const reason=String(leaderPnlBag(detail).reason||"");
+  if(/(^|,)\s*no_fills\s*(,|$)/.test(reason)) return true;
+  if(/copy_db|no_strategies/.test(reason)) return false;
+  return leaderPnlVacant(detail);
+}
+function leaderCombinedTotal(detail){
+  return leaderPnlSums(detail).total;
+}
+function leaderPnlBody(detail){
+  if(leaderNotFollowed(detail)) return `<tr><td colspan="4"><span class="nd">未跟过</span></td></tr>`;
+  const sums=leaderPnlSums(detail);
+  if(!sums.rows.length) return `<tr><td colspan="4">${LEADER_EMPTY}</td></tr>`;
+  const feeTitle=esc(leaderFeeHover(detail));
+  const foot=`<tr><td class="k-name" title="${feeTitle}"><b>合计</b></td>${moneyTd(sums.realized, sums.realizedReason, "sub", "已实现")}${moneyTd(sums.unrealized, sums.unrealizedReason, "sub", "浮动")}${moneyTd(sums.total, sums.totalReason, "amt")}</tr>`;
+  return sums.rows.map(r=>`<tr><td class="k-name">${esc(r.name)}</td>${moneyTd(r.realized, r.realizedReason, "sub", "已实现")}${moneyTd(r.unrealized, r.unrealizedReason, "sub", "浮动")}${moneyTd(r.total, r.totalReason, "amt")}</tr>`).join("")+foot;
+}
+function hasOwn(obj, key){
+  return !!obj&&typeof obj==="object"&&Object.prototype.hasOwnProperty.call(obj, key);
+}
+/* 利润占比只读 profit_share。0–1 由 pct 乘 100。没有该字段时整项不显示。亏损看 reasons.profit_share=loss 和 loss_usd。 */
+function readProfitShare(detail){
+  const d=detail&&typeof detail==="object"?detail:{};
+  const pnl=d.pnl&&typeof d.pnl==="object"&&!Array.isArray(d.pnl)?d.pnl:{};
+  const pnlReasons=pnl.reasons&&typeof pnl.reasons==="object"?pnl.reasons:null;
+  const top=d.reasons&&typeof d.reasons==="object"?d.reasons:null;
+  const has=hasOwn(pnl,"profit_share")||hasOwn(d,"profit_share")||hasOwn(pnlReasons,"profit_share")||hasOwn(top,"profit_share");
+  const raw=hasOwn(pnl,"profit_share")?pnl.profit_share:(hasOwn(d,"profit_share")?d.profit_share:undefined);
+  const reason=reasonField(pnlReasons,"profit_share")||reasonField(top,"profit_share");
+  return {has, value:raw===undefined?undefined:numOrNull(raw), reason};
+}
+function readLossUsd(detail){
+  const bag=leaderPnlBag(detail);
+  if(bag.loss_usd===undefined) return null;
+  return numOrNull(bag.loss_usd);
+}
+function leaderProfitShare(detail){
+  const ps=readProfitShare(detail);
+  if(ps.reason==="not_followed"||leaderNotFollowed(detail)) return {show:true, text:"未跟过", hover:""};
+  if(!ps.has) return {show:false, text:"", hover:""};
+  if(ps.reason==="loss"){
+    let signed=readLossUsd(detail);
+    if(signed==null){
+      const total=leaderCombinedTotal(detail);
+      signed=total!=null&&isFinite(total)&&total<=0?total:0;
+    }
+    if(signed===0) return {show:true, text:"亏损 −$0.00", hover:""};
+    const money=signed<0?usd(signed,true):usd(-Math.abs(signed),true);
+    return {show:true, text:"亏损 "+money, hover:""};
+  }
+  if(ps.value!=null) return {show:true, text:pct(ps.value,false,1)||"", hover:""};
+  return {show:true, text:"—", hover:reasonZh(ps.reason)};
+}
+function recentWindowTitle(n, who){
+  const v=numOrNull(n);
+  const rounded=v==null?0:Math.round(v);
+  const known=v!=null&&v>0&&isFinite(rounded)&&rounded>0;
+  if(known) return "他近 "+rounded+" 笔输赢";
+  return who==="overview"?"近期输赢":"他近期输赢";
+}
+/* 优先 pnl.fees_deducted。缺字段或 null 才看 pnl.profit_share_basis。占比和合计共用这一句。 */
+function leaderFeeHover(detail){
+  const on="占所有赚钱 leader 盈利之和，已扣估算手续费";
+  const offFee="占所有赚钱 leader 盈利之和，未扣估算手续费";
+  const offBasis="占所有赚钱 leader 盈利之和，未扣手续费";
+  const d=detail&&typeof detail==="object"?detail:{};
+  const pnl=d.pnl&&typeof d.pnl==="object"&&!Array.isArray(d.pnl)?d.pnl:null;
+  if(pnl&&hasOwn(pnl,"fees_deducted")&&typeof pnl.fees_deducted==="boolean") return pnl.fees_deducted?on:offFee;
+  if(pnl&&pnl.profit_share_basis==="net_of_estimated_fees") return on;
+  return offBasis;
+}
+function shanghaiMMDD(iso){
+  const d=parseUtc(iso);
+  if(!d) return null;
+  const p=Object.fromEntries(new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Shanghai",month:"2-digit",day:"2-digit"}).formatToParts(d).map(x=>[x.type,x.value]));
+  if(!p.month||!p.day) return null;
+  return p.month+"-"+p.day;
+}
+function recentClosedView(v, reason){
+  const why=reasonZh(reason);
+  if(v==null||typeof v!=="object"||Array.isArray(v)){
+    if(reason==="no_closed") return {n:null, count:null, text:"暂无已平仓记录", hover:""};
+    return {n:null, count:null, text:null, hover:why};
+  }
+  const count=numOrNull(v.count);
+  const wins=numOrNull(pick(v,["wins","win"]));
+  const losses=numOrNull(pick(v,["losses","loss"]));
+  const pnl=numOrNull(v.pnl_usd);
+  const from=shanghaiMMDD(v.from);
+  const to=shanghaiMMDD(v.to);
+  const windowN=numOrNull(v.n);
+  const titled=windowN!=null&&windowN>0?windowN:null;
+  if(wins==null&&losses==null&&pnl==null&&count==null&&titled==null) return {n:null, count:null, text:null, hover:why};
+  const range=from&&to?` · ${from}~${to}`:"";
+  const money=pnl==null?"—":usd(pnl,true);
+  const text=wins==null&&losses==null&&pnl==null&&count==null?null:`${wins==null?"—":Math.round(wins)} 胜 ${losses==null?"—":Math.round(losses)} 负 · 合计 ${money}${range}`;
+  return {
+    n:titled,
+    count:count!=null&&count>0?count:null,
+    text,
+    hover:""
+  };
+}
+/* copy_rate 仍是 0–1 的数字。明细在 copy_rate_detail；对象只认 rate，不再拼 copied/signals。 */
 function copyRateText(v){
-  if(v==null) return null;
+  if(v==null||v==="") return null;
   if(typeof v==="number") return pct(v,false,0);
-  if(typeof v==="object"){
-    const c=numOrNull(pick(v,["copied","filled","followed"]));
-    const s=numOrNull(pick(v,["signals","total","count"]));
-    if(c!=null&&s!=null) return `${Math.round(c)} / ${Math.round(s)}`;
-    if(v.rate!=null) return pct(Number(v.rate),false,0);
+  if(typeof v==="string") return pct(numOrNull(v),false,0);
+  if(typeof v==="object"&&!Array.isArray(v)){
+    const rate=numOrNull(v.rate);
+    if(rate!=null) return pct(rate,false,0);
   }
   return null;
 }
-function recentText(v){
-  if(v==null) return null;
-  if(typeof v==="string"||typeof v==="number") return String(v);
-  const w=numOrNull(pick(v,["wins","win"]));
-  const l=numOrNull(pick(v,["losses","loss"]));
-  if(w==null&&l==null) return null;
-  return `${w==null?"—":Math.round(w)} / ${l==null?"—":Math.round(l)}`;
+function copyRateView(detail){
+  const bag=leaderPnlBag(detail||{});
+  const extra=bag.copy_rate_detail&&typeof bag.copy_rate_detail==="object"&&!Array.isArray(bag.copy_rate_detail)?bag.copy_rate_detail:null;
+  let text=null;
+  if(extra&&extra.rate!=null&&extra.rate!=="") text=copyRateText(extra);
+  if(text==null) text=copyRateText(bag.copy_rate);
+  let hover="";
+  if(extra&&text!=null){
+    const signals=numOrNull(extra.signals);
+    if(signals!=null){
+      const done=(numOrNull(extra.copied)||0)+(numOrNull(extra.followed)||0);
+      hover=`跟了 ${Math.round(done)} / 信号 ${Math.round(signals)}`;
+    }
+  }
+  return {text, hover, reason:reasonZh(bag.copyReason)};
 }
 function categoryRows(src){
   let list=[];
@@ -2130,14 +2408,38 @@ function paintLeaderTable(sel, head, body){
   dropExpander(sec);
   if(sel==="#ld-trades"||sel==="#ld-pos") bindLeaderPager(sec);
 }
+function dashSpan(reason){
+  const why=reason?` title="${esc(String(reason))}"`:"";
+  return `<span class="na"${why}>—</span>`;
+}
 function paintLeaderPnl(detail){
   paintLeaderTable("#ld-pnl", PNL_HEAD, leaderPnlBody(detail));
   const box=$("#ld-pnl"); if(!box) return;
   const bag=leaderPnlBag(detail||{});
-  const bs=box.querySelectorAll(".kv > div > b");
-  if(bs[0]) bs[0].innerHTML=recentText(bag.recent)||nd(bag.reason||"no_recent_closed");
-  if(bs[1]) bs[1].innerHTML=bag.share==null?nd(bag.reason||"no_share"):(pct(Number(bag.share),false,0)||nd("no_share"));
-  if(bs[2]) bs[2].innerHTML=copyRateText(bag.copy_rate)||nd(bag.reason||"no_copy_rate");
+  const followed=!leaderNotFollowed(detail);
+  const closed=recentClosedView(bag.recent, bag.recentReason);
+  const recentLbl=box.querySelector("#ld-recent-lbl")||box.querySelector('[data-k="recent"] .lbl');
+  if(recentLbl) recentLbl.textContent=recentWindowTitle(closed.n!=null?closed.n:bag.n);
+  const feeHover=leaderFeeHover(detail);
+  const shareLbl=box.querySelector('[data-k="share"] .lbl');
+  if(shareLbl&&shareLbl.setAttribute) shareLbl.setAttribute("title", feeHover);
+  const cellOf=key=>box.querySelector?box.querySelector('[data-k="'+key+'"]'):null;
+  const setCell=(key, html, show)=>{
+    const cell=cellOf(key);
+    if(!cell) return;
+    if(show!=null) cell.hidden=!show;
+    const b=cell.querySelector&&cell.querySelector("b");
+    if(b) b.innerHTML=html;
+  };
+  const recentHtml=closed.text?esc(closed.text):dashSpan(closed.hover);
+  setCell("recent", recentHtml, true);
+  const share=leaderProfitShare(detail);
+  const shareHtml=share.text==="—"?dashSpan(share.hover):(share.text==="未跟过"?`<span class="nd">未跟过</span>`:esc(share.text));
+  setCell("share", shareHtml, share.show);
+  const rate=copyRateView(detail);
+  const rateTitle=rate.hover?` title="${esc(rate.hover)}"`:"";
+  const rateHtml=!followed&&rate.text==null?`<span class="nd">未跟过</span>`:(rate.text!=null?`<span${rateTitle}>${esc(rate.text)}</span>`:dashSpan(rate.reason));
+  setCell("copy", rateHtml, true);
 }
 function paintLeaderTrades(detail){ paintLeaderTable("#ld-trades", TRADE_HEAD, leaderTradeBody(detail)); }
 function paintLeaderPositions(detail){ paintLeaderTable("#ld-pos", POS_HEAD, leaderPositionBody(detail)); }
@@ -2222,6 +2524,40 @@ function blankLeaderLive(reason){
   if(lbl) setPcLabel(lbl, reason==="offline"?"暂时连不上":"无数据");
   const host=$("#pc-mkts"); if(host) host.remove();
   if(window.PMChart) PMChart.drawEmpty();
+}
+function leaderFailCopy(err){
+  if(err&&(err.offline||err.status>=500||err.status===0)) return "暂时连不上，稍后再试";
+  return "暂时没有这份数据";
+}
+function clearLeaderFailure(){
+  const root=document.documentElement;
+  if(root&&root.classList&&root.classList.remove) root.classList.remove("leader-failed");
+  const bar=document.getElementById("ld-fail");
+  if(bar&&bar.remove) bar.remove();
+}
+/* 500 / 断网：顶部一行说明 + 重试。收起加载骨架，不亮「数据更新中」。 */
+function paintLeaderFailure(err){
+  const root=document.documentElement;
+  if(root&&root.classList){
+    if(root.classList.remove) root.classList.remove("pending-leader");
+    if(root.classList.add) root.classList.add("leader-failed");
+  }
+  document.querySelectorAll(".live-badge,.demo-badge,.demo-banner").forEach(e=>{ if(e&&e.remove) e.remove(); });
+  const main=document.querySelector("main.main")||document.querySelector(".main");
+  if(main){
+    let bar=document.getElementById("ld-fail");
+    if(!bar){
+      bar=document.createElement("div");
+      bar.id="ld-fail";
+      bar.className="ndbox";
+      bar.setAttribute("role","status");
+      if(main.prepend) main.prepend(bar);
+    }
+    bar.innerHTML='<span class="nd">'+esc(leaderFailCopy(err))+'</span><button type="button" class="btn sm" id="ld-retry">重试</button>';
+    const btn=document.getElementById("ld-retry");
+    if(btn&&btn.addEventListener) btn.addEventListener("click",()=>{ renderLeader(); });
+  }
+  blankLeaderLive(err&&err.offline?"offline":"error");
 }
 function paintSideToggle(market, side){
   const el=$("#pc"); if(!el) return;
@@ -2365,6 +2701,14 @@ window.PM.marketSwitcherPlan=marketSwitcherPlan;
 window.PM.marketSwitcherHtml=marketSwitcherHtml;
 window.PM.marketSwitcherSlice=marketSwitcherSlice;
 window.PM.leaderRevealCount=leaderRevealCount;
+window.PM.leaderPnlVacant=leaderPnlVacant;
+window.PM.leaderNotFollowed=leaderNotFollowed;
+window.PM.leaderProfitShare=leaderProfitShare;
+window.PM.leaderFeeHover=leaderFeeHover;
+window.PM.recentWindowTitle=recentWindowTitle;
+window.PM.recentClosedView=recentClosedView;
+window.PM.copyRateText=copyRateText;
+window.PM.copyRateView=copyRateView;
 async function paintLeaderPrices(detail, addr){
   leaderDetail=detail;
   const markets=leaderMarkets(detail||{});
@@ -2423,8 +2767,8 @@ function bindLeaderChrome(){
     pnl.dataset.nbound="1";
     pnl.addEventListener("click", ev=>{
       const s=ev.target.closest&&ev.target.closest(".seg span"); if(!s) return;
-      const t=(s.textContent||"").trim();
-      const n=t==="50"?50:(t==="N=20"?20:0);
+      const raw=(s.getAttribute&&(s.getAttribute("data-n")||(s.dataset&&s.dataset.n)))||(s.textContent||"").trim();
+      const n=raw==="20"||raw==="50"?Number(raw):0;
       if(!n||n===leaderN) return;
       leaderN=n;
       pnl.querySelectorAll(".seg span").forEach(x=>x.classList.toggle("on", x===s));
@@ -2582,7 +2926,15 @@ function leaderFixtureDetail(addr){
     mirrors:[{leader_trade_id:"fx0", token_id:"fx-yes-0", fill_usd:400, fill_price:0.42, decision:"copied", side:"BUY"}],
     open_positions:[{token_id:"fx-yes-0", question:FIXTURE_TITLES[0], outcome:"Yes", current_size:1200, avg_price:0.42, last_mark:0.46, unrealized_pnl:48}],
     our_positions:[{token_id:"fx-yes-0", outcome:"Yes", current_size:40}],
-    pnl:{by_strategy:[{strategy:"paper", realized_usd:12, unrealized_usd:3, total_usd:15}], copy_rate:{copied:4, signals:18}}
+    pnl:{
+      by_strategy:[{strategy:"paper", realized_usd:12, unrealized_usd:3, total_usd:15, fill_usd:400, our_total_usd:400}],
+      total:{realized_usd:12, unrealized_usd:3, total_usd:15, fill_usd:400, our_total_usd:400},
+      profit_share:0.579,
+      loss_usd:null,
+      copy_rate:4/18,
+      copy_rate_detail:{copied:2, followed:2, signals:18, rate:4/18},
+      recent_closed:{n:20, count:6, wins:4, losses:2, pnl_usd:15, from:"2026-10-01T04:00:00Z", to:"2026-10-20T04:00:00Z"}
+    }
   };
 }
 function leaderFixtureBook(){
@@ -2623,26 +2975,33 @@ function clearLeaderDemoTags(){
 }
 async function renderLeader(opts){
   const addr=Q.get("addr"); if(!addr) return "static";
+  const root=document.documentElement;
+  const retrying=!!(root&&root.classList&&root.classList.contains&&root.classList.contains("leader-failed"));
+  clearLeaderFailure();
+  if(retrying&&root&&root.classList&&root.classList.add&&Q.get("mock")!=="1") root.classList.add("pending-leader");
   leaderAddr=addr;
   clearLeaderDemoTags();
   document.title="Leader · Wakeloom 织迹";
-  const h0=document.querySelector(".top h1");
-  if(h0){ const av=h0.querySelector(".av"); if(av) av.textContent=""; [...h0.childNodes].forEach(n=>{ if(n.nodeType===3) n.textContent=""; }); }
-  const idl0=$("#ld-idl"); if(idl0) idl0.innerHTML=`<a href="/leaders" class="dim">Leaders</a> / <span class="nd">…</span>`;
-  const shellAsOf=$("#ld-perf .hd .r"); if(shellAsOf&&!(opts&&opts.keepChart)) shellAsOf.textContent="";
+  if(!(opts&&opts.keepChart)){
+    const h0=document.querySelector(".top h1");
+    if(h0){ const av=h0.querySelector(".av"); if(av) av.textContent=""; [...h0.childNodes].forEach(n=>{ if(n.nodeType===3) n.textContent=""; }); }
+    const idl0=$("#ld-idl"); if(idl0) idl0.innerHTML=`<a href="/leaders" class="dim">Leaders</a> / <span class="nd">…</span>`;
+    const shellAsOf=$("#ld-perf .hd .r"); if(shellAsOf) shellAsOf.textContent="";
+  }
   bindLeaderChrome();
   if(Q.get("fixture")==="1"){
     leaderFixture=true;
     try{ await hydrateLeaderFixture(addr); }
-    catch(e){ console.warn(e); blankLeaderLive("error"); }
+    catch(e){ console.warn(e); paintLeaderFailure(e); return "error"; }
     return "fixture";
   }
   if(token.get()){
     try{ await hydrateLeader(addr, opts); }
     catch(e){
-      if(e&&e.status===401){ lockPrivateBlocks(addr); return "locked"; }
+      if(e&&e.status===401) return "expired";
       console.warn(e);
-      blankLeaderLive(e&&e.offline?"offline":"error");
+      paintLeaderFailure(e);
+      return "error";
     }
     return;
   }
@@ -2657,7 +3016,8 @@ async function renderLeader(opts){
     publicOnly(w);
   }catch(e){
     console.warn(e);
-    blankLeaderLive(e&&e.offline?"offline":"error");
+    paintLeaderFailure(e);
+    return "error";
   }
 }
 function refreshLeader(){ return renderLeader({keepChart:true}).catch(e=>{ console.warn(e); if(e&&e.status===401) return; }); }
@@ -2898,6 +3258,7 @@ async function boot(){
       stripDemo();
       if(r==="fixture") return badge("demo","本地 fixture（?fixture=1），形状对齐 0x12d6…f2a8，未请求 BFF");
       if(r==="locked"){ revealMetrics(); return; }
+      if(r==="expired"||r==="error") return;
       return badge("live");
     }
     if(!R[PAGE])return;
@@ -2905,6 +3266,7 @@ async function boot(){
     const state=await R[PAGE](); stripDemo();
     if(PAGE==="leaders" && state==="fixture"){ badge("demo","本地 fixture（?fixture=1）。去掉 fixture 后走 BFF"); keepMock(); return; }
     if(PAGE==="leaders" && state==="error") return;
+    if(PAGE==="account" && state==="error") return;
     badge("live","BFF");
   }catch(e){ if(e.status===401)return;
     if(PAGE==="leaders"){ console.warn(e); return; }

@@ -1,0 +1,42 @@
+{
+  "address": "0x1111111111111111111111111111111111111111",
+  "user_name": "fixture-leader",
+  "recent_n": 50,
+  "pnl": {
+    "by_strategy": [
+      {
+        "strategy": "paper",
+        "realized_usd": 4.5,
+        "unrealized_usd": null,
+        "total_usd": null,
+        "fill_usd": 80,
+        "our_total_usd": 80,
+        "net_usd": 9.9,
+        "reasons": { "unrealized_usd": "no_mark", "total_usd": "no_mark" }
+      }
+    ],
+    "total": {
+      "realized_usd": 4.5,
+      "unrealized_usd": null,
+      "total_usd": null,
+      "fill_usd": 80,
+      "our_total_usd": 80,
+      "net_usd": 9.9
+    },
+    "reasons": { "unrealized_usd": "no_mark", "total_usd": "no_mark" },
+    "profit_share": 0.579,
+    "loss_usd": null,
+    "copy_rate": 0.25,
+    "copy_rate_detail": { "copied": 1, "followed": 3, "signals": 8, "rate": 0.5 },
+    "recent_n": 20,
+    "recent_closed": {
+      "n": 20,
+      "count": 4,
+      "wins": 3,
+      "losses": 1,
+      "pnl_usd": 12.5,
+      "from": "2026-10-20T16:00:00.000Z",
+      "to": "2026-10-23T15:30:00.000Z"
+    }
+  }
+}

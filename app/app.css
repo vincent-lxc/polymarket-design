@@ -42,6 +42,23 @@ html.pending-leader .top h1,html.pending-leader #ld-idl,html.pending-leader #ld-
 html.pending-leader .top .tag,html.pending-leader .top .pill{visibility:hidden}
 html.pending-leader .top h1,html.pending-leader #ld-idl{background:#26262b;border-radius:8px}
 html.pending-leader #ld-perf svg{opacity:0}
+html.pending-leader .top h1 .av{background:#26262b;color:transparent}
+/* 加载壳里的示意曲线不占位，灰条才是加载态。接口重画后会换掉整块。 */
+body[data-page="leader"] .ld-curve{position:relative;min-height:120px}
+body[data-page="leader"] .ld-curve-skel{display:block;width:100%;height:120px;border-radius:8px}
+body[data-page="leader"] svg[data-empty="1"]{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none}
+/* 接口失败：收起头部 / 表现格 / 累计曲线的加载条，不再假装还在加载。 */
+html.leader-failed .sk{animation:none!important}
+html.leader-failed .top h1,html.leader-failed #ld-idl{background:transparent!important;color:inherit!important}
+html.leader-failed .top h1 .sk,html.leader-failed .top h1 .av,html.leader-failed #ld-idl .sk,html.leader-failed #ld-perf .kv .sk,html.leader-failed #ld-perf .lgrid .sk,html.leader-failed .ld-curve,html.leader-failed .ld-curve-skel{display:none!important}
+#ld-fail,#auth-expired{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px}
+#auth-expired .btn{flex:none}
+#ld-pnl .lbl-note{display:block;margin-top:2px;font-size:11px;line-height:1.35;color:var(--dim);white-space:normal;overflow:visible;text-overflow:clip;max-width:100%}
+/* 账户列表默认只露灰骨架。?id= / ?s= 才露出详情壳。hidden 挡住样式表还没到时的详情闪现。 */
+html:not(.account-detail) #ac-legacy{display:none!important}
+html.account-detail #ac-legacy{display:block!important}
+html.account-detail #ac-list-skel{display:none!important}
+#ac-list-skel .sa-acard .sk{display:block}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:var(--r-pill);border:0;background:var(--card2);color:var(--mu);white-space:nowrap}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--gr)}
 .paper{background:var(--elev);color:var(--mu)}.paper::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--mu)}
@@ -201,7 +218,7 @@ tr.rl{cursor:pointer;transition:opacity .2s}tr.rl:hover{opacity:.8}tr.rl a{color
 .fi:hover::after,.fi:focus::after{opacity:1;transform:none}
 .r.fi::after{left:auto;right:0}
 .pchart{min-height:220px}
-@media(max-width:900px){.kv .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.f label{white-space:nowrap}}
+@media(max-width:900px){.kv .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}#ld-pnl .kv .lbl,#ld-pnl .lbl-note,#ld-pnl .kv b{white-space:normal;overflow:visible;text-overflow:clip}}.f label{white-space:nowrap}}
 .kv .lbl.fi:focus,.kv .lbl.fi:hover{overflow:visible}
 /* v4.6 chart hover */
 .hv-l,.hv-d,.hv-t{position:absolute;left:0;top:0;pointer-events:none;opacity:0;transition:opacity .18s,transform .35s var(--ease);z-index:5}
@@ -397,6 +414,26 @@ body[data-page="leader"] .live-badge.inflow{position:static;display:inline-flex;
 body[data-page="leader"] .mkt-line{display:flex;align-items:center;gap:6px;min-width:0;max-width:280px}
 body[data-page="leader"] .mkt-ell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body[data-page="leader"] .mkt-ell .mkt{white-space:nowrap}
+/* 1280 三栏时「他的交易」装进 .tw，不再靠框内横滚。390 仍走下面的 min-width:640。 */
+@media(min-width:901px){
+ body[data-page="leader"] #ld-trades table{table-layout:fixed;width:100%;min-width:0}
+ body[data-page="leader"] #ld-trades th,
+ body[data-page="leader"] #ld-trades td{overflow:hidden;text-overflow:ellipsis}
+ body[data-page="leader"] #ld-trades th:nth-child(1),
+ body[data-page="leader"] #ld-trades td:nth-child(1){width:112px}
+ body[data-page="leader"] #ld-trades th:nth-child(3),
+ body[data-page="leader"] #ld-trades td:nth-child(3){width:52px}
+ body[data-page="leader"] #ld-trades th:nth-child(4),
+ body[data-page="leader"] #ld-trades td:nth-child(4){width:154px}
+ body[data-page="leader"] #ld-trades th:nth-child(5),
+ body[data-page="leader"] #ld-trades td:nth-child(5){width:132px}
+ body[data-page="leader"] #ld-trades th:nth-child(6),
+ body[data-page="leader"] #ld-trades td:nth-child(6){width:72px}
+ body[data-page="leader"] #ld-trades .mkt-line{display:flex;max-width:100%;width:100%;min-width:0}
+ body[data-page="leader"] #ld-trades .mkt-ell{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+ body[data-page="leader"] #ld-trades .fk{flex:none}
+ body[data-page="leader"] #ld-trades .sk.l{min-width:0;max-width:100%}
+}
 body[data-page="leader"] .app{min-width:0;max-width:100%}
 @media(max-width:900px){
  .pc-pill{max-width:none}
@@ -460,4 +497,33 @@ body[data-page="leader"] .app{min-width:0;max-width:100%}
 }
 @media(max-width:480px){
  body[data-page="leader"] .pc-pill{flex:1 1 auto;max-width:none;min-width:0}
+}
+/* 手机总览 / 账户：「数据更新中」跟在标题后面占一行。≥901 仍是原来的固定角标。 */
+@media(max-width:900px){
+ body[data-page="overview"] .demo-badge.inflow,
+ body[data-page="overview"] .live-badge.inflow,
+ body[data-page="account"] .demo-badge.inflow,
+ body[data-page="account"] .live-badge.inflow{
+  position:static;display:inline-flex;align-self:flex-start;margin:0 0 10px;
+  top:auto;right:auto;bottom:auto;z-index:1;max-width:100%
+ }
+}
+/* ≤640：策略实例对比一行一卡，写法和 .rowcards 相同。更宽仍是表格。 */
+@media(max-width:640px){
+ #ov-accts .tw{overflow-x:clip;max-width:100%}
+ #ov-accts table{display:block;width:100%!important;min-width:0!important}
+ #ov-accts tr:has(th){display:none}
+ #ov-accts tr:has(.k-name){
+  display:flex;flex-wrap:wrap;align-items:baseline;column-gap:10px;row-gap:2px;
+  margin:0 0 8px;padding:10px 12px;background:var(--bg);border-radius:10px;max-width:100%
+ }
+ #ov-accts tr:has(.k-name):last-child{margin-bottom:0}
+ #ov-accts tr:has(.k-name)>td{border:0;padding:0!important;min-width:0!important;background:transparent;white-space:normal!important;overflow:visible;text-overflow:clip}
+ #ov-accts td.k-name{order:1;flex:1 1 8em;min-width:0}
+ #ov-accts td.k-eq{order:2;flex:1 1 auto;margin-left:auto;max-width:100%;text-align:right;font-weight:600;white-space:normal!important;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+ #ov-accts td.k-res{order:3;display:inline;margin-top:4px}
+ #ov-accts td.k-res .tag{white-space:normal!important}
+ #ov-accts td.k-sub{order:4;display:inline-flex;align-items:baseline;gap:4px;margin-top:4px}
+ #ov-accts td.k-sub::before{content:attr(data-k);color:var(--dim);font-size:11px;font-weight:500}
+ #ov-accts td.k-hide{display:none!important}
 }
