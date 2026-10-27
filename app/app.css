@@ -75,7 +75,8 @@ h2{font-size:15px;font-weight:600}
 /* hero */
 .hero{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:end}
 .big{font-size:56px;font-weight:600;letter-spacing:-.02em;line-height:1.05;margin:6px 0}
-.sub{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mu)}
+.sub{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--mu);min-width:0;max-width:100%}
+.sub>span,.fee-note{min-width:0;white-space:normal;overflow-wrap:anywhere}
 .sub b{color:var(--tx);font-weight:500}
 /* lead card */
 .lead{padding:24px;border-color:#3a2a20;background:linear-gradient(180deg,#1b1714,var(--card) 60%)}
@@ -182,12 +183,15 @@ td.r,th.r{text-align:right}
 .kv b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lead table td .fk{display:block}
 @media(max-width:900px){.card table{display:table;width:100%;white-space:normal}.card .tw{overflow-x:auto}td,th{padding-left:6px!important;padding-right:6px!important}}
-@media(max-width:900px){table{min-width:0!important}td{white-space:normal}td.num,td .num,.tag{white-space:nowrap}}
+@media(max-width:900px){table{min-width:0!important}td{white-space:normal}td.num,td .num,.tag{white-space:nowrap}td.num:has(.fee-note),td .fee-note,td.fee-note,.fee-note,.fee-stack{white-space:normal!important;overflow-wrap:anywhere}}
 #ov-mirrors td,#ov-mirrors th,#ov-mirrors .na{white-space:nowrap}
 #ov-mirrors td:first-child{white-space:normal;min-width:10em}
 .q-br{display:none}
 .q-usd{display:none}
 .q-unit{display:none}
+.fee-stack{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:100%;vertical-align:top}
+td .fee-stack,td.r .fee-stack{align-items:flex-end}
+.fee-tag{color:var(--mu);font-size:12px;font-weight:500;line-height:1.35;font-variant-numeric:tabular-nums}
 /* v4.3 collapse */
 tr.more{display:none}
 .tw.open tr.more{display:table-row;animation:rowin .5s var(--ease) both}

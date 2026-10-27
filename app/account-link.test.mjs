@@ -93,45 +93,45 @@ function loadApi(search) {
 const pm = loadApi("");
 const PM = pm.PM;
 
-assert.equal(PM.accountRecordId({ id: UUID, strategy: "paper20000" }), UUID);
-assert.equal(PM.accountRecordId({ account_id: UUID_B, strategy: "paper20000" }), UUID_B);
+assert.equal(PM.accountRecordId({ id: UUID, strategy: "mockpaper" }), UUID);
+assert.equal(PM.accountRecordId({ account_id: UUID_B, strategy: "mockpaper" }), UUID_B);
 assert.equal(PM.accountRecordId({ id: "  " }), "");
 assert.equal(PM.accountRecordId({ id: "null", account_id: UUID }), UUID);
-assert.equal(PM.accountRecordId({ strategy: "paper20000" }), "");
+assert.equal(PM.accountRecordId({ strategy: "mockpaper" }), "");
 
 const catalog = [
-  { id: UUID, strategy: "paper20000", name: "paper20000", process_kind: "legacy" },
+  { id: UUID, strategy: "mockpaper", name: "mockpaper", process_kind: "legacy" },
   { id: UUID_B, name: "fees20000", strategy: "fees20000" }
 ];
-assert.equal(PM.matchAccountId("paper20000", catalog), UUID);
+assert.equal(PM.matchAccountId("mockpaper", catalog), UUID);
 assert.equal(PM.matchAccountId("fees20000", [{ account_id: UUID_B, name: "fees20000" }]), UUID_B);
 assert.equal(PM.matchAccountId("missing", catalog), "");
-assert.equal(PM.matchAccountId("paper20000", catalog.concat([{ id: "other-uuid-other-uuid-other-uuid", strategy: "paper20000", name: "paper20000" }])), "");
-assert.equal(PM.overviewInstanceHref({ strategy: "paper20000" }, catalog), "/account?id=" + UUID);
-assert.equal(PM.overviewInstanceHref({ id: UUID_B, strategy: "paper20000" }, catalog), "/account?id=" + UUID_B);
-assert.equal(PM.overviewInstanceHref({ id: "paper20000", strategy: "paper20000" }, catalog), "/account?id=" + UUID);
-assert.equal(PM.overviewInstanceHref({ id: "paper20000", account_id: UUID, strategy: "paper20000" }, []), "/account?id=" + UUID);
-assert.equal(PM.matchAccountUuid("paper20000", [{ id: "paper20000", account_id: UUID, name: "paper20000" }]), UUID);
-assert.equal(PM.matchAccountUuid("paper20000", catalog.concat([{ id: UUID_B, strategy: "paper20000", name: "paper20000" }])), "");
+assert.equal(PM.matchAccountId("mockpaper", catalog.concat([{ id: "other-uuid-other-uuid-other-uuid", strategy: "mockpaper", name: "mockpaper" }])), "");
+assert.equal(PM.overviewInstanceHref({ strategy: "mockpaper" }, catalog), "/account?id=" + UUID);
+assert.equal(PM.overviewInstanceHref({ id: UUID_B, strategy: "mockpaper" }, catalog), "/account?id=" + UUID_B);
+assert.equal(PM.overviewInstanceHref({ id: "mockpaper", strategy: "mockpaper" }, catalog), "/account?id=" + UUID);
+assert.equal(PM.overviewInstanceHref({ id: "mockpaper", account_id: UUID, strategy: "mockpaper" }, []), "/account?id=" + UUID);
+assert.equal(PM.matchAccountUuid("mockpaper", [{ id: "mockpaper", account_id: UUID, name: "mockpaper" }]), UUID);
+assert.equal(PM.matchAccountUuid("mockpaper", catalog.concat([{ id: UUID_B, strategy: "mockpaper", name: "mockpaper" }])), "");
 assert.equal(PM.overviewInstanceHref({ strategy: "nope" }, catalog), "/account");
-assert.equal(PM.overviewInstanceHref({ strategy: "paper20000" }, []).includes("?s="), false);
-assert.equal(PM.overviewInstanceHref({ id: "paper20000", strategy: "paper20000" }, []).includes("?s="), false);
-assert.equal(PM.overviewInstanceHref({ id: "paper20000", strategy: "paper20000" }, []).includes("paper20000"), false);
+assert.equal(PM.overviewInstanceHref({ strategy: "mockpaper" }, []).includes("?s="), false);
+assert.equal(PM.overviewInstanceHref({ id: "mockpaper", strategy: "mockpaper" }, []).includes("?s="), false);
+assert.equal(PM.overviewInstanceHref({ id: "mockpaper", strategy: "mockpaper" }, []).includes("mockpaper"), false);
 assert.equal(PM.accountDetailHref(""), "/account");
-assert.equal(PM.accountDetailHref("paper20000"), "/account");
-assert.equal(PM.accountIdSearch("?s=paper20000&mock=1", UUID), "?mock=1&id=" + UUID);
-assert.equal(PM.accountIdSearch("?mock=1&s=paper20000&sa=1", UUID), "?mock=1&sa=1&id=" + UUID);
-assert.equal(PM.accountIdSearch("?s=paper20000", "paper20000"), null);
-assert.equal(PM.accountIdSearch("?s=paper20000", ""), null);
+assert.equal(PM.accountDetailHref("mockpaper"), "/account");
+assert.equal(PM.accountIdSearch("?s=mockpaper&mock=1", UUID), "?mock=1&id=" + UUID);
+assert.equal(PM.accountIdSearch("?mock=1&s=mockpaper&sa=1", UUID), "?mock=1&sa=1&id=" + UUID);
+assert.equal(PM.accountIdSearch("?s=mockpaper", "mockpaper"), null);
+assert.equal(PM.accountIdSearch("?s=mockpaper", ""), null);
 
-const link = PM.overviewAccountLink({ strategy: "paper20000" }, catalog);
+const link = PM.overviewAccountLink({ strategy: "mockpaper" }, catalog);
 assert.match(link, new RegExp('href="/account\\?id=' + UUID + '"'));
-assert.match(link, />paper20000</);
+assert.match(link, />mockpaper</);
 assert.equal(link.includes("?s="), false);
 assert.equal(PM.overviewAccountLink({ strategy: "<b>x</b>" }, []).includes("<b>"), false);
 
 const row = {
-  strategy: "paper20000",
+  strategy: "mockpaper",
   net_pnl_usd: 10,
   net_pct: 0.1,
   equity_usd: 100,
@@ -153,11 +153,11 @@ pm.catalog = catalog;
 await PM.renderOverview(overview);
 const table = pm.store["#ov-accts"]._table.innerHTML;
 assert.match(table, new RegExp('href="/account\\?id=' + UUID + '"'));
-assert.match(table, />paper20000</);
+assert.match(table, />mockpaper</);
 assert.equal(table.includes("?s="), false);
-assert.equal(table.includes("/v1/accounts/paper20000"), false);
+assert.equal(table.includes("/v1/accounts/mockpaper"), false);
 assert.ok(pm.calls.some((url) => url.includes("/v1/accounts")));
-assert.equal(pm.calls.some((url) => url.includes("/paper20000")), false);
+assert.equal(pm.calls.some((url) => url.includes("/mockpaper")), false);
 
 pm.calls.length = 0;
 await PM.renderOverview(Object.assign({}, overview, { accounts: [{ ...row, id: UUID }] }));
@@ -167,11 +167,11 @@ assert.equal(pm.calls.length, 0);
 
 pm.calls.length = 0;
 pm.catalog = catalog;
-await PM.renderOverview(Object.assign({}, overview, { accounts: [{ ...row, id: "paper20000" }] }));
+await PM.renderOverview(Object.assign({}, overview, { accounts: [{ ...row, id: "mockpaper" }] }));
 const namedId = pm.store["#ov-accts"]._table.innerHTML;
 assert.match(namedId, new RegExp('href="/account\\?id=' + UUID + '"'));
 assert.equal(namedId.includes("?s="), false);
-assert.equal(namedId.includes("id=paper20000"), false);
+assert.equal(namedId.includes("id=mockpaper"), false);
 assert.ok(pm.calls.some((url) => url.includes("/v1/accounts?limit=100")));
 
 pm.catalog = [];
@@ -179,7 +179,7 @@ await PM.renderOverview(overview);
 const bare = pm.store["#ov-accts"]._table.innerHTML;
 assert.match(bare, /href="\/account"/);
 assert.equal(bare.includes("?s="), false);
-assert.match(bare, />paper20000</);
+assert.match(bare, />mockpaper</);
 assert.match(bare, /class="k-name"/);
 assert.match(bare, /class="r num k-eq"/);
 assert.match(bare, /class="k-res"/);
@@ -193,12 +193,12 @@ assert.equal(pm.store["#ov-recent-lbl"].textContent, "他近 20 笔输赢");
 await PM.renderOverview(Object.assign({}, overview, { main_leader: { user_name: "A", address: "0xabc", recent_n: 20, recent_closed: { count: 7, wins: 4, losses: 3, pnl_usd: 1.25 } } }));
 assert.equal(pm.store["#ov-recent-lbl"].textContent, "近期输赢");
 
-const legacy = loadApi("?s=paper20000&mock=1");
+const legacy = loadApi("?s=mockpaper&mock=1");
 legacy.location.pathname = "/account";
 legacy.location.hash = "#keep";
 const rewritten = [];
 legacy.history.replaceState = function (_state, _title, url) { rewritten.push(url); };
-assert.equal(legacy.PM.replaceNamedAccountLocation("paper20000"), false);
+assert.equal(legacy.PM.replaceNamedAccountLocation("mockpaper"), false);
 assert.equal(rewritten.length, 0);
 assert.equal(legacy.PM.replaceNamedAccountLocation(UUID), true);
 assert.equal(rewritten[0], "/account?mock=1&id=" + UUID + "#keep");

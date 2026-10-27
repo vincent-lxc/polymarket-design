@@ -58,7 +58,7 @@ const detail = {
   pnl: {
     by_strategy: [
       { strategy: "catsports20000", realized_usd: 10, unrealized_usd: 2, total_usd: 12 },
-      { strategy: "paper20000", realized_usd: -3, unrealized_usd: 1, total_usd: -2 }
+      { strategy: "mockpaper", realized_usd: -3, unrealized_usd: 1, total_usd: -2 }
     ],
     copy_rate: 0.375,
     copy_rate_detail: { copied: 1, followed: 2, signals: 8, rate: 0.375 },
@@ -115,7 +115,7 @@ assert.match(ourValue, /q-shares">12\.5<span class="q-unit"> 股<\/span>/);
 
 const pnl = PM.leaderPnlBody(detail);
 assert.match(pnl, /catsports20000/);
-assert.match(pnl, /paper20000/);
+assert.match(pnl, /mockpaper/);
 assert.match(pnl, /合计/);
 assert.match(pnl, /\+\$7\.00/);
 assert.match(pnl, /\+\$3\.00/);
@@ -509,7 +509,7 @@ assert.equal(wrapped.marks[0].price, 0.42);
 assert.ok(wrapped.marks.every((m) => m.who !== "M"));
 
 const uuid = "6f1c0c3e-1b7a-4c2d-9a10-aabbccddeeff";
-assert.equal(PM.overviewInstanceHref({ id: uuid, strategy: "paper20000" }, []), "/account?id=" + uuid);
+assert.equal(PM.overviewInstanceHref({ id: uuid, strategy: "mockpaper" }, []), "/account?id=" + uuid);
 assert.match(PM.accountDetailHref(uuid), /\/account\?id=/);
 
 console.log("leader-detail tests ok");

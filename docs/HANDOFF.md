@@ -130,8 +130,8 @@ API：`研发/API-STRATEGY-ACCOUNT-v1-2026-10-23.md`
 不要单独先合 #77（否则净值−资金≠净收益且无说明，用户会觉得算错）。
 
 **手续费口径（Morgan 定 B）**  
-- 未真扣费账户（如 paper20000）：估算扣费，`fees_estimated: true`，悬停/卡片标「估算」。  
-- 已真扣费（paper20000fees）不重复扣。  
+- 未真扣费账户（如样例账户）：估算扣费，`fees_estimated: true`，悬停/卡片标「估算」。  
+- 已真扣费的样例账户不重复扣。  
 - 同窗口柱子合计 = 卡片 `net_pnl_usd`，差 ≤ $1。  
 - 真实响应：`研发/pr77-responses/`；核对：`研发/CHECK-PR77-*.md`、`CHECK-PR78-*.md`；Casey 门：`产品/release-gate/pr77-…`、`pr78-…`。  
 - 前端：起始日用顶层 `inception_at`（旧账户 10-14），不要只看 `clipped_from`；估算手续费加总各期 `fees_uncharged`，`totals.fees` 不含这笔。
@@ -164,13 +164,13 @@ API：`研发/API-STRATEGY-ACCOUNT-v1-2026-10-23.md`
 
 **做到哪**
 - 已合已上：#72–#76（#76 是回撤门禁「null 放行」加 cutover，现网 DEPLOYED_SHA `e8757616`）。
-- #77（卡片手续费只扣一次，共用 `bff/fee-basis.ts`）：数据已验过，paper20000 卡片 5,889.41 / +29.45%，四处一致。Casey 数据门已过。
+- #77（卡片手续费只扣一次，共用 `bff/fee-basis.ts`）：数据已验过，样例账户卡片 5,889.41 / +29.45%，四处一致。Casey 数据门已过。
 - #78（`GET /v1/accounts/:id/pnl-buckets` 日/周/月/年趋势）：base 目前是 #77 分支，**#77 合后要把 base 改回 master 再合**。全段对账差 $0，Casey 数据门已过。
 - 真实返回、核对文档都在 `研发/pr77-responses/`、`研发/CHECK-PR77-real-responses-2026-10-24.md`、`研发/CHECK-PR78-real-responses-2026-10-24.md`。
 
 **下一步**
 1. 等 Emily 截图 → Casey 门 → Morgan「可以」，然后先 squash 合 #77，再合 #78，和 Emily 前端一起上。
-2. 部署只重启 pmct-bff。部署前在 `backups/` 下做备份，部署后冒烟 paper20000 卡片和 pnl-buckets，报 Morgan；Casey 30 分钟内现网过门，不过关就回滚。
+2. 部署只重启 pmct-bff。部署前在 `backups/` 下做备份，部署后冒烟样例账户卡片和 pnl-buckets，报 Morgan；Casey 30 分钟内现网过门，不过关就回滚。
 3. Leader 页「—」：`GET /v1/leaders/:addr` 的 `pnl.by_strategy` 为空、或 realized/unrealized 为 null 时要补齐，加 `pnl.total`，补「近 N 笔输赢」「利润占比」。排查报告写到 `研发/CHECK-leader-pnl-dash-2026-10-24.md`（正在写），原始返回在 `研发/leader-pnl-responses/`。之后开 PR。
 4. BFF 访问日志小 PR：只记路径、状态码、耗时，不记 token，用 `BFF_ACCESS_LOG` 开关。云端代理 bc-de1c4ad4 在写，出 PR 后给 Morgan 审。
 5. #76 还欠的：在群里贴三个数（候选人数前后对比、alex 回撤显示、新放进来的前 10 个钱包），再请 Casey 确认 alex 不显示 −100%。
@@ -194,8 +194,8 @@ API：`研发/API-STRATEGY-ACCOUNT-v1-2026-10-23.md`
 **做到哪**
 - 已合已上：#38（手机表格一行一卡），main `1176cfc`，App Version `462572d5-f1fc-474f-8349-3ac6be45365a`；回滚点 #36 `befc8958-9b04-490a-9250-3ce472779ca3`。等 Casey 现网复查。
 - #39（leader 去假数字）：已做 500/断网显示「暂时连不上，稍后再试」+重试，账户列表「连不上接口」+重试，测试 `app/load-error.test.mjs`。已下发但未回：401 顶部条「登录已失效，请重新登录」（保留数据、不自动跳转）、1280 交易表 41px 横滚、「近 N 笔」字面 N、手机「跟单率」标签截断、累计盈亏空态；合 origin/main（leader.html 4 处冲突两边保留，不 force-push），统一 `?v=`。
-- #40（账户趋势图 日/周/月/年+自定义，盈亏柱）：11 项测试过，已发 #78 契约和 7 份真实返回，正在出 1280/390 真实数据截图，并加「柱子合计 = 卡片 5,873.08，差 ≤ $1」测试。
-- 卡片手续费标注（还没开 PR）：大数字仍是净值，加「净收益 +$X（已扣估算手续费 $Y）」，% 用扣费后，总览合计标「含估算手续费」。用 `研发/pr77-responses/` 8 份 #77 返回；期望 paper20000 NAV $27,886.86 / +$5,889.41 / $1,997.46 / +29.45% / 「估算」；paper20000fees −$1,801.11 / −9.01%，不标估算。
+- #40（账户趋势图 日/周/月/年+自定义，盈亏柱）：11 项测试过，已发 #78 契约和 7 份真实返回，正在出 1280/390 真实数据截图，并加「柱子合计与卡片净值差 ≤ $0.01」测试。
+- 卡片手续费标注（还没开 PR）：大数字仍是净值，加「净收益 +$X（已扣估算手续费 $Y）」，% 用扣费后，总览合计标「含估算手续费」。用 `研发/pr77-responses/` 8 份 #77 返回；期望样例账户 NAV $27,886.86 / +$5,889.41 / $1,997.46 / +29.45% / 「估算」；已扣费样例 −$1,801.11 / −9.01%，不标估算。
 
 **下一步**
 1. 收 #40 和卡片截图，自查后交 Casey 按 `产品/ACCEPT-account-chart-range-2026-10-24.md` 过门 → Morgan「可以」→ 等 Blake 合 #77、#78 后合前端并部署 App。
