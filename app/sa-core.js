@@ -1486,7 +1486,7 @@
     };
     var list = [
       mockAccount({
-        id: "paper20000", name: "paper20000", strategy_id: "copy", strategy_label: "跟单 copy", state: "running",
+        id: "mockpaper", name: "mockpaper", strategy_id: "copy", strategy_label: "跟单 copy", state: "running",
         series: null,
         capital_usd: 20000, current_segment: 2,
         params: { copy_ratio: 0.3, fees_on: false, daily_loss_usd: 800, max_positions: 200, risk: { max_per_trade_usd: { value: 15, reason: null } }, exit: { stop_loss_pct: { value: 0.12, reason: null } } },
@@ -1509,7 +1509,7 @@
         metrics: m(0, 0, 0, 0, 0, 0, 0, 0, 0)
       }),
       mockAccount({
-        id: "paper20000fees", name: "paper20000fees", strategy_id: "copy", strategy_label: "跟单 copy", state: "stopped",
+        id: "mockpaperfees", name: "mockpaperfees", strategy_id: "copy", strategy_label: "跟单 copy", state: "stopped",
         capital_usd: 20000, current_segment: 1, stopped_at: "2026-10-22T10:00:00Z",
         pending_settlement_count: null,
         rpc_capacity: { required_rpm: 180, available_rpm: 40, observed_429_1h: 17, providers_healthy: 1, providers_total: 3, status: "insufficient" },
@@ -1683,7 +1683,7 @@
           reasons: a.reasons || {}
         };
       }
-      var end = a.metrics.return_pct;
+      var end = a.metrics.return_pct * (scope === "current_segment" ? 0.35 : 1);
       var s = mockSeries(a.id, a.name, a.strategy_id, a.strategy_label, end * (1 + i * 0.02), a.capital_usd);
       if (scope === "current_segment") {
         s.points = s.points.filter(function (p) { return p.segment === a.current_segment || p.segment === 3; });
@@ -1711,7 +1711,7 @@
         fees_usd: a.metrics.fees_usd,
         gross_pnl_usd: a.metrics.gross_pnl_usd,
         net_pnl_usd: a.metrics.net_pnl_usd,
-        return_pct: a.metrics.return_pct,
+        return_pct: scope === "current_segment" ? a.metrics.return_pct * 0.35 : a.metrics.return_pct,
         max_drawdown_pct: a.metrics.max_drawdown_pct,
         trades: a.metrics.trades,
         runtime_sec: a.metrics.runtime_sec,

@@ -96,7 +96,7 @@
 ## 策略管理 `GET /v1/me/strategies`、`/v1/strategy-templates`
 | 页面字段 | BFF | 状态 |
 |---|---|---|
-| 我的策略实例 | 草稿：name、template_id、params、state | ⚠ 草稿和正在跑的实例（paper20000 等）是两回事；草稿没有净盈亏 |
+| 我的策略实例 | 草稿：name、template_id、params、state | ⚠ 草稿和正在跑的实例是两回事；草稿没有净盈亏 |
 | 扣费净盈亏列 | 无 | ❌ 草稿不跑，没有盈亏 |
 | 模板 S0–S3 | `templates` | ✅ |
 | 新增、修改（唯一写入） | POST / PATCH，正文 `confirm` 加请求头 `X-Confirm-Phrase`（encodeURIComponent），mode=paper | ✅ api.js 里有 `PM.createDraft` / `PM.saveDraft` |

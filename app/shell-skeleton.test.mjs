@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const files = fs.readdirSync(dir).filter((name) => name.endsWith(".html")).sort();
 const markets = ["Fed 12 月降息", "湖人", "BTC 周五", "阿森纳"];
-const accounts = ["catsports20000", "paper20000", "fees20000", "catunknown20000"];
+const accounts = ["catsports20000", "mockpaper", "fees20000", "catunknown20000"];
 
 function visible(html) {
   return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "");
@@ -28,8 +28,8 @@ for (const name of files) {
   }
   assert.equal(/\$\d/.test(body), false, name + " dollar");
   assert.equal(/\d¢/.test(body), false, name + " cents");
-  assert.equal(/placeholder="(?:catsports20000|paper20000|fees20000)"/.test(html), false, name);
-  assert.equal(/value="(?:catsports20000|paper20000|fees20000)"/.test(html), false, name);
+  assert.equal(/placeholder="(?:catsports20000|mockpaper|fees20000)"/.test(html), false, name);
+  assert.equal(/value="(?:catsports20000|mockpaper|fees20000)"/.test(html), false, name);
 }
 
 const account = fs.readFileSync(path.join(dir, "account.html"), "utf8");
