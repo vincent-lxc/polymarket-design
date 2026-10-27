@@ -74,15 +74,15 @@ assert.match(saSrc, /SA\.summaryOverWarning\(/);
 
 assert.equal(SA.isStrategyCatalog({ items: [{ strategy_id: "copy" }], next_cursor: null, total: 1 }), true);
 assert.equal(SA.isStrategyCatalog({ strategies: [{ name: "paper" }] }), false);
-assert.equal(SA.isAccountListV2({ accounts: [{ strategy: "paper20000" }] }), false);
+assert.equal(SA.isAccountListV2({ accounts: [{ strategy: "mockpaper" }] }), false);
 assert.equal(SA.isAccountListV2({ items: [], next_cursor: null, total: 0, summary: { mode: "paper" } }), true);
 assert.equal(SA.isAccountListV2({ accounts: [{ strategy: "zft-062", process_kind: "legacy" }], next_cursor: null, total: 7, summary: { mode: "paper" } }), true);
 assert.equal(SA.isAccountListV2({ accounts: [{ id: "a", strategy_id: "copy" }], summary: { mode: "paper" } }), true);
 const alias = SA.normalizeAccountPage({ accounts: [{ strategy: "zft-062", process_kind: "legacy" }], next_cursor: null, total: 1, summary: { mode: "paper" } });
 assert.equal(alias.items[0].strategy, "zft-062");
 assert.equal(alias.accounts.length, 1);
-const named = SA.normalizeAccountPage({ items: [{ id: "paper20000" }], summary: { mode: "paper" } });
-assert.equal(named.accounts[0].id, "paper20000");
+const named = SA.normalizeAccountPage({ items: [{ id: "mockpaper" }], summary: { mode: "paper" } });
+assert.equal(named.accounts[0].id, "mockpaper");
 assert.equal(SA.isLegacyAccount({ process_kind: "legacy" }), true);
 assert.equal(SA.isLegacyAccount({ process_kind: "acct" }), false);
 assert.equal(SA.hasCursorPage({ active: [{ address: "0x1" }] }), false);
@@ -224,28 +224,28 @@ assert.equal(entry.cells[1], "0.62");
 assert.equal(model.common.find((r) => r.key === "max_drawdown_pct").cells[0], "2.0%");
 assert.equal(model.common.find((r) => r.key === "return_pct").cells[0], "+9.0%");
 
-const paper = SA.mockAccounts().find((a) => a.id === "paper20000");
+const paper = SA.mockAccounts().find((a) => a.id === "mockpaper");
 assert.equal(Object.prototype.hasOwnProperty.call(paper, "series"), true);
 assert.equal(paper.series, null);
 assert.equal(paper.points, undefined);
-const mixed = SA.mockCompare(["paper20000", "old-1x"], { axis: "elapsed" });
+const mixed = SA.mockCompare(["mockpaper", "old-1x"], { axis: "elapsed" });
 assert.equal(mixed.table.find((r) => r.account_id === "old-1x").archived, true);
-assert.equal(mixed.table.find((r) => r.account_id === "paper20000").archived, false);
+assert.equal(mixed.table.find((r) => r.account_id === "mockpaper").archived, false);
 assert.equal(mixed.series.find((s) => s.account_id === "old-1x").archived, true);
 const tagged = SA.chartModel(mixed.series, { focusId: "old-1x", axis: "elapsed" });
 assert.equal(tagged.lines.find((l) => l.account_id === "old-1x").archived, true);
-assert.equal(tagged.lines.find((l) => l.account_id === "paper20000").archived, false);
+assert.equal(tagged.lines.find((l) => l.account_id === "mockpaper").archived, false);
 
-const cmp = SA.mockCompare(["paper20000", "paper20000fees", "zft-062"], { axis: "calendar", metric: "return_pct", scope: "all" });
-const chart = SA.chartModel(cmp.series, { focusId: "paper20000", axis: "calendar", metric: "return_pct", width: 600, height: 200 });
+const cmp = SA.mockCompare(["mockpaper", "mockpaperfees", "zft-062"], { axis: "calendar", metric: "return_pct", scope: "all" });
+const chart = SA.chartModel(cmp.series, { focusId: "mockpaper", axis: "calendar", metric: "return_pct", width: 600, height: 200 });
 assert.equal(chart.lines.filter((l) => l.accent).length, 1);
 assert.equal(chart.lines.find((l) => l.accent).color, SA.ACCENT);
 assert.ok(chart.lines.filter((l) => !l.accent).every((l) => l.color !== SA.ACCENT));
-assert.ok(chart.marks.every((m) => m.account_id === "paper20000"));
+assert.ok(chart.marks.every((m) => m.account_id === "mockpaper"));
 assert.ok(chart.gaps.length >= 1);
-const hover = SA.chartModel(cmp.series, { focusId: "paper20000", hoverId: "zft-062", axis: "calendar" });
+const hover = SA.chartModel(cmp.series, { focusId: "mockpaper", hoverId: "zft-062", axis: "calendar" });
 assert.ok(hover.marks.every((m) => m.account_id === "zft-062"));
-const elapsed = SA.chartModel(SA.mockCompare(["paper20000", "zft-062"], { axis: "elapsed" }).series, { focusId: "paper20000", axis: "elapsed" });
+const elapsed = SA.chartModel(SA.mockCompare(["mockpaper", "zft-062"], { axis: "elapsed" }).series, { focusId: "mockpaper", axis: "elapsed" });
 assert.equal(elapsed.gaps.length, 0);
 assert.ok(elapsed.marks.length >= 1);
 
@@ -293,7 +293,7 @@ assert.equal(off.includes("strategy_id"), false);
 assert.equal(coerced.includes("strategy_id"), false);
 assert.equal(zero.includes("strategy_id"), false);
 assert.equal(/archived=(1|0)(&|$)/.test(off + "&" + on + "&" + coerced + "&" + zero), false);
-const legCmp = SA.mockCompare(["paper20000", "zft-062"], { axis: "elapsed" });
+const legCmp = SA.mockCompare(["mockpaper", "zft-062"], { axis: "elapsed" });
 const zrow = legCmp.table.find((r) => r.account_id === "zft-062");
 assert.equal(zrow.strategy_id, null);
 assert.equal(zrow.strategy, "zft-062");
@@ -342,9 +342,9 @@ assert.equal(SA.engineOnboarding(restored), false);
 assert.equal(SA.engineOnboarding({ state: "running", reasons: { equity_curve: "no_equity_points" } }), true);
 assert.equal(SA.engineOnboarding({ state: "running", reasons: { equity_curve: "no_equity_points" }, series: { points: [{ t: 0 }] } }), false);
 assert.equal(SA.engineOnboarding({ state: "stopped", reasons: { equity_curve: "no_equity_points" } }), false);
-const onboardCmp = SA.mockCompare(["paper20000", "copy-new"], { axis: "elapsed" });
+const onboardCmp = SA.mockCompare(["mockpaper", "copy-new"], { axis: "elapsed" });
 assert.equal(onboardCmp.series.find((s) => s.account_id === "copy-new").points.length, 0);
-assert.ok(onboardCmp.series.find((s) => s.account_id === "paper20000").points.length > 0);
+assert.ok(onboardCmp.series.find((s) => s.account_id === "mockpaper").points.length > 0);
 const onboardModel = SA.compareTableModel(onboardCmp.schemas, onboardCmp.table);
 const retCells = onboardModel.common.find((r) => r.key === "return_pct").cells;
 assert.equal(retCells[1], "暂无净值");
@@ -358,9 +358,9 @@ assert.equal(SA.compareTableModel(onboardCmp.schemas, onboardCmp.table, "en").co
 assert.equal(onboardModel.common.find((r) => r.key === "max_drawdown_pct").cells[0], "17.2%");
 assert.equal(String(onboardModel.common.find((r) => r.key === "max_drawdown_pct").cells[0]).includes("+"), false);
 assert.match(onboardModel.common.find((r) => r.key === "return_pct").cells[0], /\+13\.5%/);
-const lines = SA.chartModel(onboardCmp.series, { focusId: "paper20000", axis: "elapsed" }).lines;
+const lines = SA.chartModel(onboardCmp.series, { focusId: "mockpaper", axis: "elapsed" }).lines;
 assert.equal(lines.find((l) => l.account_id === "copy-new").onboarding, true);
-assert.equal(lines.find((l) => l.account_id === "paper20000").onboarding, false);
+assert.equal(lines.find((l) => l.account_id === "mockpaper").onboarding, false);
 
 const writeSchema = [
   { key: "copy_ratio", label_zh: "跟单比例", type: "number", default: 0.3, min: 0.05, max: 1, unit: "x" },
@@ -550,7 +550,7 @@ assert.equal(SA.fieldInput({ key: "stop_loss_pct", type: "number", default: 0.12
 assert.equal(SA.fieldInput({ key: "stop_loss_pct", type: "number", default: 0.12 }, undefined), "0.12");
 assert.equal(SA.fieldInput({ key: "stop_loss_pct", type: "string" }, "0.25"), "0.25");
 
-const card = SA.mockAccounts().find((a) => a.id === "paper20000");
+const card = SA.mockAccounts().find((a) => a.id === "mockpaper");
 const cardLine = SA.diffText(card.params_diff, SA.mockStrategies().items[0].params_schema);
 assert.equal(cardLine.includes("[object Object]"), false);
 assert.match(cardLine, /止损 12\.0%/);

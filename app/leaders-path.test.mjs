@@ -113,10 +113,10 @@ function catalogRoute({ bare, catalog, catalogStatus }) {
   };
 }
 
-const bareNamed = [{ strategy: "catsports20000" }, { strategy: "paper20000" }];
+const bareNamed = [{ strategy: "catsports20000" }, { strategy: "mockpaper" }];
 const catalog = [
   { id: UUID, strategy: "catsports20000", name: "catsports20000" },
-  { id: UUID_B, strategy: "paper20000", name: "paper20000" }
+  { id: UUID_B, strategy: "mockpaper", name: "mockpaper" }
 ];
 
 const pm = loadLeaders("");
@@ -131,7 +131,7 @@ assert.equal(await PM.leadersRequestKey([], ""), "");
 const named = loadLeaders("", catalogRoute({ bare: bareNamed, catalog }));
 assert.equal(await named.PM.leadersRequestKey(bareNamed, "catsports20000"), UUID);
 assert.ok(named.calls.some((c) => c.includes("/v1/accounts?limit=100&archived=false")));
-assert.equal(await named.PM.leadersRequestKey(bareNamed, "paper20000"), UUID_B);
+assert.equal(await named.PM.leadersRequestKey(bareNamed, "mockpaper"), UUID_B);
 
 const ambiguous = loadLeaders("", catalogRoute({
   bare: [{ strategy: "catsports20000" }, { strategy: "catsports20000" }],
@@ -159,13 +159,13 @@ const read = leadersUrls(open.calls).find((c) => c.startsWith("GET "));
 assert.equal(pathOf(read), "/v1/accounts/" + UUID + "/leaders");
 assert.equal(read.includes("window=90d"), true);
 assert.equal(pathOf(read).includes("catsports20000"), false);
-assert.equal(pathOf(read).includes("paper20000"), false);
+assert.equal(pathOf(read).includes("mockpaper"), false);
 assert.equal(open.PM.leadersCurrentKey(), UUID);
 assert.match(open.store["#ld-rows"].innerHTML, new RegExp(ADDR));
 assert.match(open.store["#ld-count"].textContent, /在跟/);
 const steps = open.store["#ld-steps"].innerHTML;
 assert.match(steps, /href="\/leaders\?s=catsports20000"/);
-assert.match(steps, /href="\/leaders\?s=paper20000"/);
+assert.match(steps, /href="\/leaders\?s=mockpaper"/);
 assert.equal(steps.includes(UUID), false);
 assert.equal(steps.includes(UUID_B), false);
 assert.ok(cursorOpts);
@@ -192,19 +192,19 @@ const del = open.calls.find((c) => c.startsWith("DELETE "));
 assert.equal(pathOf(del), "/v1/accounts/" + UUID + "/leaders/" + ADDR);
 
 /* ?s= 仍筛选策略，但路径用该策略对应的 uuid，不是另一个账户，也不是策略名。 */
-const filtered = loadLeaders("?s=paper20000", catalogRoute({ bare: bareNamed, catalog }));
+const filtered = loadLeaders("?s=mockpaper", catalogRoute({ bare: bareNamed, catalog }));
 assert.equal(await filtered.PM.renderLeaders(), "live");
 const filteredRead = leadersUrls(filtered.calls).find((c) => c.startsWith("GET "));
 assert.equal(pathOf(filteredRead), "/v1/accounts/" + UUID_B + "/leaders");
 assert.equal(filtered.PM.leadersCurrentKey(), UUID_B);
 const filteredSteps = filtered.store["#ld-steps"].innerHTML;
-assert.match(filteredSteps, /href="\/leaders\?s=paper20000"/);
-assert.match(filteredSteps, /<span class="on">paper20000<\/span>/);
+assert.match(filteredSteps, /href="\/leaders\?s=mockpaper"/);
+assert.match(filteredSteps, /<span class="on">mockpaper<\/span>/);
 assert.equal(filteredSteps.includes(UUID_B), false);
 
 /* 行上已经带 uuid 时直接用，不再为了对名去打目录。 */
 const onRow = loadLeaders("", catalogRoute({
-  bare: [{ id: UUID, strategy: "catsports20000" }, { account_id: UUID_B, strategy: "paper20000" }],
+  bare: [{ id: UUID, strategy: "catsports20000" }, { account_id: UUID_B, strategy: "mockpaper" }],
   catalog: []
 }));
 assert.equal(await onRow.PM.renderLeaders(), "live");
@@ -214,7 +214,7 @@ assert.equal(onRow.calls.some((c) => c.includes("limit=100")), false);
 /* 目录也没有 uuid：退回策略名，列表仍能画出来。 */
 const noUuid = loadLeaders("", catalogRoute({
   bare: bareNamed,
-  catalog: [{ strategy: "catsports20000", name: "catsports20000" }, { id: "paper20000", strategy: "paper20000", name: "paper20000" }]
+  catalog: [{ strategy: "catsports20000", name: "catsports20000" }, { id: "mockpaper", strategy: "mockpaper", name: "mockpaper" }]
 }));
 assert.equal(await noUuid.PM.renderLeaders(), "live");
 assert.equal(pathOf(leadersUrls(noUuid.calls).find((c) => c.startsWith("GET "))), "/v1/accounts/catsports20000/leaders");

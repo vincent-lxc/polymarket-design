@@ -1055,6 +1055,175 @@
     }
     if (detailState.model) bindChart(host, detailState.model, function () {});
   }
+  function chartContentWidth(host) {
+    if (!host) return 0;
+    var cs = window.getComputedStyle(host);
+    var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    return Math.round(host.clientWidth - pad);
+  }
+  function pnlDrawWidth() {
+    var host = document.getElementById("sa-chart");
+    var w = chartContentWidth(host);
+    if (w > 0) return w;
+    var sec = document.getElementById("sa-curve");
+    if (!sec) return 0;
+    var cs = window.getComputedStyle(sec);
+    var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    return Math.max(0, Math.round(sec.clientWidth - pad - 28));
+  }
+  function pnlPresentInput(pnl, extra) {
+    var w = pnlDrawWidth();
+    return Object.assign({
+      payload: pnl.payload,
+      hadSuccess: true,
+      granularity: pnl.granularity,
+      tz: pnl.tz,
+      scope: detailState.scope,
+      from: pnl.window && pnl.window.from,
+      clippedToInception: !!(pnl.window && pnl.window.clippedToInception),
+      width: w || undefined
+    }, extra || {});
+  }
+  function fitPnlChart() {
+    var host = document.getElementById("sa-chart");
+    var P = pnlLib();
+    var pnl = detailState && detailState.pnl;
+    if (!host || !P || !pnl || pnl.status !== "ready" || !pnl.payload || !pnl.model) return;
+    var w = chartContentWidth(host);
+    if (!w || Math.abs(pnl.model.width - w) < 2) return;
+    var view = P.present(pnlPresentInput(pnl, { width: w }));
+    if (!view.chart || !view.chart.drawn) return;
+    pnl.model = view.chart;
+    host.innerHTML = P.svg(pnl.model) + '<div class="sa-tip"></div>';
+    bindPnl(host, pnl.model);
+  }
+  var pnlResizeBound = false;
+  function bindPnlResize() {
+    if (pnlResizeBound) return;
+    pnlResizeBound = true;
+    var timer = 0;
+    window.addEventListener("resize", function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        timer = 0;
+        if (!detailState || !detailState.pnl || detailState.pnl.status !== "ready") return;
+        fitPnlChart();
+      }, 60);
+    });
+  }
+  function paintCurve() {
+    var sec = document.getElementById("sa-curve");
+    if (!sec || !detailState) return;
+    sec.innerHTML = curveInnerHtml();
+    bindDetailChart();
+    fitPnlChart();
+    bindPnlResize();
+  }
+  function pnlNowOpts(pnl) {
+    var P = pnlLib();
+    return {
+      now: Date.now(),
+      tz: (pnl && pnl.tz) || "",
+      week_start: (pnl && pnl.weekStart) || "monday",
+      inception: (pnl && pnl.inception) || accountInception(detailState.account)
+    };
+  }
+  async function loadPnl() {
+    var P = pnlLib();
+    if (!detailState || !P) return;
+    var pnl = detailState.pnl;
+    if (!pnl) return;
+    if (mockMode()) {
+      pnl.status = "unsupported";
+      pnl.controls = false;
+      pnl.model = null;
+      return;
+    }
+    var id = pnlAccountId();
+    if (!id) {
+      pnl.status = "unsupported";
+      pnl.controls = false;
+      return;
+    }
+    var seq = ++pnl.seq;
+    var token = detailSeq;
+    var base = pnlNowOpts(pnl);
+    var preset = P.defaultWindow(pnl.granularity, base);
+    var fromReq = pnl.custom ? (pnl.requestedFrom || pnl.from) : preset.from;
+    var toReq = pnl.custom ? pnl.to : preset.to;
+    var win = P.clampWindow(fromReq, toReq, Object.assign({ granularity: pnl.granularity, custom: !!pnl.custom }, base));
+    pnl.window = { from: win.from, to: win.to, min: win.min || "", today: win.today, clippedToInception: !!win.clippedToInception };
+    pnl.notice = win.warn || "";
+    if (win.warn) {
+      pnl.status = "blocked";
+      pnl.controls = pnl.hadSuccess || pnl.controls;
+      pnl.model = null;
+      if (seq === pnl.seq && token === detailSeq) paintCurve();
+      return;
+    }
+    var wasLoading = pnl.status === "loading";
+    pnl.status = "loading";
+    if (pnl.hadSuccess && !wasLoading && seq === pnl.seq && token === detailSeq) paintCurve();
+    try {
+      var data = await api(P.requestPath(id, { granularity: pnl.granularity, from: win.from, to: win.to, scope: detailState.scope }));
+      if (seq !== pnl.seq || token !== detailSeq || !detailState || detailState.pnl !== pnl) return;
+      if (data && data.tz) pnl.tz = data.tz;
+      if (data && data.week_start) pnl.weekStart = data.week_start;
+      if (data && data.inception_at) pnl.inception = data.inception_at;
+      var next = P.reconcileWindow({
+        granularity: pnl.granularity,
+        custom: pnl.custom,
+        from: win.from,
+        to: win.to,
+        tz: pnl.tz,
+        weekStart: pnl.weekStart,
+        inception: pnl.inception
+      }, data, Date.now());
+      if (next && !pnl.realigned) {
+        pnl.realigned = true;
+        pnl.inception = next.inception || pnl.inception;
+        pnl.tz = next.tz || pnl.tz;
+        pnl.weekStart = next.weekStart || pnl.weekStart;
+        return loadPnl();
+      }
+      pnl.payload = data;
+      var view = P.present(pnlPresentInput(pnl));
+      if (view.mode === "legacy") {
+        pnl.status = "unsupported";
+        pnl.controls = false;
+        pnl.model = null;
+        pnl.payload = null;
+        paintCurve();
+        return;
+      }
+      pnl.hadSuccess = true;
+      pnl.controls = true;
+      pnl.payload = data;
+      pnl.model = view.chart;
+      pnl.status = view.mode === "empty" ? "empty" : "ready";
+      var opts = pnlNowOpts(pnl);
+      pnl.window.min = opts.inception ? (P.civilDate(opts.inception, P.zoneOf(opts.tz)) || pnl.window.min) : pnl.window.min;
+      pnl.window.today = P.todayISO(Date.now(), P.zoneOf(opts.tz));
+      paintCurve();
+    } catch (e) {
+      if (seq !== pnl.seq || token !== detailSeq || !detailState || detailState.pnl !== pnl) return;
+      var fail = P.present({ error: { status: e && e.status, offline: !!(e && e.offline), code: e && e.body && (e.body.error || e.body.code) }, hadSuccess: pnl.hadSuccess });
+      pnl.model = null;
+      pnl.payload = null;
+      pnl.notice = fail.message || "";
+      if (fail.mode === "legacy") {
+        pnl.status = "unsupported";
+        pnl.controls = false;
+      } else if (fail.mode === "blocked") {
+        pnl.status = "blocked";
+        pnl.controls = true;
+      } else {
+        pnl.status = "error";
+        pnl.controls = true;
+      }
+      paintCurve();
+    }
+  }
   function detailSkeletonHtml() {
     return '<div class="top"><h1>账户 <i class="sk m" aria-hidden="true"></i></h1></div><section class="card"><i class="sk xl"></i><i class="sk l" style="margin-top:12px"></i></section><section class="card"><i class="sk l"></i><i class="sk" style="margin-top:10px"></i></section>';
   }
@@ -1457,8 +1626,42 @@
         }
         detailState.sides.positions.pager = SA.pagerInit(detailState.sides.positions.pager.limit);
         detailState.sides.trades.pager = SA.pagerInit(detailState.sides.trades.pager.limit);
+        if (detailState.pnl) {
+          detailState.pnl.realigned = false;
+          if (detailState.pnl.hadSuccess) {
+            detailState.pnl.status = "loading";
+            detailState.pnl.model = null;
+          }
+        }
         paintDetail();
+        loadPnl();
       }
+      return;
+    }
+    if (act === "granularity" && detailState && detailState.pnl && detailState.pnl.controls) {
+      var gran = t.getAttribute("data-v");
+      if (!gran) return;
+      detailState.pnl.granularity = gran;
+      detailState.pnl.custom = false;
+      detailState.pnl.requestedFrom = "";
+      detailState.pnl.realigned = false;
+      loadPnl();
+      return;
+    }
+    if ((act === "pnl-from" || act === "pnl-to") && detailState && detailState.pnl && detailState.pnl.controls) {
+      if (!ev || ev.type !== "change") return;
+      var fromEl = document.querySelector("#sa-curve [data-act=pnl-from]");
+      var toEl = document.querySelector("#sa-curve [data-act=pnl-to]");
+      detailState.pnl.custom = true;
+      detailState.pnl.realigned = false;
+      var pickedFrom = fromEl ? fromEl.value : (detailState.pnl.requestedFrom || detailState.pnl.from || "");
+      var lib = pnlLib();
+      detailState.pnl.requestedFrom = lib
+        ? lib.rememberRequestedFrom(detailState.pnl.requestedFrom, act, pickedFrom)
+        : (act === "pnl-from" ? (pickedFrom || "") : (detailState.pnl.requestedFrom || pickedFrom || ""));
+      detailState.pnl.from = detailState.pnl.requestedFrom || pickedFrom;
+      detailState.pnl.to = toEl ? toEl.value : detailState.pnl.to;
+      loadPnl();
       return;
     }
     if (act === "focus") { compareState.focus = id; compareState.hover = ""; focusId = id; paintCompare(); return; }
@@ -1676,13 +1879,16 @@
         schema: schema,
         scope: q().get("scope") === "current_segment" ? "current_segment" : "all",
         flash: flashTake(),
+        pnl: pnlLib() ? pnlLib().initialState() : null,
         sides: {
           positions: { pager: SA.pagerInit(20), mobile: [], next: null, total: 0 },
           trades: { pager: SA.pagerInit(20), mobile: [], next: null, total: 0 }
         }
       };
+      if (detailState.pnl) detailState.pnl.inception = accountInception(account);
       document.title = account.name + " · 账户 · Wakeloom";
       paintDetail();
+      loadPnl();
     } catch (e) {
       if (seq !== detailSeq) return;
       mount.innerHTML = isMissingAccount(e) ? accountMissingHtml() : (banner([explain(e)], true) + '<a class="btn" href="' + esc(href("/account")) + '">返回账户列表</a>');
@@ -1823,7 +2029,7 @@
     var mount = document.getElementById("sa-mount");
     if (!mount || !mount.contains(ev.target)) return;
     var act = ev.target.getAttribute && ev.target.getAttribute("data-act");
-    if (act === "state" || act === "sort" || act === "limit" || act === "pick") onAct(ev);
+    if (act === "state" || act === "sort" || act === "limit" || act === "pick" || act === "pnl-from" || act === "pnl-to") onAct(ev);
   });
 
   window.PMSA_UI = {
