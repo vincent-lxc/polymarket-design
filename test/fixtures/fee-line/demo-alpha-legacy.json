@@ -1,0 +1,58 @@
+{
+  "as_of": "2001-01-01T00:00:00.000Z",
+  "account": {
+    "id": "00000000-0000-4000-8000-0000000000a1",
+    "strategy": "acct-alpha",
+    "name": "acct-alpha",
+    "mode": "paper",
+    "run_state": "running",
+    "run_state_zh": "\u8fd0\u884c\u4e2d",
+    "capital_usd": 2000.0,
+    "cash_usd": 929.6476750000007,
+    "positions_value_usd": 1859.038488000002,
+    "exposure_usd": 1891.2489577658362,
+    "equity_usd": 2788.686163000003,
+    "unrealized_usd": -32.210469766,
+    "realized_usd": 820.8966327658359,
+    "fees_usd": 199.74559500000004,
+    "fees_estimated_usd": null,
+    "fees_estimated": true,
+    "fees_uncharged_usd": 199.74559500000004,
+    "net_pnl_usd": 588.9405680000028,
+    "net_pct": 0.2944702840000014,
+    "daily_realized_usd": 24.653190653282802,
+    "open_positions": 1,
+    "reasons": {}
+  },
+  "max_drawdown_pct": 0.3018108185067349,
+  "equity_curve": [
+    {
+      "t": "2001-01-01T00:00:00.000Z",
+      "equity": 10.0
+    },
+    {
+      "t": "2001-06-01T00:00:00.000Z",
+      "equity": 2788.686163000003
+    }
+  ],
+  "positions": [
+    {
+      "title": "Fake Market 001",
+      "outcome": "Yes",
+      "shares": 1,
+      "token_id": "token-fake-001",
+      "leader": "0x0000000000000000000000000000000000000001",
+      "unrealized_usd": 0.1
+    }
+  ],
+  "activity": [
+    {
+      "decided_at": "2001-01-01T00:00:00.000Z",
+      "market": "Fake Market 001",
+      "side": "BUY",
+      "fill_usd": 0.2,
+      "leader": "0x0000000000000000000000000000000000000001"
+    }
+  ],
+  "reasons": {}
+}

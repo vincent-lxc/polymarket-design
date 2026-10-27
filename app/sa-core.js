@@ -957,6 +957,14 @@
     return sign + Math.abs(v).toFixed(1) + "%";
   }
 
+  /* 手续费这一行的收益率保留两位。图表和对比表仍用 formatPct 的一位。 */
+  function formatFeePct(frac) {
+    if (frac == null || frac === "" || !isFinite(Number(frac))) return "—";
+    var v = Number(frac) * 100;
+    var sign = v > 0 ? "+" : v < 0 ? "−" : "";
+    return sign + Math.abs(v).toFixed(2) + "%";
+  }
+
   /* 回撤是幅度，不是收益。正数不加「+」，负数也不画成带负号的盈亏。 */
   function formatDrawdown(frac) {
     if (frac == null || frac === "" || !isFinite(Number(frac))) return "—";
@@ -970,6 +978,62 @@
     if (sign) s = n > 0 ? "+" : n < 0 ? "−" : "";
     else if (n < 0) s = "−";
     return s + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  /* 净收益和收益率只读接口，不拿净值减资金。
+     metrics：账户列表、按 uuid 的详情。
+     overview / legacy：总览 accounts[]、totals，以及旧详情 account。 */
+  function feeBag(source, place) {
+    if (place === "metrics") {
+      if (source && source.metrics && typeof source.metrics === "object") return source.metrics;
+      return null;
+    }
+    if (source && typeof source === "object") return source;
+    return null;
+  }
+
+  function feePctKey(place) {
+    return place === "metrics" ? "return_pct" : "net_pct";
+  }
+
+  function feeNum(bag, key) {
+    if (!bag || !Object.prototype.hasOwnProperty.call(bag, key)) return null;
+    var n = finiteNum(bag[key]);
+    return isFinite(n) ? n : null;
+  }
+
+  function feeLine(source, place) {
+    var bag = feeBag(source, place);
+    var estimated = !!(bag && bag.fees_estimated === true);
+    var uncharged = estimated ? feeNum(bag, "fees_uncharged_usd") : null;
+    return {
+      place: place === "metrics" ? "metrics" : (place === "legacy" ? "legacy" : "overview"),
+      pct_field: feePctKey(place),
+      estimated: estimated,
+      show_paren: estimated && uncharged != null,
+      equity_usd: feeNum(bag, "equity_usd"),
+      net_pnl_usd: feeNum(bag, "net_pnl_usd"),
+      pct_value: feeNum(bag, feePctKey(place)),
+      fees_uncharged_usd: uncharged,
+      fees_usd: estimated ? null : feeNum(bag, "fees_usd")
+    };
+  }
+
+  function feeCopy(source, place) {
+    var line = feeLine(source, place);
+    var netPlain = "净收益 " + formatUsd(line.net_pnl_usd, true);
+    var paren = line.show_paren ? "（已扣估算手续费 " + formatUsd(line.fees_uncharged_usd, false) + "）" : "";
+    var fee = line.estimated ? "" : "手续费 " + formatUsd(line.fees_usd, false);
+    /* 卡片上的「估算」只是标注。金额留在净收益括号里，不另写一遍。 */
+    var cardFee = line.estimated ? "估算" : fee;
+    line.equity_text = formatUsd(line.equity_usd, false);
+    line.pct_text = formatFeePct(line.pct_value);
+    line.net_plain = netPlain;
+    line.paren_text = paren;
+    line.net_text = netPlain + paren;
+    line.fee_text = fee;
+    line.card_fee_text = cardFee;
+    return line;
   }
 
   function formatParam(v, schema) {
@@ -1619,7 +1683,7 @@
           reasons: a.reasons || {}
         };
       }
-      var end = a.metrics.return_pct * (scope === "current_segment" ? 0.35 : 1);
+      var end = a.metrics.return_pct;
       var s = mockSeries(a.id, a.name, a.strategy_id, a.strategy_label, end * (1 + i * 0.02), a.capital_usd);
       if (scope === "current_segment") {
         s.points = s.points.filter(function (p) { return p.segment === a.current_segment || p.segment === 3; });
@@ -1647,7 +1711,7 @@
         fees_usd: a.metrics.fees_usd,
         gross_pnl_usd: a.metrics.gross_pnl_usd,
         net_pnl_usd: a.metrics.net_pnl_usd,
-        return_pct: scope === "current_segment" ? a.metrics.return_pct * 0.35 : a.metrics.return_pct,
+        return_pct: a.metrics.return_pct,
         max_drawdown_pct: a.metrics.max_drawdown_pct,
         trades: a.metrics.trades,
         runtime_sec: a.metrics.runtime_sec,
@@ -1766,6 +1830,8 @@
     formatPct: formatPct,
     formatDrawdown: formatDrawdown,
     formatUsd: formatUsd,
+    feeLine: feeLine,
+    feeCopy: feeCopy,
     formatParam: formatParam,
     formatMetric: formatMetric,
     diffText: diffText,
