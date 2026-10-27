@@ -1,0 +1,71 @@
+{
+  "id": "00000000-0000-4000-8000-0000000000b2",
+  "name": "acct-beta",
+  "strategy_id": null,
+  "strategy_label": "\u65e7\u7248\u7b56\u7565",
+  "account_type": "paper",
+  "process_kind": "legacy",
+  "strategy": "acct-beta",
+  "state": "running",
+  "run_state": "running",
+  "run_state_zh": "\u8fd0\u884c\u4e2d",
+  "archived": false,
+  "params": {},
+  "params_editable": false,
+  "capital_usd": 2000.0,
+  "current_segment": 1,
+  "segments": [],
+  "metrics": {
+    "equity_usd": 1819.8885950000022,
+    "net_pnl_usd": -180.11140499999783,
+    "return_pct": -0.09005570249999895,
+    "fees_usd": 102.09360400000001,
+    "fees_estimated": false,
+    "fees_uncharged_usd": 0.0,
+    "fees_estimated_usd": null,
+    "gross_pnl_usd": -78.01780099999783,
+    "trades": 1,
+    "open_positions": 1,
+    "max_drawdown_pct": 0.30276282863334514,
+    "runtime_sec": 3600,
+    "as_of": "2001-01-01T00:00:00.000Z"
+  },
+  "equity_curve": [
+    {
+      "t": "2001-01-01T00:00:00.000Z",
+      "equity": 10.0
+    },
+    {
+      "t": "2001-06-01T00:00:00.000Z",
+      "equity": 1819.8885950000022
+    }
+  ],
+  "rpc_capacity": {
+    "required_rpm": 10,
+    "available_rpm": 100,
+    "observed_429_1h": 0,
+    "providers_healthy": 1,
+    "providers_total": 1,
+    "status": "ok"
+  },
+  "created_at": "2001-01-01T00:00:00.000Z",
+  "positions": [
+    {
+      "title": "Fake Market 001",
+      "outcome": "Yes",
+      "shares": 1,
+      "token_id": "token-fake-001",
+      "leader": "0x0000000000000000000000000000000000000001",
+      "unrealized_usd": 0.1
+    }
+  ],
+  "trades": [
+    {
+      "decided_at": "2001-01-01T00:00:00.000Z",
+      "market": "Fake Market 001",
+      "side": "BUY",
+      "fill_usd": 0.2,
+      "leader": "0x0000000000000000000000000000000000000001"
+    }
+  ]
+}

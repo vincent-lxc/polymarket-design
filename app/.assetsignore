@@ -1,0 +1,4 @@
+fixtures/
+*.test.mjs
+*.test.js
+*.md

@@ -9,12 +9,12 @@ const PUBLIC_PAGES=new Set(["board","markets","login"]);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 /* 市场名：有 event_slug / slug 才链到 polymarket.com/event/，否则纯文本。 */
-/* 没有标题时：slug 读成句子，再不行用「市场」加短 id。不要把内部占位写到界面上。 */
+/* 没有标题时：slug 读成句子，再不行用短 id。不要把单独的「市场」写到界面上。 */
 function humanizeSlug(slug){
   const raw=String(slug||"").trim();
   if(!raw||raw==="[object Object]") return "";
   const spaced=raw.replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
-  if(!spaced) return "";
+  if(!spaced||spaced==="市场") return "";
   if(/[A-Z\u4e00-\u9fff]/.test(spaced)) return spaced;
   return spaced.replace(/\b[a-z]/g,c=>c.toUpperCase());
 }
@@ -33,20 +33,106 @@ function fallbackMarketTitle(row){
 }
 function marketLabel(name, row){
   const named=name==null?"":String(name).trim();
-  if(named&&named!=="[object Object]") return named;
+  if(named&&named!=="[object Object]"&&named!=="市场") return named;
   return fallbackMarketTitle(row);
 }
-function marketHtml(name, row){ const text=marketLabel(name, row); return window.PMMarket?PMMarket.html(text, row):esc(text); }
-/* 总览镜像名在 recent_mirrors[].market，没有 title。market 为 null 时才用 slug。 */
-function mirrorMarketName(row){
+function marketHtml(name, row){
+  const text=marketLabel(name, row);
+  const shown=text||"未命名市场";
+  return window.PMMarket?PMMarket.html(shown, row):esc(shown);
+}
+/* 镜像单市场名：market 名 → title → 可读 slug（连字符改空格）→ 短 id。绝不返回单独的「市场」。 */
+function labelText(v){
+  if(typeof v!=="string") return "";
+  const s=v.trim();
+  if(!s||s==="[object Object]"||s==="市场") return "";
+  return s;
+}
+function readableSlug(v){
+  const s=labelText(v);
+  if(!s) return "";
+  return s.replace(/-/g," ").replace(/\s+/g," ").trim();
+}
+function mirrorMarketName(row, withId){
   if(!row||typeof row!=="object") return null;
-  if(typeof row.market==="string"&&row.market.trim()) return row.market.trim();
-  if(row.market!=null&&typeof row.market!=="string"){ const text=String(row.market).trim(); if(text&&text!=="[object Object]") return text; }
-  if(row.market==null||(typeof row.market==="string"&&!row.market.trim())){
-    const slug=[row.slug,row.event_slug].find(s=>typeof s==="string"&&s.trim());
-    if(slug) return String(slug).trim();
+  const nested=row.market&&typeof row.market==="object"&&!Array.isArray(row.market)?row.market:null;
+  const marketName=labelText(typeof row.market==="string"?row.market:"")||labelText(nested&&(nested.name||nested.question));
+  if(marketName) return marketName;
+  const title=labelText(row.title)||labelText(row.question)||labelText(row.market_title)||labelText(nested&&nested.title);
+  if(title) return title;
+  const slug=[row.slug,row.event_slug,row.market_slug,nested&&nested.slug,nested&&nested.event_slug].map(readableSlug).find(Boolean);
+  if(slug&&slug!=="市场") return slug;
+  if(withId===false) return null;
+  const id=[row.condition_id,row.market_id,row.token_id,row.id,nested&&nested.condition_id,nested&&nested.id].find(v=>v!=null&&String(v).trim());
+  const brief=id==null?"":short(String(id).trim());
+  if(brief&&brief!=="市场") return brief;
+  return null;
+}
+function stripCodePrefix(s){ return String(s||"").trim().replace(/^S\d+\s*/i,"").trim(); }
+function publicName(v){
+  /* leaders_mode.zh 是「S0 现行规则」这种对外文案。去掉代号前缀后展示。
+     英文 value（category_score 等）永不展示。 */
+  if(v&&typeof v==="object"){
+    const zh=typeof v.zh==="string"?stripCodePrefix(v.zh):"";
+    if(zh) return zh;
+    return publicName(v.label)||publicName(v.name)||publicName(v.strategy_name)||publicName(v.template_label)||"";
+  }
+  if(typeof v!=="string") return "";
+  const s=v.trim();
+  if(!s||/^S\d+\b/i.test(s)) return "";
+  return s;
+}
+/* 用户看见的策略名。没有 strategy_name 时用 leaders_mode.zh（去掉 S0 前缀）。没有可用中文名时写「当前策略」。 */
+function strategyFacingName(src){
+  if(!src||typeof src!=="object") return "当前策略";
+  const mode=src.leaders_mode||(src.params&&src.params.leaders_mode);
+  const list=[];
+  ["strategy_name","label","strategy_label","template_label","template_name"].forEach(k=>list.push(src[k]));
+  if(src.strategy&&typeof src.strategy==="object") list.push(src.strategy.strategy_name, src.strategy.label, src.strategy.name, src.strategy.zh);
+  if(mode) list.push(mode);
+  if(typeof src.strategy==="string") list.push(src.strategy);
+  list.push(src.name);
+  for(const c of list){ const hit=publicName(c); if(hit) return hit; }
+  return "当前策略";
+}
+function paramValue(p, keys){
+  if(!p||typeof p!=="object") return null;
+  for(const k of keys){
+    if(!(k in p)) continue;
+    const raw=p[k];
+    if(raw&&typeof raw==="object"&&"value" in raw) return raw.value;
+    if(raw!=null&&raw!=="") return raw;
   }
   return null;
+}
+function accountRuleText(a){
+  const name=strategyFacingName(a);
+  const p=(a&&a.params)||{};
+  const bits=[];
+  const ratio=paramValue(p, ["sizing_ratio","copy_ratio","ratio"]);
+  if(ratio!=null&&ratio!==""){
+    const n=Number(ratio);
+    if(isFinite(n)&&n>0&&n<=1) bits.push("跟单比例 "+Math.round(n*100)+"%");
+    else if(typeof ratio==="string"&&ratio.trim()) bits.push("跟单比例 "+ratio.trim());
+    else if(isFinite(n)) bits.push("跟单比例 "+n);
+  }
+  const per=paramValue(p, ["max_per_trade_usd"]);
+  if(per!=null&&isFinite(Number(per))){ const shown=usd(Number(per)); if(shown) bits.push("单笔 "+shown); }
+  const pos=paramValue(p, ["max_open_positions"]);
+  if(pos!=null&&pos!=="") bits.push("持仓 "+pos);
+  const loss=paramValue(p, ["daily_loss_limit_usd"]);
+  if(loss!=null&&isFinite(Number(loss))){ const shown=usd(Number(loss)); if(shown) bits.push("日亏 "+shown); }
+  bits.push(name);
+  return bits.join(" · ");
+}
+function accountFacingSource(d, a){
+  const src=Object.assign({}, a||{});
+  const extra=d&&typeof d==="object"?d:{};
+  if(!src.params&&extra.params) src.params=extra.params;
+  ["strategy_name","label","strategy_label","template_label","template_name","leaders_mode","name","strategy"].forEach(k=>{
+    if(src[k]==null&&extra[k]!=null) src[k]=extra[k];
+  });
+  return src;
 }
 function formatShares(x){
   if(x==null||x==="") return "—";
@@ -64,7 +150,14 @@ const LEADER_EMPTY='<span class="nd">暂无数据</span>';
 const LEADER_DASH='<span class="na">—</span>';
 const why=r=>r?` title="${esc(r)}"`:"";
 const isPending=r=>r==="not_yet_aggregated"||(typeof r==="string"&&/(^|,)\s*not_yet_aggregated\s*(,|$)/.test(r));
+const pendingWord=()=>PAGE==="leader"?"暂未汇总":"无数据";
 const nd=r=>PAGE==="leader"?LEADER_DASH:(isPending(r)?`<span class="nd"${why(r)}>暂未汇总</span>`:`<span class="nd"${why(r)}>无数据</span>`);
+function hideBlock(el){
+  if(!el) return;
+  el.hidden=true;
+  el.innerHTML="";
+  try{ if(el.remove) el.remove(); }catch(e){}
+}
 function usd(x,sign){ if(x==null||!isFinite(x))return null; const s=sign&&x>0?"+":x<0?"−":""; return s+"$"+Math.abs(x).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function pct(f,sign=true,d=2){ if(f==null||!isFinite(f))return null; const v=f*100; return (sign&&v>0?"+":v<0?"−":"")+Math.abs(v).toFixed(d)+"%"; }
 const cls=x=>x==null?"na":x>0?"up":x<0?"dn":"";
@@ -191,6 +284,9 @@ function drawCurve(curve, isPartial){
 /* 主力 leader 卡：以前只换了名字，地址行、进行中镜像还是 @lunadegen 的示例。这里整张卡都用实时字段，没有的写「无数据」。 */
 function fillLeadCard(ml,R){
   const box=$("#ov-lead"); if(!box)return;
+  ["#ov-lead-recent","#ov-lead-pnl"].forEach(sel=>{ const el=document.querySelector(sel); if(el) el.hidden=true; });
+  if(!ml){ box.hidden=true; return; }
+  box.hidden=false;
   const av=box.querySelector(".lhead .av"); if(av){ av.textContent=ml?String(ml.user_name||(ml.address||"").slice(2)||"?").slice(0,2).toUpperCase():"—"; }
   const sub=box.querySelector(".lhead .mu");
   if(sub) sub.innerHTML=ml?[ml.address?`<span title="${esc(ml.address)}">${esc(short(ml.address))}</span>`:null,
@@ -198,7 +294,9 @@ function fillLeadCard(ml,R){
   const pill=box.querySelector(".lhead .pill"); if(pill) pill.remove();
   const mir=box.querySelector(".mirror");
   if(mir){ const m=ml&&ml.open_mirror;
-    mir.innerHTML=m?`<div style="flex:1"><b>${marketHtml(mirrorMarketName(m),m)}</b></div>`:`<div style="flex:1">${nd((R&&R.open_mirror)||"no_open_mirror")}</div>`; }
+    const cell=mir.closest?mir.closest(".cell"):null;
+    if(!m){ if(cell) cell.hidden=true; else mir.hidden=true; }
+    else{ if(cell) cell.hidden=false; mir.hidden=false; mir.innerHTML=`<div style="flex:1"><b>${marketHtml(null,m)}</b></div>`; } }
   const cells=box.querySelectorAll(".lgrid .cell .tag.live"); cells.forEach(t=>{ if(!(ml&&ml.open_mirror)) t.remove(); });
   if(ml&&ml.address){ const h=box.querySelector(".h"); if(h&&!h.querySelector("a")){ h.innerHTML=h.innerHTML.replace(/^([^<]+)/,`<a href="/leader?addr=${encodeURIComponent(ml.address)}">$1</a>`); } }
 }
@@ -213,44 +311,145 @@ function stripDemo(){
   if(PAGE==="leader") return;
   document.querySelectorAll("main section.card:not([id]), main section#pc").forEach(sec=>{
     if(sec.id!=="pc"&&sec.querySelector("form,input,select,textarea,[id]"))return;
-    const hd=sec.querySelector(".hd"); const h=hd?hd.outerHTML:"";
-    sec.innerHTML=h+'<div class="ndbox"><span class="nd" title="no_endpoint">无数据</span><span>接口暂未提供这一块的数据。</span></div>';
-    sec.querySelectorAll(".hd .r,.hd .seg,.hd .tag,.hd .btn").forEach(e=>e.remove());
+    hideBlock(sec);
   });
-  document.querySelectorAll(".rail > .rc:not(.note)").forEach(rc=>{
-    const h=rc.querySelector("h2"); const title=h?h.textContent:"";
-    rc.innerHTML=`<h2>${esc(title)}</h2><div class="ndbox" style="margin-top:8px"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>持仓数接口还没聚合。</span></div>`;
-  });
+  document.querySelectorAll(".rail > .rc:not(.note)").forEach(hideBlock);
 }
 
 function rows(sec,headHtml,bodyHtml){ const t=sec&&sec.querySelector("table"); if(!t)return; t.innerHTML=headHtml+bodyHtml; sec.querySelectorAll(".xp").forEach(b=>b.remove()); }
 function rejectTag(code,zh,known){ if(!code)return NA; return `<span class="tag" title="${esc(code)}">${esc(zh||"其他原因")}${known===false?` <span class="fk" style="display:inline">${esc(code)}</span>`:""}</span>`; }
 function fillCell(m){
-  /* fill_usd 为 null：不显示空或 $0，统一「暂未汇总」（含未成交 / 未记金额） */
-  if(m.fill_usd==null) return `<span class="nd"${why(m.fill_usd_reason||(m.reasons&&m.reasons.fill_usd)||"not_yet_aggregated")}>暂未汇总</span>`;
+  /* fill_usd 为 null：不显示空或 $0（含未成交 / 未记金额） */
+  if(m.fill_usd==null) return `<span class="nd"${why(m.fill_usd_reason||(m.reasons&&m.reasons.fill_usd)||"not_yet_aggregated")}>${pendingWord()}</span>`;
   const px=m.fill_price!=null?` @ ${Math.round(m.fill_price*100)}¢`:"";
   return `${usd(m.fill_usd)}${px}`;
 }
-function mirrorRow(m){ const lp=m.leader_price!=null?Math.round(m.leader_price*100)+"¢":null;
-  const L=m.leader_notional_usd!=null?`${usd(m.leader_notional_usd)}${lp?" @ "+lp:""}`:null;
-  const me=fillCell(m);
-  const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已跟</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
-  return `<tr><td title="${esc(bj(m.decided_at)||"")}">${marketHtml(mirrorMarketName(m), m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td>${m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA}</td><td class="r num">${L||NA}</td><td class="r">${me}</td><td class="r ${m.slippage_bps!=null?"num":"na"}">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":"—"}</td><td>${res}</td></tr>`; }
+/* 手机卡片把金额和价格拆开：桌面仍是「金额 @ 价格」一格。没有金额就整格 —。 */
+function quoteInner(amountUsd, cents){
+  const u=usd(amountUsd);
+  if(u==null) return `<span class="q-amt na">—</span><span class="q-br" aria-hidden="true"></span>`;
+  const px=cents==null||cents===""?"":`<span class="q-at"> @ </span><span class="q-br" aria-hidden="true"></span><span class="q-px">${cents}</span>`;
+  const br=px?"":`<span class="q-br" aria-hidden="true"></span>`;
+  return `<span class="q-amt">${u}</span>${px||br}`;
+}
+/* 总览最近跟单。跟单结果只在 decision：copied / followed / failed / rejected / skipped。
+   status 是链上状态（pending / confirmed / reorged），不参与分类。
+   有 decision 就只看 decision。不认识的 decision 不显示，也不当成跳过。
+   decision 缺失时先看风控、失败，再看跳过，避免把风控拒绝藏掉。
+   GET /v1/overview 不返回 cursor；下面的翻页只有响应里真有 next_cursor 时才会发请求。 */
+const MIRROR_SCREEN=8;
+const MIRROR_FOLLOW=new Set(["copied","followed"]);
+const MIRROR_FAIL=new Set(["failed"]);
+const MIRROR_REJECT=new Set(["rejected"]);
+const MIRROR_SKIP=new Set(["skipped","skip","ignored","ignore","filtered","filter"]);
+function signalToken(v){
+  if(v==null||typeof v==="boolean") return "";
+  if(typeof v==="object"){
+    if(v.decision!=null) return signalToken(v.decision);
+    if(v.value!=null) return signalToken(v.value);
+    if(v.code!=null) return signalToken(v.code);
+    return "";
+  }
+  return String(v).trim().toLowerCase().replace(/[\s-]+/g,"_");
+}
+function decisionKind(token){
+  if(!token) return "";
+  if(MIRROR_SKIP.has(token)||token.startsWith("skip")) return "skip";
+  if(MIRROR_FOLLOW.has(token)) return "follow";
+  if(MIRROR_FAIL.has(token)||token.startsWith("fail")) return "fail";
+  if(MIRROR_REJECT.has(token)||token.startsWith("reject")||token.startsWith("risk")) return "reject";
+  return "";
+}
+function mirrorSignalKind(m){
+  if(!m||typeof m!=="object") return "";
+  const decision=signalToken(m.decision);
+  if(decision) return decisionKind(decision);
+  const zh=(typeof m.reason_zh==="string"?m.reason_zh:"")+(typeof m.reason_title==="string"?" "+m.reason_title:"");
+  const reason=signalToken(m.reason||m.reason_code||m.code);
+  if(/风控/.test(zh)||/daily_loss|max_position|position_limit|open_position/.test(reason)||decisionKind(reason)==="reject") return "reject";
+  if(/失败/.test(zh)||decisionKind(reason)==="fail") return "fail";
+  if(/跳过/.test(zh)||decisionKind(reason)==="skip"||/slippage|thin|spread|settle|in_play|edge|deviation/.test(reason)) return "skip";
+  if(m.copied===true||m.fill_usd!=null) return "follow";
+  return "";
+}
+function visibleMirrors(list){
+  return (Array.isArray(list)?list:[]).filter(m=>{
+    const k=mirrorSignalKind(m);
+    return k==="follow"||k==="fail"||k==="reject";
+  });
+}
+function mirrorBag(raw){
+  if(Array.isArray(raw)) return {items:raw, next:""};
+  if(!raw||typeof raw!=="object") return {items:[], next:""};
+  const items=Array.isArray(raw.items)?raw.items:(Array.isArray(raw.rows)?raw.rows:(Array.isArray(raw.mirrors)?raw.mirrors:[]));
+  const next=raw.next_cursor||raw.cursor||raw.next||"";
+  return {items, next:next?String(next):""};
+}
+function mirrorCursor(page, bag){
+  return (bag&&bag.next)||(page&&(page.recent_mirrors_next_cursor||page.mirrors_next_cursor))||"";
+}
+async function loadVisibleMirrors(d, still){
+  const first=mirrorBag(d&&d.recent_mirrors);
+  let items=first.items.slice();
+  let next=String(mirrorCursor(d, first)||"");
+  const seen=new Set();
+  let guard=0;
+  while(visibleMirrors(items).length<MIRROR_SCREEN && next && guard<4){
+    if(seen.has(next)) break;
+    seen.add(next);
+    guard++;
+    if(still&&!still()) break;
+    let page=null;
+    try{ page=await api("/v1/overview?range="+encodeURIComponent(ovRange)+"&cursor="+encodeURIComponent(next)); }
+    catch(e){ break; }
+    const bag=mirrorBag(page&&page.recent_mirrors!=null?page.recent_mirrors:null);
+    if(!bag.items.length) break;
+    items=items.concat(bag.items);
+    const nxt=String(mirrorCursor(page, bag)||"");
+    if(!nxt||nxt===next) break;
+    next=nxt;
+  }
+  return visibleMirrors(items).slice(0, MIRROR_SCREEN);
+}
+function reasonLabel(prefix, zh, fallback){
+  const bare=prefix.replace(/·$/,"");
+  const text=typeof zh==="string"?zh.trim():"";
+  if(!text||text===bare) return fallback;
+  if(text.startsWith(prefix)) return text;
+  if(text.startsWith(bare)) return prefix+text.slice(bare.length).replace(/^\s*·?\s*/,"");
+  return prefix+text;
+}
+function mirrorResultTag(m){
+  const kind=mirrorSignalKind(m);
+  const side=String(m.side||"").toUpperCase();
+  if(kind==="follow") return side==="SELL"?'<span class="tag live">跟卖</span>':'<span class="tag live">已跟</span>';
+  if(kind==="fail") return rejectTag(m.reason||"failed", reasonLabel("失败·", m.reason_zh, "失败"), m.reason!=null?m.reason_known:true);
+  if(kind==="reject") return rejectTag(m.reason||"rejected", reasonLabel("被拒·", m.reason_zh, "风控拒绝"), m.reason!=null?m.reason_known:true);
+  return rejectTag(m.reason, m.reason_zh, m.reason_known);
+}
+function quoteTd(amountUsd, cents, primary){
+  const u=usd(amountUsd);
+  const role=primary?"k-primary":"k-hide";
+  return `<td class="r ${u==null?"na":"num"} k-quote ${role}">${quoteInner(amountUsd, cents)}</td>`;
+}
+function rawCents(price){
+  if(price==null||price==="") return null;
+  const n=Number(price);
+  return isFinite(n)?Math.round(n*100)+"¢":null;
+}
+function mirrorRow(m){ const lp=rawCents(m.leader_price);
+  const ours=m.fill_usd!=null;
+  const kind=mirrorSignalKind(m);
+  const res=mirrorResultTag(m);
+  const name=mirrorMarketName(m);
+  const side=m.side==="SELL"?"卖出":m.side==="BUY"?"买入":NA;
+  /* 失败/被拒且没成交：桌面我方一格写「未下单」；手机卡片金额用 leader 的。 */
+  const meTd=!ours&&(kind==="fail"||kind==="reject")?`<td class="r na k-quote k-hide">未下单</td>`:quoteTd(m.fill_usd, rawCents(m.fill_price), ours);
+  return `<tr><td class="k-name" title="${esc(bj(m.decided_at)||"")}">${marketHtml(name, m)}${m.outcome?` <span class="fk" style="display:inline">${esc(m.outcome)}</span>`:""}</td><td class="k-side">${side}</td>${quoteTd(m.leader_notional_usd, lp, !ours)}${meTd}<td class="r ${m.slippage_bps!=null?"num":"na"} k-hide">${m.slippage_bps!=null?Math.round(m.slippage_bps)+" bps":NA}</td><td class="k-res">${res}</td></tr>`; }
 function activityRow(m){
   const side=m.side==="SELL"?"卖出":m.side==="BUY"?"买入":(m.purpose_zh||m.purpose||"—");
   const res=m.decision==="copied"||m.status==="filled"?'<span class="tag live">已成交</span>':rejectTag(m.reason,m.reason_zh,m.reason_known);
   return `<tr><td class="num mu hm" title="${esc(bj(m.decided_at)||"")}">${bj(m.decided_at,false)||"—"}</td><td>${marketHtml(mirrorMarketName(m), m)}</td><td class="hm">${esc(side)}</td><td class="r">${fillCell(m)}</td><td>${res}</td></tr>`; }
-function fillAttr(d){
-  const box=$("#ov-attr"); if(!box)return;
-  const R=(d&&d.reasons)||{};
-  const attr=d&&d.attribution;
-  if(attr==null||(Array.isArray(attr)&&!attr.length)){
-    const hd=box.querySelector(".hd"); const h=hd?hd.outerHTML:"";
-    box.innerHTML=h+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>按 leader 的利润归属尚未聚合。</span></div>';
-    box.querySelectorAll(".hd .r,.hd .attr-actions,.hd .btn").forEach(e=>e.remove());
-    return;
-  }
-}
 /* 账户详情只用接口给出的 id / account_id。策略名不能拿去拼 /v1/accounts/{name}/positions。 */
 function presentAccountId(v){
   if(v==null)return "";
@@ -566,27 +765,39 @@ function feeLine(source, place){
 function feeParen(line){
   return line.show_paren?`（已扣估算手续费 ${usd(line.fees_uncharged_usd)}）`:"";
 }
-/* 总览合计只标「含估算手续费」，不把未扣金额再写一遍。fees_estimated 不是严格 true 时不标。 */
-function overviewHeadline(totals){
+/* 总览合计只标「含估算手续费」，不把未扣金额再写一遍。fees_estimated 不是严格 true 时不标。标签另起一行。 */
+function overviewFeeParts(totals){
   const line=feeLine(totals, "overview");
   const money=M(line.net_pnl_usd,x=>usd(x,true));
   const rate=M(line.pct_value,x=>pct(x,true,2));
-  if(line.estimated) return `净收益 ${money}（含估算手续费） · ${rate}`;
-  return `扣费净盈亏 ${money} · ${rate}`;
+  const label=line.estimated?"净收益":"扣费净盈亏";
+  return {line, amount:`${label} ${money} · ${rate}`, tag:line.estimated?"（含估算手续费）":""};
+}
+function overviewHeadline(totals){
+  const parts=overviewFeeParts(totals);
+  if(!parts.tag) return parts.amount;
+  const cut=parts.amount.lastIndexOf(" · ");
+  return parts.amount.slice(0, cut)+parts.tag+parts.amount.slice(cut);
 }
 function overviewNetCell(row){
   const line=feeLine(row, "overview");
   const reason=row&&row.reasons;
   const net=M(line.net_pnl_usd,x=>usd(x,true),reason&&reason.net_pnl_usd);
-  const paren=line.show_paren?`<span class="fee-note">${feeParen(line)}</span>`:"";
-  const tag=line.estimated?`<span class="fee-note">估算</span>`:"";
-  return {line, html:net+paren+tag, pct:M(line.pct_value,x=>pct(x,true,2),reason&&reason.net_pct)};
+  const notes=[];
+  if(line.show_paren) notes.push(feeParen(line));
+  if(line.estimated) notes.push("估算");
+  const tag=notes.length?`<span class="fee-tag">${notes.join(" ")}</span>`:"";
+  return {line, html:`<span class="fee-stack"><span>${net}</span>${tag}</span>`, pct:M(line.pct_value,x=>pct(x,true,2),reason&&reason.net_pct)};
 }
 function legacyFeeSpan(account){
   const line=feeLine(account, "legacy");
   const R=(account&&account.reasons)||{};
-  if(line.estimated) return `<span class="${cls(line.net_pnl_usd)} num fee-note">净收益 ${M(line.net_pnl_usd,x=>usd(x,true),R.net_pnl_usd)}${feeParen(line)} · ${M(line.pct_value,x=>pct(x,true,2),R.net_pct)} · 估算</span>`;
-  return `<span class="${cls(line.net_pnl_usd)} num">扣费净盈亏 ${M(line.net_pnl_usd,x=>usd(x,true),R.net_pnl_usd)} · ${M(line.pct_value,pct,R.net_pct)}</span>`;
+  const amount=`净收益 ${M(line.net_pnl_usd,x=>usd(x,true),R.net_pnl_usd)} · ${M(line.pct_value,x=>pct(x,true,2),R.net_pct)}`;
+  const notes=[];
+  if(line.show_paren) notes.push(feeParen(line));
+  if(line.estimated) notes.push("估算");
+  const tag=notes.length?`<span class="fee-tag">${notes.join(" ")}</span>`:"";
+  return `<span class="fee-stack"><span class="${cls(line.net_pnl_usd)} num">${amount}</span>${tag}</span>`;
 }
 async function loadFeeFixture(name){
   const res=await fetch("fixtures/fee-line/"+encodeURIComponent(name));
@@ -624,7 +835,9 @@ async function renderOverview(d, still){
     const pnl=line.net_pnl_usd, p=line.pct_value;
     $("#ov-eq").innerHTML=V(eq,usd,"no_equity");
     $("#ov-note").textContent=`= ${ok.length} 个策略实例合计`+(miss.length?`（不含 ${miss.join("、")}）`:"");
-    $("#ov-sub").innerHTML=`<span class="${cls(pnl)} num fee-note">${overviewHeadline(t)}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span${todayTitle(t)}>今日盈亏 ${V(t.today_pnl_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,"no_daily_baseline")}${todayMiss(t)}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString(),R.fills)}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString(),R.open_positions)}</b></span>`;
+    const parts=overviewFeeParts(t);
+    const feeTag=parts.tag?`<span class="fee-tag">${parts.tag}</span>`:"";
+    $("#ov-sub").innerHTML=`<span class="fee-stack"><span class="${cls(pnl)} num">${parts.amount}</span>${feeTag}</span><span>本金合计 <b class="num">${V(cap||null,usd)}</b></span><span${todayTitle(t)}>今日盈亏 ${V(t.today_pnl_usd,x=>`<b class="num ${cls(x)}">${usd(x,true)}</b>`,"no_daily_baseline")}${todayMiss(t)}</span><span>成交 <b class="num">${V(t.fills,x=>x.toLocaleString(),R.fills)}</b></span><span>未结算持仓 <b class="num">${V(t.open_positions,x=>x.toLocaleString(),R.open_positions)}</b></span>`;
     const kv=(l,x,s,r)=>`<div><span class="lbl">${l}</span><b class="${s?cls(x):""}">${V(x,v=>usd(v,s),r)}</b></div>`;
     $("#ov-kv").innerHTML=kv("现金合计",t.cash_usd,0,R.cash_usd)+kv("持仓市值合计",t.positions_value_usd,0,R.positions_value_usd)+kv("浮动盈亏合计",t.unrealized_usd,1,R.unrealized_usd)+kv("已实现盈亏合计",t.realized_usd,1,R.realized_usd);
     paintShareCard(shareCardFromTotals(eq,pnl,p,d.equity_curve,$("#ov-note").textContent));
@@ -637,8 +850,23 @@ async function renderOverview(d, still){
     rows($("#ov-accts"),'<tr><th>策略实例</th><th class="r">扣费净盈亏</th><th class="r">收益率</th><th class="r">账户净值</th><th class="r">持仓/上限</th><th>状态</th></tr>',
       acc.map((a,i)=>{ const cell=overviewNetCell(a); return `<tr><td><a href="${esc(hrefs[i])}">${esc(a.strategy)}</a></td><td class="r num ${cls(cell.line.net_pnl_usd)}">${cell.html}</td><td class="r num ${cls(cell.line.pct_value)}">${cell.pct}</td><td class="r num">${V(a.equity_usd,usd,a.reasons&&a.reasons.equity_usd)}</td><td class="r num">${a.open_positions==null?nd(a.reasons&&a.reasons.open_positions):a.open_positions}/${a.max_open_positions==null?"—":a.max_open_positions}</td><td><span class="tag ${a.run_state==="running"?"live":""}" title="${esc(a.run_state)}">${esc(a.run_state_zh||"无数据")}</span></td></tr>`; }).join(""));
   }
-  if(d.recent_mirrors) rows($("#ov-mirrors"),'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',d.recent_mirrors.map(mirrorRow).join(""));
-  fillAttr(d);
+  const mirrors=await loadVisibleMirrors(d, still);
+  if(still&&!still()) return;
+  const mirrorBox=$("#ov-mirrors");
+  if(!mirrors.length){
+    if(mirrorBox){
+      mirrorBox.hidden=true;
+      const table=mirrorBox.querySelector("table");
+      if(table) table.innerHTML="";
+    }
+  }else{
+    if(mirrorBox) mirrorBox.hidden=false;
+    const h2=mirrorBox&&mirrorBox.querySelector("h2");
+    if(h2) h2.textContent="最近跟单";
+    rows(mirrorBox,'<tr><th>市场</th><th>方向</th><th class="r">leader</th><th class="r">我方</th><th class="r">滑点</th><th>结果</th></tr>',mirrors.map(mirrorRow).join(""));
+    const mirrorNote=mirrorBox&&mirrorBox.querySelector(".hd .r");
+    if(mirrorNote) mirrorNote.textContent="最近 "+mirrors.length+" 条";
+  }
   const ml=d.main_leader, lead=$("#ov-lead .h");
   if(lead) lead.innerHTML=ml?`${who(ml.user_name,ml.address)} <span class="tag live">${esc(ml.status_zh)}</span>`:nd(R.main_leader||"no_main_leader");
   fillLeadCard(ml,R);
@@ -646,29 +874,171 @@ async function renderOverview(d, still){
 }
 
 /* ---------- 账户 / Leaders / 健康 / 配置 / 策略 ---------- */
+function blankAccountShell(){
+  const h=document.querySelector(".top h1");
+  if(h) h.innerHTML='账户 <i class="sk m" aria-hidden="true"></i>';
+  const steps=document.querySelector(".steps");
+  if(steps) steps.innerHTML='<i class="sk m"></i>';
+  const big=document.querySelector("#ac-main .big");
+  if(big) big.innerHTML='<i class="sk xl"></i>';
+  const sub=document.querySelector("#ac-main .sub");
+  if(sub) sub.innerHTML='<i class="sk l"></i>';
+  const kv=document.querySelector("#ac-main .kv");
+  if(kv) kv.innerHTML='<div><i class="sk"></i></div>';
+  ["#ac-pos","#ac-act"].forEach(sel=>{
+    const t=$(sel+" table");
+    if(t) t.innerHTML='<tr><td><i class="sk l"></i></td><td><i class="sk"></i></td></tr>';
+  });
+}
+function stripSkMarkup(el){
+  if(!el||typeof el.innerHTML!=="string") return;
+  el.innerHTML=el.innerHTML
+    .replace(/<i\b[^>]*class="sk[^"]*"[^>]*>\s*<\/i>/g,"")
+    .replace(/<div class="meter">[\s\S]*?<\/div>/g,"");
+}
+function dropLiveSkeletons(root){
+  const scope=root||document;
+  if(scope.querySelectorAll){
+    const list=scope.querySelectorAll(".sk");
+    if(list&&list.forEach) list.forEach(el=>{ if(el&&el.remove) el.remove(); });
+  }
+  if(scope.querySelectorAll){
+    const meters=scope.querySelectorAll("#ac-loss .meter, #ac-main .meter");
+    if(meters&&meters.forEach) meters.forEach(el=>{ if(el&&el.remove) el.remove(); });
+  }
+}
+/* 找不到账户时主卡、持仓、成交和策略备注一起换掉，不留灰条。 */
+function paintAccountMissing(){
+  const h=document.querySelector(".top h1");
+  if(h) h.textContent="账户";
+  const main=$("#ac-main");
+  if(main) main.innerHTML='<div class="ndbox"><span class="nd">找不到这个账户</span></div><p style="margin-top:12px"><a class="btn" href="/account">返回账户列表</a></p>';
+  const steps=document.querySelector(".steps");
+  if(steps) steps.innerHTML='<a href="/account">返回账户列表</a>';
+  ["#ac-pos","#ac-act","#ac-params","#ac-loss"].forEach(sel=>{
+    const root=$(sel);
+    if(!root) return;
+    const table=root.querySelector&&root.querySelector("table");
+    if(table) table.innerHTML="";
+    const lab=root.querySelector&&root.querySelector(".hd .lbl");
+    if(lab) lab.innerHTML="";
+    root.innerHTML="";
+    stripSkMarkup(root);
+  });
+  dropLiveSkeletons(document);
+}
+/* 旧列表没有 uuid。退出骨架时标题、副文、指标、日亏条和两张表一起清，避免灰条一直留着。 */
+function clearAccountSkeleton(){
+  const h=document.querySelector(".top h1");
+  if(h) h.textContent="账户";
+  const sub=$("#ac-main .sub");
+  if(sub) sub.innerHTML="";
+  const kv=$("#ac-main .kv");
+  if(kv) kv.innerHTML="";
+  const loss=$("#ac-loss");
+  if(loss) stripSkMarkup(loss);
+  ["#ac-pos","#ac-act"].forEach(sel=>{
+    const root=$(sel);
+    if(!root) return;
+    const table=root.querySelector&&root.querySelector("table");
+    if(table){
+      const html=String(table.innerHTML||"");
+      const head=html.match(/<tr>\s*<th[\s\S]*?<\/tr>/);
+      table.innerHTML=head?head[0]:"";
+    }
+    const lab=root.querySelector&&root.querySelector(".hd .lbl");
+    if(lab) lab.innerHTML="";
+    stripSkMarkup(root);
+    if(root.querySelectorAll) root.querySelectorAll(".sk").forEach(el=>{ if(el&&el.remove) el.remove(); });
+  });
+  const params=$("#ac-params");
+  if(params) stripSkMarkup(params);
+  dropLiveSkeletons(document);
+}
+function paintAccountEmpty(){
+  clearAccountSkeleton();
+  const big=$("#ac-main .big");
+  if(big) big.innerHTML=nd("no_accounts");
+}
+function paintAccountError(err){
+  clearAccountSkeleton();
+  const big=$("#ac-main .big");
+  const msg=(err&&err.offline)?"连不上接口":((err&&err.message)||"没有完成");
+  if(big) big.innerHTML='<span class="nd">'+esc(msg)+'</span>';
+  const sub=$("#ac-main .sub");
+  if(sub) sub.innerHTML='<button type="button" class="btn sm" id="ac-retry">重试</button>';
+  const btn=$("#ac-retry");
+  if(btn&&btn.addEventListener) btn.addEventListener("click",()=>{ blankAccountShell(); renderAccount(); });
+}
+/* 真实 /v1/accounts 仍是旧列表：有 uuid 用 uuid，否则用策略名请求 /v1/accounts/{strategy}。 */
+function legacyAccountKey(a){
+  if(!a) return "";
+  return accountRecordUuid(a)||presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordId(a);
+}
+function accountByLabel(label, accs){
+  const key=presentAccountId(label);
+  if(!key) return null;
+  const hits=(accs||[]).filter(a=>a&&(sameAccountLabel(a.strategy,key)||sameAccountLabel(a.name,key)||sameAccountLabel(accountRecordId(a),key)||sameAccountLabel(accountRecordUuid(a),key)));
+  return hits.length===1?hits[0]:null;
+}
+function accountStepHref(a){
+  const uuid=accountRecordUuid(a);
+  if(uuid) return accountDetailHref(uuid);
+  const name=presentAccountId(a&&a.strategy)||presentAccountId(a&&a.name)||accountRecordId(a);
+  return name?appHref("/account",{id:name}):appHref("/account");
+}
 async function renderAccount(){
-  const list=await api("/v1/accounts");
-  paintHeartbeat(list);
-  if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
-  const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordUuid(a)));
   const wantId=presentAccountId(Q.get("id"));
   const wantName=presentAccountId(Q.get("s"));
+  if(wantId||wantName) blankAccountShell();
+  let list;
+  try{ list=await api("/v1/accounts"); }
+  catch(e){
+    if(e&&e.status===404){ paintAccountEmpty(); return; }
+    paintAccountError(e);
+    return;
+  }
+  paintHeartbeat(list);
+  if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
+  const accs=accountListItems(list).filter(a=>a&&(presentAccountId(a.strategy)||presentAccountId(a.name)||accountRecordId(a)||accountRecordUuid(a)));
   let id="";
-  if(looksLikeAccountUuid(wantId)) id=wantId;
-  else if(wantName) id=matchAccountUuid(wantName, accs);
-  else id=accountRecordUuid(accs.find(x=>accountRecordUuid(x))||null);
-  if(id&&wantName) replaceNamedAccountLocation(id);
-  const current=id?accs.find(x=>accountRecordUuid(x)===id)||null:null;
+  let current=null;
+  if(wantId&&looksLikeAccountUuid(wantId)){
+    id=wantId;
+    current=accs.find(x=>accountRecordUuid(x)===id)||null;
+  }else if(wantId||wantName){
+    current=accountByLabel(wantId||wantName, accs);
+    if(!current){ paintAccountMissing(); return; }
+    id=legacyAccountKey(current);
+    if(!id){ paintAccountMissing(); return; }
+    const uuid=accountRecordUuid(current);
+    if(uuid&&wantName) replaceNamedAccountLocation(uuid);
+  }else{
+    current=accs.find(x=>legacyAccountKey(x))||null;
+    id=legacyAccountKey(current);
+  }
   const label=(current&&(presentAccountId(current.strategy)||presentAccountId(current.name)))||id;
   const steps=document.querySelector(".steps");
   if(steps) steps.innerHTML=accs.map(x=>{
-    const xid=accountRecordUuid(x);
-    const text=presentAccountId(x.strategy)||presentAccountId(x.name)||xid;
-    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountDetailHref(xid))}">${esc(text)}</a>`;
+    const xid=legacyAccountKey(x);
+    const text=presentAccountId(x.strategy)||presentAccountId(x.name)||accountRecordUuid(x)||xid;
+    return `<a class="${id&&xid===id?"on":""}" href="${esc(accountStepHref(x))}">${esc(text)}</a>`;
   }).join("")+'<a href="/strategies" class="dim" style="margin-left:auto;font-size:13px">策略 →</a>';
-  if(!id){ $("#ac-main .big").innerHTML=nd("no_accounts"); return; }
-  const d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); const a=d.account||{}, R=a.reasons||{};
+  if(!id){ paintAccountEmpty(); return; }
+  let d;
+  try{ d=await api("/v1/accounts/"+encodeURIComponent(id)+"?range=24h"); }
+  catch(e){
+    if(e&&e.status===404){ paintAccountMissing(); return; }
+    paintAccountError(e);
+    return;
+  }
+  const a=d.account||{}, R=a.reasons||{};
   document.querySelector(".top h1").textContent="账户 · "+label;
+  const runZh=(a&&a.run_state_zh)||(current&&current.run_state_zh)||"";
+  const run=document.getElementById("ac-run");
+  if(run){ run.hidden=!runZh; if(runZh) run.innerHTML='<span class="dot"></span>'+esc(runZh); }
+  const stateTag=document.getElementById("ac-state");
+  if(stateTag){ stateTag.hidden=!runZh; if(runZh) stateTag.textContent=runZh; }
   const m=$("#ac-main"); const leg=feeLine(a, "legacy");
   m.querySelector(".big").innerHTML=V(leg.equity_usd,usd,R.equity_usd);
   m.querySelector(".sub").innerHTML=legacyFeeSpan(a)+`<span>本金 <b class="num">${V(a.capital_usd,usd)}</b></span><span>最大回撤 <b class="num dn">${M(d.max_drawdown_pct,x=>pct(-Math.abs(x)),d.reasons&&d.reasons.max_drawdown_pct)}</b></span>`;
@@ -679,10 +1049,38 @@ async function renderAccount(){
     if(a.open_positions==null) posLab.innerHTML=nd(R.open_positions||"not_yet_aggregated");
     else posLab.textContent=a.open_positions+" 个市场"+(a.max_open_positions!=null?" / 上限 "+a.max_open_positions:"");
   }
+  const loss=$("#ac-loss");
+  if(loss) stripSkMarkup(loss);
   if(d.positions) rows($("#ac-pos"),'<tr><th>市场</th><th class="hm">方向</th><th class="r hm">股数</th><th class="r hm">均价 / 现价</th><th class="r">浮动</th></tr>',d.positions.map(p=>`<tr><td>${marketHtml(p.title, p)}</td><td class="hm">${esc(p.outcome||"—")}</td><td class="r num hm">${esc(formatShares(p.shares))}</td><td class="r num hm">${Math.round(p.avg_price*100)}¢ / ${p.last_mark==null?"—":Math.round(p.last_mark*100)+"¢"}</td><td class="r num ${cls(p.unrealized_usd)}">${M(p.unrealized_usd,x=>usd(x,true),(p.reasons&&p.reasons.unrealized_usd)||"not_yet_aggregated")}</td></tr>`).join(""));
+  else clearAccountSkeletonTables("#ac-pos");
+  const actLab=$("#ac-act .hd .lbl");
+  if(actLab) actLab.innerHTML="";
   if(d.activity) rows($("#ac-act"),'<tr><th class="hm">时间</th><th>市场</th><th class="hm">用途</th><th class="r">金额</th><th>结果</th></tr>',d.activity.map(activityRow).join(""));
-  else if($("#ac-act")){ const sec=$("#ac-act"); const hd=sec.querySelector(".hd"); sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>'; }
+  else if($("#ac-act")){
+    const sec=$("#ac-act");
+    const table=sec.querySelector("table");
+    if(table) table.innerHTML="";
+    const hd=sec.querySelector(".hd");
+    const lab=hd&&hd.querySelector&&hd.querySelector(".lbl");
+    if(lab) lab.innerHTML="";
+    sec.innerHTML=(hd?hd.outerHTML:"")+'<div class="ndbox"><span class="nd" title="not_yet_aggregated">暂未汇总</span><span>成交与拒单尚未接入或暂无记录。</span></div>';
+  }
+  const params=$("#ac-params");
+  if(params) stripSkMarkup(params);
+  const face=accountFacingSource(d, a);
+  const chip=$("#ac-strategy"); if(chip) chip.textContent=strategyFacingName(face);
+  const rule=$("#ac-rule"); if(rule) rule.textContent=accountRuleText(face);
+  dropLiveSkeletons(document);
   paintHeartbeat([d, a, list]);
+}
+function clearAccountSkeletonTables(sel){
+  const root=$(sel);
+  if(!root) return;
+  const table=root.querySelector&&root.querySelector("table");
+  if(!table) return;
+  const html=String(table.innerHTML||"");
+  const head=html.match(/<tr>\s*<th[\s\S]*?<\/tr>/);
+  table.innerHTML=head?head[0]:"";
 }
 /* ---------- Leaders 在跟（注册表） ---------- */
 /* GET/POST/DELETE /v1/accounts/{id}/leaders。id 优先用当前账户 uuid（与账户详情/总览同一 id）。
@@ -1124,10 +1522,22 @@ async function renderStrategies(){
     }catch(e){ if(e.status!==404) throw e; }
   }
   const d=await api("/v1/me/strategies");
-  rows($("#st-mine"),'<tr><th>名称</th><th class="hm">模板</th><th>状态</th><th class="r">操作</th></tr>',(d.strategies||[]).map(s=>`<tr><td><b>${esc(s.name)}</b> <span class="tag">模拟盘</span></td><td class="hm mu">${esc(s.template_id||"空白")}</td><td><span class="tag ${s.state==="running"?"live":"idle"}">${s.state==="running"?"运行中":"已暂停"}</span></td><td class="r"><a class="btn sm" href="#edit">修改参数</a></td></tr>`).join("")||`<tr><td colspan="4">${nd("no_strategies")}</td></tr>`);
+  rows($("#st-mine"),'<tr><th>名称</th><th class="hm">模板</th><th>状态</th><th class="r">操作</th></tr>',(d.strategies||[]).map(s=>`<tr><td><b>${esc(s.name)}</b> <span class="tag">模拟盘</span></td><td class="hm mu">${esc(templateFacing(s))}</td><td><span class="tag ${s.state==="running"?"live":"idle"}">${s.state==="running"?"运行中":"已暂停"}</span></td><td class="r"><a class="btn sm" href="#edit">修改参数</a></td></tr>`).join("")||`<tr><td colspan="4">${nd("no_strategies")}</td></tr>`);
+}
+function templateFacing(s){
+  if(!s||typeof s!=="object") return "当前策略";
+  return strategyFacingName({
+    strategy_name:s.strategy_name,
+    label:s.template_label||s.label,
+    strategy_label:s.strategy_label,
+    template_label:s.template_label,
+    template_name:s.template_name,
+    leaders_mode:s.leaders_mode||(s.params&&s.params.leaders_mode),
+    strategy:s.strategy&&typeof s.strategy==="object"?s.strategy:null
+  });
 }
 /* 唯一写操作：自己的模拟盘策略草稿，二次确认（短语 = 策略名） */
-window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,mirrorMarketName,formatShares,leaderIdentity,
+window.PM={api,token,usd,pct,bj,short,applyCurveNote,marketHtml,marketLabel,humanizeSlug,strategyFacingName,accountRuleText,mirrorMarketName,visibleMirrors,mirrorSignalKind,formatShares,leaderIdentity,renderAccount,
   accountRecordId,accountRecordUuid,looksLikeAccountUuid,matchAccountId,matchAccountUuid,accountDetailHref,overviewInstanceHref,overviewAccountLink,accountIdSearch,replaceNamedAccountLocation,accountListItems,renderOverview,
   feeLine,overviewHeadline,overviewNetCell,legacyFeeSpan,
   heartbeatLabel,normalizeOverviewRange,overviewRangeEcho,sliceOverviewCurve,shareCardFromTotals,loadOverview,
@@ -1167,6 +1577,7 @@ function applyLeaderIdentity(detail){
   document.title=id.title;
   const h=document.querySelector(".top h1");
   if(h){
+    h.querySelectorAll(".sk").forEach(n=>n.remove());
     const av=h.querySelector(".av"); if(av) av.textContent=id.initials;
     [...h.childNodes].forEach(n=>{ if(n.nodeType===3) h.removeChild(n); });
     h.appendChild(document.createTextNode(id.heading));
@@ -1226,6 +1637,17 @@ function normPx(v){
 }
 function cent(p){ const n=normPx(p); return n==null?null:Math.round(n*100)+"¢"; }
 function shareCount(n){ const x=numOrNull(n); return x==null?null:x.toLocaleString("en-US",{maximumFractionDigits:2}); }
+function shareLabel(n){ const s=shareCount(n); return s==null?null:s+'<span class="q-unit"> 股</span>'; }
+function posMarketValue(p){
+  if(!p) return null;
+  return numOrNull(pick(p,["current_value_usd","current_value","currentValue","market_value_usd","market_value","marketValue","position_value_usd","value_usd"]));
+}
+function cardAmount(usdText, shareText){
+  const br=`<span class="q-br" aria-hidden="true"></span>`;
+  const shares=shareText||NA;
+  if(usdText) return `<span class="q-usd q-amt">${usdText}</span>${br}<span class="q-shares">${shares}</span>`;
+  return `<span class="q-amt">${shares}</span>${br}`;
+}
 function atPrice(amount, price){ const u=usd(amount); if(u==null) return null; const c=cent(price); return u+(c?" @ "+c:""); }
 function tradeToken(t){ const v=pick(t,["token_id","tokenId","asset_id","asset","clob_token_id"]); return v==null?"":String(v); }
 function tradeOutcome(t){ const v=pick(t,["outcome","outcome_name"]); return v==null?"":String(v); }
@@ -1258,16 +1680,16 @@ function rowMarketTitle(row){
   const fromNested=nested&&textField(pick(nested,["question","title","name"]));
   if(fromNested) return presentMarketTitle(fromNested);
   const named=textField(pick(row,["question","title","name","market_title","event_title"]));
-  if(named) return presentMarketTitle(named);
-  if(textField(row.market)) return presentMarketTitle(textField(row.market));
+  if(named&&named!=="市场") return presentMarketTitle(named);
+  if(textField(row.market)&&textField(row.market)!=="市场") return presentMarketTitle(textField(row.market));
   const nestedSlug=nested&&textField(pick(nested,["slug","event_slug","eventSlug"]));
-  const slug=nestedSlug||textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row))||"";
+  const slug=nestedSlug||textField(pick(row,["slug","event_slug","eventSlug","market_slug"]))||textField(mirrorMarketName(row, false))||"";
   return humanizeSlug(slug);
 }
 /* 接口有时把 slug 塞进 market 字符串。有空格或中文的当标题，纯连字符的读成句子。 */
 function presentMarketTitle(s){
   const t=String(s||"").trim();
-  if(!t||t==="[object Object]") return "";
+  if(!t||t==="[object Object]"||t==="市场") return "";
   if(/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(t)) return humanizeSlug(t);
   return t;
 }
@@ -1284,7 +1706,7 @@ function explicitTitle(row){
     textField(row.market)
   ];
   for(const c of candidates){
-    if(c&&!/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(c)) return c;
+    if(c&&c!=="市场"&&!/^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+$/.test(c)) return c;
   }
   return "";
 }
@@ -1475,14 +1897,14 @@ function leaderTradeBody(detail){
     const src=trade||mirror;
     const title=leaderDisplayTitle(trade, idx)||leaderDisplayTitle(mirror, idx);
     const outcome=tradeOutcome(trade)||tradeOutcome(mirror);
-    const his=atPrice(hisAmt, hisPx);
-    const ours=atPrice(ourAmt, ourPx);
     const when=bj(tradeTime(trade)||tradeTime(mirror))||"—";
-    return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td class="num mu hm">${esc(when)}</td><td>${leaderMarketCell(title, src, outcome)}</td><td class="hm">${side==="SELL"?"卖出":side==="BUY"?"买入":NA}</td><td class="r ${his?"num":"na"}">${his||NA}</td><td class="r ${ours?"num":"na"}">${ours||NA}</td><td>${mirrorResult(mirror, side)}</td></tr>`;
+    const oursOn=usd(ourAmt)!=null;
+    const sideTxt=side==="SELL"?"卖出":side==="BUY"?"买入":NA;
+    return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td class="num mu hm k-hide">${esc(when)}</td><td class="k-name">${leaderMarketCell(title, src, outcome)}</td><td class="hm k-side">${sideTxt}</td>${quoteTd(hisAmt, cent(hisPx), !oursOn)}${quoteTd(ourAmt, cent(ourPx), oursOn)}<td class="k-res">${mirrorResult(mirror, side)}</td></tr>`;
   }).join("");
 }
 const POS_HEAD='<tr><th>市场 · outcome</th><th class="r hm" title="current_size">股数</th><th class="r hm">均价 / 现价</th><th class="r" title="unrealized_pnl">他的浮动</th><th class="r">我方镜像持仓</th></tr>';
-function posKey(p){ const tok=tradeToken(p); if(tok) return "t:"+tok; return "n:"+(mirrorMarketName(p)||pick(p,["title","question","name"])||"")+"|"+tradeOutcome(p); }
+function posKey(p){ const tok=tradeToken(p); if(tok) return "t:"+tok; return "n:"+(mirrorMarketName(p, false)||pick(p,["title","question","name"])||"")+"|"+tradeOutcome(p); }
 function posSize(p){ return numOrNull(pick(p,["current_size","shares","size","qty"])); }
 function leaderPositionBody(detail){
   const d=detail&&typeof detail==="object"?detail:{};
@@ -1503,8 +1925,29 @@ function leaderPositionBody(detail){
     const pnl=his?numOrNull(pick(his,["unrealized_pnl","unrealized_usd","cash_pnl"])):null;
     const mine=our?posSize(our):null;
     const px=(avg==null&&mark==null)?NA:`${avg==null?"—":cent(avg)} / ${mark==null?"—":cent(mark)}`;
-    const mineHtml=mine==null?NA:`${shareCount(mine)} 股`;
-    return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td>${leaderMarketCell(title, src, outcome)}</td><td class="r num hm">${size==null?NA:shareCount(size)}</td><td class="r num hm">${px}</td><td class="r ${pnl==null?"na":"num "+cls(pnl)}">${pnl==null?LEADER_DASH:usd(pnl,true)}</td><td class="r ${mine==null?"na":"num"}">${mineHtml}</td></tr>`;
+    const mineKnown=mine!=null;
+    const pnlKnown=pnl!=null;
+    const hisValue=his?posMarketValue(his):null;
+    const ourValue=hisValue==null&&our?posMarketValue(our):null;
+    const hisShare=shareLabel(size)||NA;
+    const ourShare=mineKnown?shareLabel(mine):null;
+    let sizeTd, mineTd;
+    if(hisValue!=null){
+      sizeTd=`<td class="r num hm k-amt">${cardAmount(usd(hisValue), hisShare)}</td>`;
+      mineTd=mineKnown?`<td class="r num k-sub" data-k="我方">${ourShare}</td>`:`<td class="r na k-hide">${NA}</td>`;
+    }else if(ourValue!=null&&mineKnown){
+      sizeTd=`<td class="r num hm k-hide">${size==null?NA:shareCount(size)}</td>`;
+      mineTd=`<td class="r num k-amt">${cardAmount(usd(ourValue), ourShare)}</td>`;
+    }else if(mineKnown){
+      sizeTd=`<td class="r num hm k-hide">${size==null?NA:shareCount(size)}</td>`;
+      mineTd=`<td class="r num k-amt">${cardAmount(null, ourShare)}</td>`;
+    }else{
+      sizeTd=`<td class="r ${size==null?"na":"num"} hm k-amt">${cardAmount(null, hisShare)}</td>`;
+      mineTd=`<td class="r na k-hide">${NA}</td>`;
+    }
+    const pxTd=`<td class="r num ${pnlKnown?"hm k-hide":"k-sub"}" data-k="价格">${px}</td>`;
+    const pnlTd=`<td class="r ${pnlKnown?"num "+cls(pnl)+" k-sub":"na k-hide"}" data-k="浮动">${pnlKnown?usd(pnl,true):LEADER_DASH}</td>`;
+    return `<tr${i>=LEADER_ROW_PAGE?' class="more"':''}><td class="k-name">${leaderMarketCell(title, src, outcome)}</td>${sizeTd}${pxTd}${pnlTd}${mineTd}</tr>`;
   }).join("");
 }
 function leaderPnlBag(detail){
@@ -1519,9 +1962,13 @@ function leaderPnlBag(detail){
     reason:(d.reasons&&d.reasons.pnl)||pnl.reason||null
   };
 }
-function moneyTd(x, reason){
-  if(x==null||!isFinite(x)) return `<td class="r">${nd(reason||"not_yet_aggregated")}</td>`;
-  return `<td class="r num ${cls(x)}">${usd(x,true)}</td>`;
+function moneyTd(x, reason, role, label){
+  const missing=x==null||!isFinite(x);
+  const inner=missing?nd(reason||"not_yet_aggregated"):usd(x,true);
+  const tone=missing?"na":"num "+cls(x);
+  if(role==="amt") return `<td class="r ${tone} k-amt"><span class="q-amt">${inner}</span><span class="q-br" aria-hidden="true"></span></td>`;
+  const k=label?` data-k="${esc(label)}"`:"";
+  return `<td class="r ${tone} k-sub"${k}>${inner}</td>`;
 }
 function leaderPnlBody(detail){
   const bag=leaderPnlBag(detail);
@@ -1534,9 +1981,9 @@ function leaderPnlBody(detail){
     return {name, realized, unrealized, total, reason:row.reasons&&(row.reasons.realized_usd||row.reasons.total)};
   });
   const sum=key=>rows.length&&rows.every(r=>r[key]!=null)?rows.reduce((s,r)=>s+r[key],0):null;
-  const foot=`<tr><td><b>合计</b></td>${moneyTd(sum("realized"), bag.reason)}${moneyTd(sum("unrealized"), bag.reason)}${moneyTd(sum("total"), bag.reason)}</tr>`;
+  const foot=`<tr><td class="k-name"><b>合计</b></td>${moneyTd(sum("realized"), bag.reason, "sub", "已实现")}${moneyTd(sum("unrealized"), bag.reason, "sub", "浮动")}${moneyTd(sum("total"), bag.reason, "amt")}</tr>`;
   if(!rows.length) return `<tr><td colspan="4">${LEADER_EMPTY}</td></tr>`+foot;
-  return rows.map(r=>`<tr><td>${esc(r.name)}</td>${moneyTd(r.realized,r.reason)}${moneyTd(r.unrealized,r.reason)}${moneyTd(r.total,r.reason)}</tr>`).join("")+foot;
+  return rows.map(r=>`<tr><td class="k-name">${esc(r.name)}</td>${moneyTd(r.realized, r.reason, "sub", "已实现")}${moneyTd(r.unrealized, r.reason, "sub", "浮动")}${moneyTd(r.total, r.reason, "amt")}</tr>`).join("")+foot;
 }
 function copyRateText(v){
   if(v==null) return null;
@@ -2374,19 +2821,7 @@ function bindBoardWin(){
 async function renderMarkets(){
   const tab=marketTab();
   applyMarketTab(tab);
-  const logged=!!token.get();
-  const login=t=>` <a href="/login?next=${encodeURIComponent("/markets?tab="+t)}">登录后查看 →</a>`;
-  const exp=$("#mk-exposure-note"), cat=$("#mk-category-note"), qua=$("#mk-quality-note");
-  if(exp) exp.innerHTML=logged?"按市场聚合的敞口接口还没有（无 /v1/markets）。这里保持「汇总中」，不补 0。":"未登录只开放排行公开子集。我们的敞口需要登录，也不会把空值写成 0。"+login("exposure");
-  if(cat) cat.innerHTML="品类敞口、今日盈亏和跟单笔数标为 P1，等 BFF 带上 category。本期不汇总。"+(logged?"":login("category"));
-  if(qua) qua.innerHTML="延迟、滑点和放弃原因标为 P1。本期不汇总，不补 0。"+(logged?"":login("quality"));
-  document.querySelectorAll("#mk-range span").forEach(s=>{
-    s.onclick=()=>{
-      document.querySelectorAll("#mk-range span").forEach(x=>x.classList.toggle("on", x===s));
-      const n=$("#mk-range-note");
-      if(n) n.textContent="窗口 "+s.dataset.r+" · 聚合还没接上，空值保持「汇总中」。";
-    };
-  });
+  ["#mk-kpis","#mk-exposure-card","#mk-category-card","#mk-quality-card","#mk-range-note"].forEach(sel=>hideBlock(document.querySelector(sel)));
   if(tab!=="board") return;
   await renderBoard(bindBoardWin());
 }
@@ -2409,13 +2844,12 @@ async function boot(){
     }
     if(PAGE==="overview"){
       try{
-        const overview=await loadFeeFixture("paper20000-overview.json");
-        try{ stampOverviewIds(overview, await loadFeeFixture("paper20000-list.json")); }catch(e){}
-        /* 利润归属还没画真实分段。留着静态壳会带出「示意」。 */
+        const overview=await loadFeeFixture("demo-overview.json");
+        try{ stampOverviewIds(overview, await loadFeeFixture("demo-list.json")); }catch(e){}
         overview.attribution=null;
         await renderOverview(overview);
         stripDemo();
-        badge("demo","总览示例（?mock=1）。数字来自 fixtures/fee-line/paper20000-overview.json，不是实时账户");
+        badge("demo","总览示例（?mock=1）。数字来自 fixtures/fee-line/demo-overview.json，不是实时账户");
         keepMock();
         return;
       }
@@ -2423,7 +2857,8 @@ async function boot(){
     }
     if(PAGE==="account"){
       try{
-        const fx=await loadFeeFixture("paper20000-legacy-detail.json");
+        const id=Q.get("id")||Q.get("s")||"";
+        const fx=await loadFeeFixture(id==="acct-beta"||id==="00000000-0000-4000-8000-0000000000b2"?"demo-beta-legacy.json":"demo-alpha-legacy.json");
         const a=fx.account||{};
         const title=document.querySelector(".top h1"); if(title) title.textContent="账户 · "+(a.strategy||"");
         const m=$("#ac-main");
@@ -2444,7 +2879,10 @@ async function boot(){
           const hd=sec.querySelector(".hd"); const h=hd?hd.outerHTML:"";
           sec.innerHTML=h+'<div class="ndbox"><span class="nd">无数据</span><span>这页只核对顶部净值，持仓和成交不在这张示例里展开。</span></div>';
         });
-        badge("demo","旧账户详情示例（?mock=1）。数字来自 fixtures/fee-line/paper20000-legacy-detail.json，不是实时账户");
+        const runZh=a.run_state_zh||"";
+        const run=document.getElementById("ac-run");
+        if(run){ run.hidden=!runZh; if(runZh) run.innerHTML='<span class="dot"></span>'+esc(runZh); }
+        badge("demo","旧账户详情示例（?mock=1）。数字来自 fixtures/fee-line，不是实时账户");
         keepMock();
         return;
       }catch(e){ console.warn(e); return fallback("?mock=1"); }

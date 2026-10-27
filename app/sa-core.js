@@ -68,6 +68,81 @@
     return base;
   }
 
+  /* GET /v1/accounts 的 summary.mode：本仓库契约（mock 与页头）只有 "wallet" 与 "paper"。
+     缺 mode 时页头本来就显示「模拟盘」，不当成钱包。
+     钱包可用资金只认 summary.wallet_available_usd；错误详情里的 available_usd 作同一口径的别名。
+     两个都没有、或不是有限数字，就视为拿不到可用资金。 */
+  function isWalletBook(summary) {
+    return !!(summary && summary.mode === "wallet");
+  }
+
+  function walletAvailableUsd(source) {
+    if (!source || typeof source !== "object") return null;
+    var keys = ["wallet_available_usd", "available_usd"];
+    for (var i = 0; i < keys.length; i++) {
+      if (!Object.prototype.hasOwnProperty.call(source, keys[i])) continue;
+      var raw = source[keys[i]];
+      if (raw == null || raw === "") return null;
+      var n = Number(raw);
+      return isFinite(n) ? n : null;
+    }
+    return null;
+  }
+
+  /* 页头：只有钱包口径且接口标了 over_allocated 才出「超额」。模拟盘、缺 mode 都不出。 */
+  function summaryOverWarning(summary) {
+    summary = summary || {};
+    if (!isWalletBook(summary) || summary.over_allocated !== true) return "";
+    var parts = ["超额提示。分配总额超过钱包可用余额。"];
+    if (summary.allocated_usd != null && isFinite(Number(summary.allocated_usd))) {
+      parts.push("已分配 " + money(summary.allocated_usd) + "。");
+    }
+    var avail = walletAvailableUsd(summary);
+    if (avail != null) parts.push("可用 " + money(avail) + "。");
+    return parts.join("");
+  }
+
+  /* 新建 / 调资：模拟盘一律不提示。钱包只有拿到可用资金、且本次占用超过它才提示。
+     previous_usd 有值时比的是增量（调资）；没有则比整笔（新建）。不使用写死额度。 */
+  function allocationWarning(input) {
+    input = input || {};
+    var type = input.account_type || input.mode || "";
+    if (type !== "wallet") return "";
+    var available = walletAvailableUsd(input);
+    if (available == null && input.summary) available = walletAvailableUsd(input.summary);
+    if (available == null) return "";
+    var requested = Number(input.requested_usd);
+    if (!isFinite(requested)) return "";
+    var need = requested;
+    if (input.previous_usd != null && input.previous_usd !== "") {
+      var prev = Number(input.previous_usd);
+      if (!isFinite(prev)) return "";
+      need = requested - prev;
+    }
+    if (!(need > available)) return "";
+    return "超额提示。这次分配超过钱包可用余额。可用 " + money(available) + "。";
+  }
+
+  /* 新建、复制、改资金、启动：丢掉 paper_over_allocated，其它 code 仍交给 warningText。 */
+  function warningLines(warnings) {
+    var lines = [];
+    (warnings || []).forEach(function (w) {
+      if (!w || w.code === "paper_over_allocated") return;
+      var text = warningText(w.code, w);
+      if (text) lines.push(text);
+    });
+    return lines;
+  }
+
+  /* 页头超额文案加上接口 warnings 过滤后的句子，给测试和页头共用。 */
+  function allocationNoticeText(summary, warnings) {
+    var parts = [];
+    var head = summaryOverWarning(summary);
+    if (head) parts.push(head);
+    warningLines(warnings).forEach(function (line) { parts.push(line); });
+    return parts.join("\n");
+  }
+
   function joinNums(parts) {
     return parts.filter(Boolean).join("，");
   }
@@ -75,7 +150,7 @@
   function money(x) {
     var n = Number(x);
     if (!isFinite(n)) return "—";
-    return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   function isStrategyCatalog(d) {
@@ -946,14 +1021,16 @@
 
   function feeCopy(source, place) {
     var line = feeLine(source, place);
-    var net = "净收益 " + formatUsd(line.net_pnl_usd, true);
-    if (line.show_paren) net += "（已扣估算手续费 " + formatUsd(line.fees_uncharged_usd, false) + "）";
+    var netPlain = "净收益 " + formatUsd(line.net_pnl_usd, true);
+    var paren = line.show_paren ? "（已扣估算手续费 " + formatUsd(line.fees_uncharged_usd, false) + "）" : "";
     var fee = line.estimated ? "" : "手续费 " + formatUsd(line.fees_usd, false);
     /* 卡片上的「估算」只是标注。金额留在净收益括号里，不另写一遍。 */
     var cardFee = line.estimated ? "估算" : fee;
     line.equity_text = formatUsd(line.equity_usd, false);
     line.pct_text = formatFeePct(line.pct_value);
-    line.net_text = net;
+    line.net_plain = netPlain;
+    line.paren_text = paren;
+    line.net_text = netPlain + paren;
     line.fee_text = fee;
     line.card_fee_text = cardFee;
     return line;
@@ -1494,11 +1571,25 @@
     return list;
   }
 
-  function mockSummary(mode) {
+  /* 额度数字由调用方传入。模拟盘不在这里写死 60000 / 80000。 */
+  function mockSummary(mode, opts) {
+    opts = opts && typeof opts === "object" ? opts : {};
     if (mode === "wallet") {
-      return { mode: "wallet", allocated_usd: 5000, wallet_available_usd: 1200, over_allocated: false };
+      return {
+        mode: "wallet",
+        allocated_usd: opts.allocated_usd != null ? opts.allocated_usd : 5000,
+        wallet_available_usd: opts.wallet_available_usd != null ? opts.wallet_available_usd : 1200,
+        over_allocated: !!opts.over_allocated
+      };
     }
-    return { mode: "paper", allocated_usd: 80000, wallet_available_usd: null, over_allocated: true, paper_limit_usd: 60000 };
+    var paper = {
+      mode: "paper",
+      allocated_usd: opts.allocated_usd != null ? opts.allocated_usd : null,
+      wallet_available_usd: opts.wallet_available_usd != null ? opts.wallet_available_usd : null,
+      over_allocated: !!opts.over_allocated
+    };
+    if (opts.paper_limit_usd != null) paper.paper_limit_usd = opts.paper_limit_usd;
+    return paper;
   }
 
   function mockFilter(list, q) {
@@ -1525,7 +1616,7 @@
     var last = slice[slice.length - 1];
     var next = start + limit < filtered.length && last ? last.id : null;
     return {
-      summary: mockSummary(q.mode),
+      summary: mockSummary(q.mode, q),
       items: slice,
       accounts: slice,
       next_cursor: next,
@@ -1592,7 +1683,7 @@
           reasons: a.reasons || {}
         };
       }
-      var end = a.metrics.return_pct * (scope === "current_segment" ? 0.35 : 1);
+      var end = a.metrics.return_pct;
       var s = mockSeries(a.id, a.name, a.strategy_id, a.strategy_label, end * (1 + i * 0.02), a.capital_usd);
       if (scope === "current_segment") {
         s.points = s.points.filter(function (p) { return p.segment === a.current_segment || p.segment === 3; });
@@ -1620,7 +1711,7 @@
         fees_usd: a.metrics.fees_usd,
         gross_pnl_usd: a.metrics.gross_pnl_usd,
         net_pnl_usd: a.metrics.net_pnl_usd,
-        return_pct: scope === "current_segment" ? a.metrics.return_pct * 0.35 : a.metrics.return_pct,
+        return_pct: a.metrics.return_pct,
         max_drawdown_pct: a.metrics.max_drawdown_pct,
         trades: a.metrics.trades,
         runtime_sec: a.metrics.runtime_sec,
@@ -1690,6 +1781,12 @@
     ACCENT: ACCENT,
     errorText: errorText,
     warningText: warningText,
+    isWalletBook: isWalletBook,
+    walletAvailableUsd: walletAvailableUsd,
+    summaryOverWarning: summaryOverWarning,
+    allocationWarning: allocationWarning,
+    warningLines: warningLines,
+    allocationNoticeText: allocationNoticeText,
     isStrategyCatalog: isStrategyCatalog,
     accountListRows: accountListRows,
     normalizeAccountPage: normalizeAccountPage,

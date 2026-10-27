@@ -85,6 +85,19 @@
       return raw ? JSON.parse(raw) : [];
     } catch (err) { return []; }
   }
+  /* 模拟盘丢掉超参考额度那条警告。钱包只在拿到可用资金且本次占用超过它时另加一句，不用写死额度。 */
+  function flashCapitalNotice(accountType, warnings, requested, previous) {
+    var lines = SA.warningLines(warnings);
+    var summary = (listState && listState.summary) || {};
+    var extra = SA.allocationWarning({
+      account_type: accountType || "paper",
+      requested_usd: requested,
+      previous_usd: previous,
+      summary: summary
+    });
+    if (extra) lines.push(extra);
+    if (lines.length) flashPush(lines);
+  }
   function banner(lines, bad) {
     if (!lines || !lines.length) return "";
     return '<div class="' + (bad ? "sa-alert" : "sa-warn") + '" role="alert">' + lines.map(function (l) { return "<div>" + esc(l) + "</div>"; }).join("") + "</div>";
@@ -110,10 +123,10 @@
     return feeFixtureCache[name];
   }
   var FEE_DETAIL = {
-    "7cd31570-39a5-47ea-aa0d-1b49d90acad4": "paper20000-uuid-detail.json",
-    "d9e9f8b4-6d94-4478-af61-7907a148fca2": "paper20000fees-uuid-detail.json",
-    paper20000: "paper20000-legacy-detail.json",
-    paper20000fees: "paper20000fees-legacy-detail.json"
+    "00000000-0000-4000-8000-0000000000a1": "demo-alpha-uuid.json",
+    "00000000-0000-4000-8000-0000000000b2": "demo-beta-uuid.json",
+    "acct-alpha": "demo-alpha-legacy.json",
+    "acct-beta": "demo-beta-legacy.json"
   };
   function mockKey() { return "sa_mock_v1"; }
   function mockList() {
@@ -208,7 +221,7 @@
   async function fetchAccounts(query) {
     if (mockMode()) {
       try {
-        var listed = await feeFixtureJson("paper20000-list.json");
+        var listed = await feeFixtureJson("demo-list.json");
         var items = (listed && (listed.items || listed.accounts)) || [];
         if (items.length) return SA.mockPage(items, query);
       } catch (err) {}
@@ -308,6 +321,19 @@
     if (!SA.presentText(account.name)) account.name = account.strategy || account.id;
     return account;
   }
+  function applySegmentScope(fx, scope) {
+    if (scope !== "current_segment" || !fx) return fx;
+    var curve = fx.equity_curve;
+    var points = curve && curve.points;
+    if (!points && Array.isArray(curve)) points = curve;
+    var has = Array.isArray(points) && points.some(function (p) { return p && p.segment != null; });
+    if (has) return fx;
+    fx.segment_scope_empty = true;
+    if (fx.metrics) fx.metrics.return_pct = null;
+    if (Object.prototype.hasOwnProperty.call(fx, "net_pct")) fx.net_pct = null;
+    fx.equity_curve = Array.isArray(curve) ? [] : { points: [] };
+    return fx;
+  }
   async function fetchAccount(id, scope, viaStrategy) {
     var key = SA.presentText(id);
     if (!key) {
@@ -325,7 +351,7 @@
           var fx = raw && raw.account && !raw.metrics ? unwrapAccount(raw) : raw;
           if (fx) {
             fx = JSON.parse(JSON.stringify(fx));
-            if (scope === "current_segment" && fx.metrics && fx.metrics.return_pct != null) fx.metrics.return_pct = fx.metrics.return_pct * 0.35;
+            applySegmentScope(fx, scope);
             if (viaStrategy) markLegacy(fx, id);
             return fx;
           }
@@ -334,7 +360,7 @@
       var a = findMock(id);
       if (!a) { var e = new Error("missing"); e.status = 404; e.body = { error: "account_not_found" }; throw e; }
       a = JSON.parse(JSON.stringify(a));
-      if (scope === "current_segment" && a.metrics && a.metrics.return_pct != null) a.metrics.return_pct = a.metrics.return_pct * 0.35;
+      applySegmentScope(a, scope);
       if (viaStrategy) markLegacy(a, id);
       return a;
     }
@@ -450,7 +476,7 @@
       esc(SA.strategyCaption(a)),
       '<b>' + esc(a.name) + "</b>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a),
       esc(SA.formatUsd(a.capital_usd, false)),
-      on ? onboardHtml() : '<span class="' + netCls + ' sa-fee-note">' + esc(line.net_text.replace(/^净收益 /, "")) + "</span>",
+      on ? onboardHtml() : '<span class="fee-stack"><span class="' + netCls + '">' + esc(line.net_plain.replace(/^净收益 /, "")) + "</span>" + (line.paren_text ? '<span class="fee-tag">' + esc(line.paren_text) + "</span>" : "") + "</span>",
       on ? onboardHtml() : '<span class="' + pctCls + '">' + esc(line.pct_text) + "</span>",
       esc(m.trades == null ? "—" : Number(m.trades).toLocaleString("en-US")),
       line.estimated ? "估算" : esc(SA.formatUsd(line.fees_usd, false)),
@@ -471,8 +497,7 @@
     var line = SA.feeCopy(a, "metrics");
     var pick = SA.selectionId(a);
     var on = SA.engineOnboarding(a);
-    var tone = line.net_pnl_usd > 0 ? "up" : line.net_pnl_usd < 0 ? "dn" : "";
-    var ret = on ? '<div class="ret sa-onboard">' + esc(onboardPhrase()) + "</div>" : '<div class="ret ' + tone + '">' + esc(line.equity_text) + "</div>";
+    var ret = on ? '<div class="ret sa-onboard">' + esc(onboardPhrase()) + "</div>" : '<div class="ret">' + esc(line.equity_text) + "</div>";
     var dd = on ? onboardPhrase() : SA.formatDrawdown(m.max_drawdown_pct);
     var bits = [SA.strategyCaption(a)];
     if (on) bits.push(onboardPhrase());
@@ -480,12 +505,13 @@
       bits.push(line.pct_text);
       bits.push(line.net_text);
     }
-    if (line.estimated) bits.push("估算");
+    var feeTag = "";
+    if (line.estimated) feeTag = '<span class="fee-tag">估算</span>';
     else if (line.fee_text) bits.push(line.fee_text);
     bits.push("资金 " + SA.formatUsd(a.capital_usd, false));
     bits.push("回撤 " + dd);
     bits.push("第 " + (a.current_segment == null ? "—" : a.current_segment) + " 段");
-    return '<article class="sa-acard" data-name="' + esc(a.name) + '"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + "</div>" + ret + '<div class="sa-meta">' + bits.map(esc).join(" · ") + "</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
+    return '<article class="sa-acard" data-name="' + esc(a.name) + '"><div class="toprow"><label><input class="sa-check" type="checkbox" data-act="pick" data-id="' + esc(pick) + '"' + (selected.has(pick) ? " checked" : "") + ' aria-label="选择 ' + esc(a.name) + '"> <a href="' + esc(accountHref(a)) + '"><b>' + esc(a.name) + "</b></a></label>" + statusHtml(a) + "</div>" + ret + feeTag + '<div class="sa-meta">' + bits.map(esc).join(" · ") + "</div>" + diffHtml(a, schema) + settleHtml(a) + rpcHtml(a) + opsHtml(a) + "</article>";
   }
   var HEAD = "<tr><th></th><th>账户</th><th>策略</th><th class='r'>资金</th><th class='r'>净收益</th><th class='r'>收益率</th><th class='r'>成交</th><th class='r'>手续费</th><th class='r'>回撤</th><th class='r'>运行时长</th><th class='r'>分段</th><th>状态</th><th class='r'>操作</th></tr>";
 
@@ -540,8 +566,10 @@
   function summaryHtml(summary) {
     summary = summary || {};
     var wallet = summary.mode === "wallet";
-    var over = summary.over_allocated ? '<div class="sa-warn"><b>超额提示。</b> ' + esc(SA.warningText("paper_over_allocated", { allocated_usd: summary.allocated_usd, limit_usd: summary.paper_limit_usd })) + "</div>" : "";
-    return '<div class="sa-kpis"><div class="sa-kpi lead"><span class="lbl">已分配</span><b class="num">' + esc(SA.formatUsd(summary.allocated_usd, false)) + '</b><span class="sa-note">已归档的资金不计入这里。</span></div><div class="sa-kpi"><span class="lbl">模式</span><b>' + (wallet ? "钱包" : "模拟盘") + '</b></div><div class="sa-kpi"><span class="lbl">' + (wallet ? "可用余额" : "参考额度") + "</span><b class='num'>" + esc(wallet ? SA.formatUsd(summary.wallet_available_usd, false) : (summary.paper_limit_usd != null ? SA.formatUsd(summary.paper_limit_usd, false) : "不拦截")) + "</b></div><div class=\"sa-kpi\"><span class=\"lbl\">状态</span><b>运行中 / 已停止</b><span class=\"sa-note\">只有这两种状态。要改参数就先停止。</span></div></div>" + over;
+    var overText = SA.summaryOverWarning(summary);
+    var over = overText ? '<div class="sa-warn">' + esc(overText) + "</div>" : "";
+    var avail = wallet ? '<div class="sa-kpi"><span class="lbl">可用余额</span><b class=\'num\'>' + esc(SA.formatUsd(summary.wallet_available_usd, false)) + "</b></div>" : "";
+    return '<div class="sa-kpis"><div class="sa-kpi lead"><span class="lbl">已分配</span><b class="num">' + esc(SA.formatUsd(summary.allocated_usd, false)) + '</b><span class="sa-note">已归档的资金不计入这里。</span></div><div class="sa-kpi"><span class="lbl">模式</span><b>' + (wallet ? "钱包" : "模拟盘") + "</b></div>" + avail + '<div class="sa-kpi"><span class="lbl">状态</span><b>运行中 / 已停止</b><span class="sa-note">只有这两种状态。要改参数就先停止。</span></div></div>' + over;
   }
   function filterBar(f) {
     return '<div class="sa-filters"><div class="seg" role="tablist"><button type="button" data-act="arch" data-v="0"' + (f.archived ? "" : ' class="on"') + '>在用</button><button type="button" data-act="arch" data-v="1"' + (f.archived ? ' class="on"' : "") + '>已归档</button></div><label class="mu">状态 <select class="in" data-act="state" style="width:auto;display:inline-block;padding:4px 8px"><option value=""' + (f.state ? "" : " selected") + '>全部</option><option value="running"' + (f.state === "running" ? " selected" : "") + '>运行中</option><option value="stopped"' + (f.state === "stopped" ? " selected" : "") + '>已停止</option></select></label><label class="mu">排序 <select class="in" data-act="sort" style="width:auto;display:inline-block;padding:4px 8px"><option value="return_pct"' + (f.sort === "return_pct" ? " selected" : "") + '>收益率</option><option value="net_pnl_usd"' + (f.sort === "net_pnl_usd" ? " selected" : "") + '>净收益</option><option value="capital_usd"' + (f.sort === "capital_usd" ? " selected" : "") + '>资金</option><option value="created_at"' + (f.sort === "created_at" ? " selected" : "") + '>创建时间</option></select></label></div>';
@@ -745,24 +773,27 @@
         };
         list.unshift(created);
         saveMock(list);
-        if (capital > 60000) flashPush([SA.warningText("paper_over_allocated", { allocated_usd: 80000 + capital, limit_usd: 60000 })]);
+        flashCapitalNotice(accountType, [], capital, null);
       } else if (fromId) {
         var copied = await api("/v1/accounts/" + encodeURIComponent(fromId) + "/copy", { method: "POST", body: SA.copyBody({ name: name, params: params, schema: schema, capital_usd: capital }), headers: { "Idempotency-Key": idemKey } });
         created = copied.account || copied;
+        var copyStartWarns = [];
         if (created && created.state !== "running" && created.id) {
           var started = await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
+          copyStartWarns = (started && started.warnings) || [];
           created = (started && started.account) || created;
         }
-        var warns = (copied.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
-        if (warns.length) flashPush(warns);
+        flashCapitalNotice(accountType, [].concat(copied.warnings || [], copyStartWarns), capital, null);
       } else {
         var res = await api("/v1/accounts", { method: "POST", body: SA.launchBody({ strategy_id: strategy.strategy_id, name: name, params: params, schema: schema, capital_usd: capital, account_type: accountType }), headers: { "Idempotency-Key": idemKey } });
         created = res.account || res;
+        var createStartWarns = [];
         if (created && created.state !== "running" && created.id) {
-          await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
+          var startedBody = await api("/v1/accounts/" + encodeURIComponent(created.id) + "/start", { method: "POST" });
+          createStartWarns = (startedBody && startedBody.warnings) || [];
+          created = (startedBody && startedBody.account) || created;
         }
-        var warns2 = (res.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
-        if (warns2.length) flashPush(warns2);
+        flashCapitalNotice(accountType, [].concat(res.warnings || [], createStartWarns), capital, null);
       }
       attempt.succeed();
       form.dataset.idemKey = attempt.key();
@@ -891,49 +922,180 @@
   }
 
   var detailState = null;
-  function paintDetail() {
-    var mount = document.getElementById("sa-mount");
+  var detailSeq = 0;
+  function pnlLib() { return window.PMPnl || null; }
+  function accountInception(a) {
+    if (!a) return "";
+    return a.inception_at || "";
+  }
+  function pnlAccountId() {
+    var a = detailState && detailState.account;
+    if (!a) return "";
+    return SA.presentText(a.id) || SA.presentText(a.account_id) || SA.presentText(a.strategy) || "";
+  }
+  function segListHtml() {
     var a = detailState.account;
-    var act = SA.rowActions(a);
     var schema = detailState.schema || [];
-    var scope = detailState.scope;
-    var flash = detailState.flash || [];
-    detailState.flash = [];
-    var series = detailSeries(a);
-    var on = SA.engineOnboarding(a);
-    var chart = "";
-    var emptyCurve = '<div class="ndbox sa-empty-curve" role="status"><span class="nd">暂无曲线数据</span></div>';
-    if (on) {
-      chart = '<div class="ndbox sa-empty-curve" role="status" id="sa-onboard-curve"><span class="nd sa-onboard">' + esc(onboardPhrase()) + "</span></div>";
-    } else if (series && series.points && series.points.length) {
-      var metric = series.metric === "equity_usd" ? "equity_usd" : "return_pct";
-      var model = SA.chartModel([series], { focusId: a.id, axis: "calendar", metric: metric, width: 720, height: 240 });
-      var drawn = (model.lines || []).some(function (l) { return l.points && l.points.length; });
-      if (drawn) {
-        chart = '<div class="sa-chart hero" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
-        detailState.model = model;
-      } else chart = emptyCurve;
-    } else {
-      chart = emptyCurve;
-    }
-    var line = SA.feeCopy(a, "metrics");
-    var pctCls = line.pct_value > 0 ? "up" : line.pct_value < 0 ? "dn" : "";
-    var feeSpan = line.fee_text ? "<span>" + esc(line.fee_text) + "</span>" : "";
-    var estSpan = line.estimated ? "<span>估算</span>" : "";
-    var eqBlock = on
-      ? '<section class="card" id="sa-eq"><div class="sa-big sa-onboard">' + esc(onboardPhrase()) + '</div><div class="sa-sub"><span class="sa-onboard">' + esc(onboardPhrase()) + "</span><span class=\"sa-fee-note\">" + esc(line.card_fee_text) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>"
-      : '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(line.equity_text) + '</div><div class="sa-sub"><span class="' + pctCls + '">' + esc(line.pct_text) + '</span><span class="sa-fee-note">' + esc(line.net_text) + "</span>" + feeSpan + estSpan + "<span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>";
-    var segList = (a.segments || []).map(function (seg) {
+    return (a.segments || []).map(function (seg) {
       var diff = seg.params_diff_vs_prev ? SA.diffText(seg.params_diff_vs_prev, schema) : "";
       return "<li>第 " + esc(seg.segment) + " 段" + (diff ? " · " + esc(diff) : "") + "</li>";
     }).join("");
+  }
+  function legacyChartHtml() {
+    var a = detailState.account;
+    var emptyCurve = '<div class="ndbox sa-empty-curve" role="status"><span class="nd">暂无曲线数据</span></div>';
+    if (SA.engineOnboarding(a)) {
+      detailState.model = null;
+      return '<div class="ndbox sa-empty-curve" role="status" id="sa-onboard-curve"><span class="nd sa-onboard">' + esc(onboardPhrase()) + "</span></div>";
+    }
+    var series = detailSeries(a);
+    if (!(series && series.points && series.points.length)) {
+      detailState.model = null;
+      return emptyCurve;
+    }
+    var metric = series.metric === "equity_usd" ? "equity_usd" : "return_pct";
+    var model = SA.chartModel([series], { focusId: a.id, axis: "calendar", metric: metric, width: 720, height: 240 });
+    var drawn = (model.lines || []).some(function (l) { return l.points && l.points.length; });
+    if (!drawn) {
+      detailState.model = null;
+      return emptyCurve;
+    }
+    detailState.model = model;
+    return '<div class="sa-chart" id="sa-chart">' + chartSvg(model) + '<div class="sa-tip"></div></div>';
+  }
+  function detailChartHtml() {
+    var pnl = detailState.pnl;
+    var P = pnlLib();
+    var usePnl = !!(P && pnl && pnl.controls && pnl.status !== "unsupported");
+    if (!usePnl) return legacyChartHtml();
+    detailState.model = null;
+    if (pnl.status === "loading") return '<div class="sa-chart sa-pnl-loading" id="sa-chart" aria-busy="true"></div>';
+    if (pnl.status === "error") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(pnl.notice || P.ERROR_TEXT) + "</span></div>";
+    if (pnl.status === "blocked") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(pnl.notice || P.RANGE_TEXT) + "</span></div>";
+    if (pnl.status === "empty") return '<div class="ndbox sa-empty-curve" role="status"><span class="nd">' + esc(P.EMPTY_TEXT) + "</span></div>";
+    if (pnl.status === "ready" && pnl.model && pnl.model.drawn) return '<div class="sa-chart" id="sa-chart">' + P.svg(pnl.model) + '<div class="sa-tip"></div></div>';
+    return legacyChartHtml();
+  }
+  function rangeControlsHtml() {
+    var pnl = detailState.pnl;
+    var P = pnlLib();
+    if (!P || !pnl || !pnl.controls) return { gran: "", dates: "" };
+    var gname = pnl.granularity || "day";
+    function btn(v, label) {
+      return '<button type="button" data-act="granularity" data-v="' + v + '"' + (gname === v ? ' class="on"' : "") + ">" + label + "</button>";
+    }
+    var win = pnl.window || { from: "", to: "", min: "", today: "" };
+    var floor = win.min || "";
+    if (floor && win.from && win.from < floor) floor = "";
+    var minAttr = floor ? ' min="' + esc(floor) + '"' : "";
+    var maxAttr = win.today ? ' max="' + esc(win.today) + '"' : "";
+    return {
+      gran: '<div class="seg" role="tablist" aria-label="粒度">' + btn("day", "日") + btn("week", "周") + btn("month", "月") + btn("year", "年") + "</div>",
+      dates: '<div class="sa-dates"><input type="date" data-act="pnl-from" aria-label="开始日期" autocomplete="off" value="' + esc(win.from || "") + '"' + minAttr + maxAttr + '><span aria-hidden="true">–</span><input type="date" data-act="pnl-to" aria-label="结束日期" autocomplete="off" value="' + esc(win.to || "") + '"' + minAttr + maxAttr + "></div>"
+    };
+  }
+  function curveInnerHtml() {
+    var scope = detailState.scope;
+    var pnl = detailState.pnl;
+    var clip = pnl && pnl.status === "ready" && pnl.model && pnl.model.clip ? pnl.model.clip : "";
+    var fees = pnl && pnl.status === "ready" && pnl.model && pnl.model.feesNote ? pnl.model.feesNote : "";
+    var segList = segListHtml();
+    var controls = rangeControlsHtml();
+    return '<div class="sa-chartbar"><div class="sa-scopes"><div class="seg" role="tablist"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div>" + controls.gran + "</div>" + controls.dates + "</div>" + (clip ? '<p class="sa-clip" role="status">' + esc(clip) + "</p>" : "") + (fees ? '<p class="sa-fees" role="status">' + esc(fees) + "</p>" : "") + detailChartHtml() + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "");
+  }
+  function bindPnl(host, model) {
+    var svg = host.querySelector("svg");
+    var tip = host.querySelector(".sa-tip");
+    var P = pnlLib();
+    if (!svg || !tip || !P || !model) return;
+    function slotAt(ev) {
+      return P.slotIndex(ev, svg, model.slots);
+    }
+    function place(ev, i) {
+      if (i < 0 || !model.slots[i]) return;
+      tip.innerHTML = P.tooltipHtml(model.slots[i].tip);
+      var rect = svg.getBoundingClientRect();
+      var width = Math.min(240, Math.max(120, rect.width - 16));
+      var left = ev.clientX - rect.left + 12;
+      if (left + width > rect.width - 8) left = ev.clientX - rect.left - width - 12;
+      tip.style.left = Math.max(8, left) + "px";
+      tip.style.top = "12px";
+      tip.classList.add("on");
+    }
+    function hide() { tip.classList.remove("on"); }
+    svg.addEventListener("pointermove", function (ev) {
+      if (ev.pointerType === "touch") return;
+      place(ev, slotAt(ev));
+    });
+    svg.addEventListener("pointerleave", function (ev) {
+      if (ev.pointerType === "touch") return;
+      hide();
+    });
+    svg.addEventListener("pointerdown", function (ev) {
+      if (ev.pointerType !== "touch" && ev.pointerType !== "pen") return;
+      place(ev, slotAt(ev));
+    });
+    if (detailState._pnlDoc) document.removeEventListener("pointerdown", detailState._pnlDoc);
+    detailState._pnlDoc = function (ev) {
+      if (!host.isConnected) {
+        document.removeEventListener("pointerdown", detailState._pnlDoc);
+        return;
+      }
+      if (!host.contains(ev.target)) hide();
+    };
+    document.addEventListener("pointerdown", detailState._pnlDoc);
+  }
+  function bindDetailChart() {
+    var host = document.getElementById("sa-chart");
+    if (!host || !detailState) return;
+    var pnl = detailState.pnl;
+    if (pnl && pnl.status === "ready" && pnl.model && pnl.model.drawn) {
+      bindPnl(host, pnl.model);
+      return;
+    }
+    if (detailState.model) bindChart(host, detailState.model, function () {});
+  }
+  function detailSkeletonHtml() {
+    return '<div class="top"><h1>账户 <i class="sk m" aria-hidden="true"></i></h1></div><section class="card"><i class="sk xl"></i><i class="sk l" style="margin-top:12px"></i></section><section class="card"><i class="sk l"></i><i class="sk" style="margin-top:10px"></i></section>';
+  }
+  function accountMissingHtml() {
+    return '<div class="top"><h1>账户</h1></div><div class="ndbox"><span class="nd">找不到这个账户</span></div><a class="btn" href="' + esc(href("/account")) + '">返回账户列表</a>';
+  }
+  function isMissingAccount(e) {
+    return !!(e && (e.status === 404 || (e.body && e.body.error === "account_not_found")));
+  }
+  /* 详情顶部只组手续费 eqBlock。曲线由 legacyChartHtml / segListHtml 负责。 */
+  function detailFeeBlock(a, m, on) {
+    var line = SA.feeCopy(a, "metrics");
+    var equityText = line.equity_usd == null && m ? SA.formatUsd(m.equity_usd, false) : line.equity_text;
+    var pctText = a.segment_scope_empty ? "暂无" : line.pct_text;
+    var pctCls = a.segment_scope_empty ? "" : (line.pct_value > 0 ? "up" : line.pct_value < 0 ? "dn" : "");
+    var feeSpan = !line.estimated && line.fee_text ? "<span>" + esc(line.fee_text) + "</span>" : "";
+    var note = [];
+    if (line.paren_text) note.push(line.paren_text);
+    if (line.estimated) note.push("估算");
+    var tag = note.length ? '<span class="fee-tag">' + esc(note.join(" ")) + "</span>" : "";
+    if (on) {
+      return '<section class="card" id="sa-eq"><div class="sa-big sa-onboard">' + esc(onboardPhrase()) + '</div><div class="sa-sub"><span class="sa-onboard">' + esc(onboardPhrase()) + "</span><span>" + esc(line.card_fee_text) + "</span><span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>";
+    }
+    return '<section class="card" id="sa-eq"><div class="sa-big num">' + esc(equityText) + '</div><div class="sa-sub"><span class="' + pctCls + '">' + esc(pctText) + '</span><span class="fee-stack"><span>' + esc(line.net_plain) + "</span>" + tag + "</span>" + feeSpan + "<span>资金 " + esc(SA.formatUsd(a.capital_usd, false)) + "</span></div></section>";
+  }
+  function paintDetail() {
+    var mount = document.getElementById("sa-mount");
+    var a = detailState.account;
+    var m = a.metrics || {};
+    var act = SA.rowActions(a);
+    var schema = detailState.schema || [];
+    var flash = detailState.flash || [];
+    detailState.flash = [];
+    var on = SA.engineOnboarding(a);
+    var eqBlock = detailFeeBlock(a, m, on);
     var locked = !SA.paramsEditable(a);
     var fields = schema.map(function (p) { return fieldHtml(p, (a.params || {})[p.key]); }).join("");
     var legacyLine = act.legacy ? '<p class="sa-warn" id="sa-legacy" role="status">' + esc(act.note) + "</p>" : "";
-    mount.innerHTML = '<div class="top"><h1>' + esc(a.name) + '</h1>' + statusHtml(a) + '<a class="btn sm" href="' + esc(href("/account")) + '">全部账户</a></div>' + legacyLine + banner(flash, false) + '<div id="sa-err"></div>' + settleHtml(a) + rpcHtml(a) + eqBlock + '<section class="card" id="sa-curve"><div class="sa-chartbar"><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + ">只看当前分段</button></div></div>" + chart + '<p class="sa-note">' + esc(TWR) + "</p>" + (segList ? "<ul class='sa-note'>" + segList + "</ul>" : "") + "</section>" + '<section class="card" id="sa-params"><div class="hd"><h2>参数</h2>' + (locked ? '<span class="tag">只读</span>' : '<span class="tag or">可编辑</span>') + '</div>' + (act.lockHint && a.state === "running" ? '<div class="sa-warn">' + esc(act.lockHint) + "</div>" : "") + (act.note && !act.legacy ? '<div class="sa-warn">' + esc(act.note) + "</div>" : "") + '<form class="sa-form' + (locked ? " sa-lock" : "") + '" id="sa-edit">' + fields + "</form><div class='sa-ops' style='margin-top:12px'>" + opsHtml(a) + (locked ? "" : '<button type="button" class="btn pri" data-act="save-start">保存并启动</button>') + "</div></section>" + '<section class="card" id="sa-pos"><div class="hd"><h2>持仓</h2></div><div id="sa-pos-body"></div></section><section class="card" id="sa-trd"><div class="hd"><h2>成交</h2></div><div id="sa-trd-body"></div></section>';
+    mount.innerHTML = '<div class="top"><h1>' + esc(a.name) + '</h1>' + statusHtml(a) + '<a class="btn sm" href="' + esc(href("/account")) + '">全部账户</a></div>' + legacyLine + banner(flash, false) + '<div id="sa-err"></div>' + settleHtml(a) + rpcHtml(a) + eqBlock + '<section class="card" id="sa-curve">' + curveInnerHtml() + "</section>" + '<section class="card" id="sa-params"><div class="hd"><h2>参数</h2>' + (locked ? '<span class="tag">只读</span>' : '<span class="tag or">可编辑</span>') + '</div>' + (act.lockHint && a.state === "running" ? '<div class="sa-warn">' + esc(act.lockHint) + "</div>" : "") + (act.note && !act.legacy ? '<div class="sa-warn">' + esc(act.note) + "</div>" : "") + '<form class="sa-form' + (locked ? " sa-lock" : "") + '" id="sa-edit">' + fields + "</form><div class='sa-ops' style='margin-top:12px'>" + opsHtml(a) + (locked ? "" : '<button type="button" class="btn pri" data-act="save-start">保存并启动</button>') + "</div></section>" + '<section class="card" id="sa-pos"><div class="hd"><h2>持仓</h2></div><div id="sa-pos-body"></div></section><section class="card" id="sa-trd"><div class="hd"><h2>成交</h2></div><div id="sa-trd-body"></div></section>';
     if (locked) document.querySelectorAll("#sa-edit input,#sa-edit select").forEach(function (el) { el.disabled = true; });
-    var host = document.getElementById("sa-chart");
-    if (host && detailState.model) bindChart(host, detailState.model, function () {});
+    bindDetailChart();
     paintSide("positions");
     paintSide("trades");
   }
@@ -966,12 +1128,20 @@
     return '<article class="sa-acard"><b>' + esc(sideMarketLabel(item)) + '</b><div class="sa-meta">' + esc(item.side || "") + " · " + esc(SA.formatUsd(item.fill_usd, false)) + "</div></article>";
   }
   async function paintSide(kind) {
+    if (!detailState || !detailState.account) return;
+    var seq = detailSeq;
+    var accountId = detailState.account.id;
     var slot = detailState.sides[kind];
     var body = document.getElementById(kind === "positions" ? "sa-pos-body" : "sa-trd-body");
     if (!body) return;
     var page;
-    try { page = await fetchSide(detailState.account.id, kind, { limit: slot.pager.limit, cursor: SA.pagerCursor(slot.pager) }); }
-    catch (e) { body.innerHTML = banner([explain(e)], true); return; }
+    try { page = await fetchSide(accountId, kind, { limit: slot.pager.limit, cursor: SA.pagerCursor(slot.pager) }); }
+    catch (e) {
+      if (seq !== detailSeq) return;
+      body.innerHTML = banner([explain(e)], true);
+      return;
+    }
+    if (seq !== detailSeq || !detailState || !detailState.account || detailState.account.id !== accountId) return;
     if (!page) { body.innerHTML = '<div class="ndbox"><span class="nd">无数据</span><span>这个列表还没有返回。</span></div>'; return; }
     if (page.resetNote) slot.pager = SA.pagerInit(slot.pager.limit);
     slot.pager = SA.pagerRemember(slot.pager, page.paged ? page.next_cursor : null);
@@ -1006,7 +1176,7 @@
       body += '<tr><th colspan="' + ((d.table || []).length + 1) + '">' + esc(sec.label) + "</th></tr>" + sec.rows.map(tr).join("");
     });
     var axis = d.axis, metric = d.metric, scope = d.scope;
-    mount.innerHTML = '<div class="top"><h1>对比 · ' + (d.table || []).length + ' 个账户</h1><a class="btn sm" href="' + esc(href("/account")) + '">返回账户</a></div><div class="sa-chartbar"><div class="seg"><button type="button" data-act="metric" data-v="return_pct"' + (metric === "equity_usd" ? "" : ' class="on"') + '>收益率 %</button><button type="button" data-act="metric" data-v="equity_usd"' + (metric === "equity_usd" ? ' class="on"' : "") + '>绝对净值</button></div><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + '>只看当前分段</button></div><div class="seg"><button type="button" data-act="axis" data-v="elapsed"' + (axis === "calendar" ? "" : ' class="on"') + '>按运行时长</button><button type="button" data-act="axis" data-v="calendar"' + (axis === "calendar" ? ' class="on"' : "") + '>统一时间窗口</button></div></div><div class="sa-chart hero" id="sa-chart">' + compareChartHtml(model) + '</div><p class="sa-note">' + esc(TWR) + ' 分段竖线只画在当前选中的账户上，停在别的账户上时改画那一条。灰色区间是停止时段。</p><section class="card" id="sa-cmp"><div class="hd"><h2>参数与指标</h2><span class="tag">最多 4 行，不分页</span></div><div class="tw"><table>' + head + body + "</table></div><div class='sa-ops' style='margin-top:10px'>" + (d.table || []).map(function (r) { return '<button type="button" class="btn sm" data-act="drop" data-id="' + esc(r.account_id) + '">移除 ' + labeledName(r.name, r.archived) + "</button>"; }).join("") + "</div></section>";
+    mount.innerHTML = '<div class="top"><h1>对比 · ' + (d.table || []).length + ' 个账户</h1><a class="btn sm" href="' + esc(href("/account")) + '">返回账户</a></div><div class="sa-chartbar"><div class="seg"><button type="button" data-act="metric" data-v="return_pct"' + (metric === "equity_usd" ? "" : ' class="on"') + '>收益率 %</button><button type="button" data-act="metric" data-v="equity_usd"' + (metric === "equity_usd" ? ' class="on"' : "") + '>绝对净值</button></div><div class="seg"><button type="button" data-act="scope" data-v="all"' + (scope === "current_segment" ? "" : ' class="on"') + '>全程</button><button type="button" data-act="scope" data-v="current_segment"' + (scope === "current_segment" ? ' class="on"' : "") + '>只看当前分段</button></div><div class="seg"><button type="button" data-act="axis" data-v="elapsed"' + (axis === "calendar" ? "" : ' class="on"') + '>按运行时长</button><button type="button" data-act="axis" data-v="calendar"' + (axis === "calendar" ? ' class="on"' : "") + '>统一时间窗口</button></div></div><div class="sa-chart" id="sa-chart">' + compareChartHtml(model) + '</div><p class="sa-note">' + esc(TWR) + ' 分段竖线只画在当前选中的账户上，停在别的账户上时改画那一条。灰色区间是停止时段。</p><section class="card" id="sa-cmp"><div class="hd"><h2>参数与指标</h2><span class="tag">最多 4 行，不分页</span></div><div class="tw"><table>' + head + body + "</table></div><div class='sa-ops' style='margin-top:10px'>" + (d.table || []).map(function (r) { return '<button type="button" class="btn sm" data-act="drop" data-id="' + esc(r.account_id) + '">移除 ' + labeledName(r.name, r.archived) + "</button>"; }).join("") + "</div></section>";
     var host = document.getElementById("sa-chart");
     if (host && host.querySelector("svg")) bindChart(host, model, function (id) {
       if ((compareState.hover || "") === (id || "")) return;
@@ -1164,16 +1334,16 @@
       var n = Number(document.getElementById("sa-newcap").value);
       if (!isFinite(n) || n <= 0) { toast(SA.errorText("invalid_capital")); return; }
       try {
+        var capWarns = [];
         if (mockMode()) {
           var list = mockList();
           var item = list.filter(function (x) { return x.id === a.id; })[0];
           if (item) { item.capital_usd = n; item.current_segment = (item.current_segment || 1) + 1; saveMock(list); }
-          if (n > 50000) flashPush([SA.warningText("paper_over_allocated", { allocated_usd: n, limit_usd: 60000 })]);
         } else {
           var res = await api("/v1/accounts/" + encodeURIComponent(a.id), { method: "PATCH", body: { capital_usd: n } });
-          var warns = (res.warnings || []).map(function (w) { return SA.warningText(w.code, w); });
-          if (warns.length) flashPush(warns);
+          capWarns = (res && res.warnings) || [];
         }
+        flashCapitalNotice(a.account_type || "paper", capWarns, n, a.capital_usd);
         closeSheet();
         toast("资金已更新，新的一段已开始。");
         await refresh();
@@ -1202,8 +1372,9 @@
           saveMock(list);
         }
       } else {
-        await api("/v1/accounts/" + encodeURIComponent(a.id), { method: "PATCH", body: { params: params } });
-        await api("/v1/accounts/" + encodeURIComponent(a.id) + "/start", { method: "POST" });
+        var patched = await api("/v1/accounts/" + encodeURIComponent(a.id), { method: "PATCH", body: { params: params } });
+        var startedRun = await api("/v1/accounts/" + encodeURIComponent(a.id) + "/start", { method: "POST" });
+        flashCapitalNotice(a.account_type || "paper", [].concat((patched && patched.warnings) || [], (startedRun && startedRun.warnings) || []), null, null);
       }
       toast("已保存并启动，还是这个账户。");
       await refresh();
@@ -1215,15 +1386,7 @@
     var params = q();
     if (document.body.dataset.page === "compare") return loadCompare((params.get("ids") || "").split(",").filter(Boolean), compareState && compareState.data ? { axis: compareState.data.axis, metric: compareState.data.metric, scope: compareState.data.scope } : { axis: "elapsed", metric: "return_pct", scope: "all" });
     if (params.get("s") && !params.get("id") && !params.get("new") && document.body.dataset.page === "account") return openNamedAccount(params.get("s"));
-    if (params.get("id") && document.body.dataset.page === "account") {
-      var rawId = params.get("id");
-      if (!mockMode() && window.PM && PM.looksLikeAccountUuid && !PM.looksLikeAccountUuid(rawId)) {
-        if (params.get("s")) return openNamedAccount(params.get("s"));
-        return loadGroups(filtersFromQuery());
-      }
-      if (params.get("s") && window.PM && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
-      return openDetail(rawId);
-    }
+    if (params.get("id") && document.body.dataset.page === "account") return openAccountByRef(params.get("id"));
     if (document.body.dataset.page === "account") return loadGroups(filtersFromQuery());
   }
   async function onAct(ev) {
@@ -1273,13 +1436,25 @@
         return loadCompare(ids2, opt);
       }
       if (act === "scope" && detailState) {
+        var seqScope = ++detailSeq;
         detailState.scope = t.getAttribute("data-v");
         var idKey = SA.presentText(detailState.account.id) || SA.presentText(detailState.account.account_id);
         var strategyKey = SA.presentText(detailState.account.strategy);
         var openedAsStrategy = !!detailState.viaStrategy && !!idKey && idKey === strategyKey;
         var via = openedAsStrategy || (!idKey && !!detailState.viaStrategy);
         var key = idKey || strategyKey;
-        detailState.account = await fetchAccount(key, detailState.scope, via);
+        var mountScope = document.getElementById("sa-mount");
+        if (mountScope) mountScope.innerHTML = detailSkeletonHtml();
+        try {
+          var nextAccount = await fetchAccount(key, detailState.scope, via);
+          if (seqScope !== detailSeq || !detailState) return;
+          detailState.account = nextAccount;
+        } catch (e) {
+          if (seqScope !== detailSeq) return;
+          if (isMissingAccount(e) && mountScope) { mountScope.innerHTML = accountMissingHtml(); return; }
+          toast(explain(e));
+          return;
+        }
         detailState.sides.positions.pager = SA.pagerInit(detailState.sides.positions.pager.limit);
         detailState.sides.trades.pager = SA.pagerInit(detailState.sides.trades.pager.limit);
         paintDetail();
@@ -1442,14 +1617,59 @@
     return openDetail(id, mockMode() && id === label);
   }
 
+  /* ?id= 不是 uuid 时，先用名字在列表里对 uuid。对上再打开；对不上才说找不到。mock 的 id 就是名字。 */
+  async function openAccountByRef(rawId) {
+    var uuidLike = window.PM && PM.looksLikeAccountUuid && PM.looksLikeAccountUuid(rawId);
+    if (mockMode() || uuidLike) {
+      if (q().get("s") && uuidLike && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
+      return openDetail(rawId);
+    }
+    var id = "";
+    try {
+      var rows = await collectAccounts(false);
+      id = namedAccountId(rawId, rows);
+      if (!id) {
+        try { id = namedAccountId(rawId, await collectAccounts(true)); }
+        catch (archivedErr) { id = ""; }
+      }
+    } catch (e) {
+      var mountErr = takeOver();
+      if (mountErr) mountErr.innerHTML = banner([explain(e)], true) + '<a class="btn" href="' + esc(href("/account")) + '">返回账户列表</a>';
+      return;
+    }
+    if (!id) {
+      var missing = takeOver();
+      if (missing) missing.innerHTML = accountMissingHtml();
+      document.title = "账户 · Wakeloom";
+      return;
+    }
+    try {
+      if (window.PM && PM.looksLikeAccountUuid && PM.looksLikeAccountUuid(id) && history && history.replaceState) {
+        var next = new URLSearchParams(location.search || "");
+        if (next.get("id") !== id) {
+          next.set("id", id);
+          next.delete("s");
+          var qs = next.toString();
+          history.replaceState(null, "", (location.pathname || "/account") + (qs ? "?" + qs : "") + (location.hash || ""));
+        }
+      }
+    } catch (e2) {}
+    return openDetail(id);
+  }
+
   async function openDetail(id, viaStrategy) {
+    var seq = ++detailSeq;
+    detailState = null;
     var mount = takeOver();
-    mount.innerHTML = "<p class='sa-note'>正在读取账户…</p>";
+    mount.innerHTML = detailSkeletonHtml();
+    document.title = "账户 · Wakeloom";
     try {
       var account = await fetchAccount(id, q().get("scope") === "current_segment" ? "current_segment" : "all", !!viaStrategy);
+      if (seq !== detailSeq) return;
       var schema = [];
       var sid = SA.presentText(account.strategy_id);
       if (sid) { try { var st = await fetchStrategy(sid); schema = st.params_schema || []; } catch (e) {} }
+      if (seq !== detailSeq) return;
       detailState = {
         account: account,
         viaStrategy: !!viaStrategy || SA.isLegacyAccount(account),
@@ -1464,7 +1684,8 @@
       document.title = account.name + " · 账户 · Wakeloom";
       paintDetail();
     } catch (e) {
-      mount.innerHTML = banner([explain(e)], true) + '<a class="btn" href="' + esc(href("/account")) + '">返回账户</a>';
+      if (seq !== detailSeq) return;
+      mount.innerHTML = isMissingAccount(e) ? accountMissingHtml() : (banner([explain(e)], true) + '<a class="btn" href="' + esc(href("/account")) + '">返回账户列表</a>');
     }
   }
 
@@ -1472,15 +1693,7 @@
     detailState = null;
     var params = q();
     if (params.get("new")) return paintLaunch(params.get("new"), params.get("from"));
-    if (params.get("id")) {
-      var rawId = params.get("id");
-      if (!mockMode() && window.PM && PM.looksLikeAccountUuid && !PM.looksLikeAccountUuid(rawId)) {
-        if (params.get("s")) return openNamedAccount(params.get("s"));
-        return loadGroups(filtersFromQuery());
-      }
-      if (params.get("s") && window.PM && PM.replaceNamedAccountLocation) PM.replaceNamedAccountLocation(rawId);
-      return openDetail(rawId);
-    }
+    if (params.get("id")) return openAccountByRef(params.get("id"));
     if (params.get("s")) return openNamedAccount(params.get("s"));
     takeOver();
     document.title = "账户 · Wakeloom 织迹";

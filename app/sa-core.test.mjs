@@ -25,8 +25,52 @@ for (const code of codes) {
 }
 
 assert.match(SA.errorText("insufficient_wallet_balance", { available_usd: 100, requested_usd: 400, allocated_usd: 900 }), /可用/);
+assert.match(SA.errorText("insufficient_wallet_balance", { available_usd: 12.5 }), /\$12\.50/);
+const paperBuilt = SA.mockSummary("paper", { allocated_usd: 80000, paper_limit_usd: 60000, over_allocated: true });
+assert.equal(paperBuilt.allocated_usd, 80000);
+assert.equal(paperBuilt.paper_limit_usd, 60000);
+assert.equal(paperBuilt.over_allocated, true);
+const paperBare = SA.mockSummary("paper");
+assert.equal(paperBare.paper_limit_usd == null, true);
+assert.equal(paperBare.allocated_usd, null);
+assert.equal(/60000|80000/.test(JSON.stringify(paperBare)), false);
 assert.match(SA.errorText("params_locked"), /先停止/);
 assert.match(SA.warningText("paper_over_allocated", { allocated_usd: 80000, limit_usd: 60000 }), /不会拦截/);
+
+const paperOver = { mode: "paper", over_allocated: true, allocated_usd: 80000, paper_limit_usd: 60000, wallet_available_usd: null };
+const paperPage = SA.allocationNoticeText(paperOver, [
+  { code: "paper_over_allocated", allocated_usd: 80000, limit_usd: 60000 },
+  { code: "engine_delay" }
+]);
+assert.equal(/超额/.test(paperPage), false);
+assert.equal(/超过参考额度/.test(paperPage), false);
+assert.match(paperPage, /engine_delay/);
+assert.equal(SA.warningLines([{ code: "paper_over_allocated", allocated_usd: 90000, limit_usd: 60000 }]).join("|"), "");
+assert.equal(SA.warningLines([{ code: "paper_over_allocated" }, { code: "rpc_slow" }]).join("|"), "rpc_slow");
+assert.equal(SA.summaryOverWarning(paperOver), "");
+assert.equal(SA.summaryOverWarning({ over_allocated: true, allocated_usd: 1 }), "");
+assert.match(SA.summaryOverWarning({ mode: "wallet", over_allocated: true, allocated_usd: 50, wallet_available_usd: 10 }), /超额/);
+assert.equal(/超过参考额度/.test(SA.summaryOverWarning({ mode: "wallet", over_allocated: true, wallet_available_usd: 10 })), false);
+assert.equal(SA.summaryOverWarning({ mode: "wallet", over_allocated: false, wallet_available_usd: 1 }), "");
+assert.equal(SA.allocationWarning({ account_type: "paper", requested_usd: 999999, wallet_available_usd: 1 }), "");
+assert.equal(SA.allocationWarning({ mode: "paper", requested_usd: 999999 }), "");
+assert.equal(SA.allocationWarning({ account_type: "wallet", requested_usd: 80 }), "");
+assert.equal(SA.allocationWarning({ account_type: "wallet", requested_usd: 40, wallet_available_usd: 100 }), "");
+assert.match(SA.allocationWarning({ account_type: "wallet", requested_usd: 80, wallet_available_usd: 10 }), /超额/);
+assert.equal(SA.allocationWarning({ account_type: "wallet", requested_usd: 80, previous_usd: 70, wallet_available_usd: 20 }), "");
+assert.match(SA.allocationWarning({ account_type: "wallet", requested_usd: 80, previous_usd: 50, wallet_available_usd: 20 }), /超额/);
+const saSrc = fs.readFileSync(new URL("./sa.js", import.meta.url), "utf8");
+assert.equal(/60000|50000/.test(saSrc), false);
+const summaryFn = saSrc.slice(saSrc.indexOf("function summaryHtml"), saSrc.indexOf("function filterBar"));
+assert.equal(summaryFn.includes("参考额度"), false);
+assert.equal(summaryFn.includes("不拦截"), false);
+const mockFn = code.slice(code.indexOf("function mockSummary"), code.indexOf("function mockFilter"));
+assert.equal(/60000|80000/.test(mockFn), false);
+assert.match(mockFn, /opts\.paper_limit_usd/);
+assert.match(mockFn, /opts\.allocated_usd/);
+assert.equal(saSrc.includes("paper_over_allocated"), false);
+assert.match(saSrc, /SA\.warningLines\(/);
+assert.match(saSrc, /SA\.summaryOverWarning\(/);
 
 assert.equal(SA.isStrategyCatalog({ items: [{ strategy_id: "copy" }], next_cursor: null, total: 1 }), true);
 assert.equal(SA.isStrategyCatalog({ strategies: [{ name: "paper" }] }), false);

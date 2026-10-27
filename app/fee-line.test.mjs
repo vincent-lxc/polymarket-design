@@ -86,82 +86,94 @@ function loadApi() {
 }
 
 function readFixture(name) {
-  return JSON.parse(fs.readFileSync(new URL("./fixtures/fee-line/" + name, import.meta.url), "utf8"));
+  return JSON.parse(fs.readFileSync(new URL("../test/fixtures/fee-line/" + name, import.meta.url), "utf8"));
 }
 
 const pm = loadApi();
 const PM = pm.PM;
-const overview = readFixture("paper20000-overview.json");
-const list = readFixture("paper20000-list.json");
-const paperUuid = readFixture("paper20000-uuid-detail.json");
-const feesUuid = readFixture("paper20000fees-uuid-detail.json");
-const paperLegacy = readFixture("paper20000-legacy-detail.json").account;
-const feesLegacy = readFixture("paper20000fees-legacy-detail.json").account;
-const paperList = list.items.find((a) => a.name === "paper20000");
-const feesList = list.items.find((a) => a.name === "paper20000fees");
-const paperRow = overview.accounts.find((a) => a.strategy === "paper20000");
-const feesRow = overview.accounts.find((a) => a.strategy === "paper20000fees");
+const overview = readFixture("demo-overview.json");
+const list = readFixture("demo-list.json");
+const paperUuid = readFixture("demo-alpha-uuid.json");
+const feesUuid = readFixture("demo-beta-uuid.json");
+const paperLegacy = readFixture("demo-alpha-legacy.json").account;
+const feesLegacy = readFixture("demo-beta-legacy.json").account;
+const paperList = list.items.find((a) => a.name === paperLegacy.strategy);
+const feesList = list.items.find((a) => a.name === feesLegacy.strategy);
+const paperRow = overview.accounts.find((a) => a.strategy === paperList.name);
+const feesRow = overview.accounts.find((a) => a.strategy === feesList.name);
 
-const NET = "净收益 +$5,889.41（已扣估算手续费 $1,997.46）";
-const EQ = "$27,886.86";
-const PCT = "+29.45%";
-const FEES_NET = "−$1,801.11";
-const FEES_PCT = "−9.01%";
+function money(n, sign) { return SA.formatUsd(n, !!sign); }
+function rateOf(n) {
+  if (n == null || n === "" || !isFinite(Number(n))) return "—";
+  const v = Number(n) * 100;
+  const sign = v > 0 ? "+" : v < 0 ? "−" : "";
+  return sign + Math.abs(v).toFixed(2) + "%";
+}
+function bagOf(source, place) { return place === "metrics" ? source.metrics : source; }
+function pctKey(place) { return place === "metrics" ? "return_pct" : "net_pct"; }
+function paperNet(bag) {
+  return "净收益 " + money(bag.net_pnl_usd, true) + "（已扣估算手续费 " + money(bag.fees_uncharged_usd, false) + "）";
+}
+function escRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
-function assertPaper(copy, place) {
+function assertPaper(copy, source, place) {
+  const bag = bagOf(source, place);
   assert.equal(copy.place, place);
   assert.equal(copy.estimated, true);
-  assert.equal(copy.equity_text, EQ);
-  assert.equal(copy.pct_text, PCT);
-  assert.equal(copy.net_text, NET);
+  assert.equal(copy.equity_text, money(bag.equity_usd, false));
+  assert.equal(copy.pct_text, rateOf(bag[pctKey(place)]));
+  assert.equal(copy.net_text, paperNet(bag));
   assert.equal(copy.fee_text, "");
   assert.equal(copy.card_fee_text, "估算");
-  assert.equal(copy.net_text.includes("9,999"), false);
+  assert.equal(copy.net_text.includes(money(9999, false)), false);
   assert.equal(copy.net_text.includes("fees_estimated_usd"), false);
 }
 
-function assertFees(copy) {
+function assertFees(copy, source, place) {
+  const bag = bagOf(source, place);
   assert.equal(copy.estimated, false);
   assert.equal(copy.show_paren, false);
-  assert.equal(copy.net_text, "净收益 " + FEES_NET);
-  assert.equal(copy.pct_text, FEES_PCT);
-  assert.equal(copy.fee_text, "手续费 $1,020.94");
+  assert.equal(copy.net_text, "净收益 " + money(bag.net_pnl_usd, true));
+  assert.equal(copy.pct_text, rateOf(bag[pctKey(place)]));
+  assert.equal(copy.fee_text, "手续费 " + money(bag.fees_usd, false));
   assert.equal(copy.net_text.includes("估算"), false);
   assert.equal(copy.net_text.includes("已扣估算手续费"), false);
   assert.equal(copy.fee_text.includes("估算"), false);
   assert.equal(copy.card_fee_text.includes("估算"), false);
 }
 
-assertPaper(SA.feeCopy(paperList, "metrics"), "metrics");
+assertPaper(SA.feeCopy(paperList, "metrics"), paperList, "metrics");
 assert.equal(SA.feeCopy(paperList, "metrics").pct_field, "return_pct");
 assert.equal(SA.feeCopy(paperList, "metrics").pct_value, paperList.metrics.return_pct);
-assertPaper(SA.feeCopy(paperUuid, "metrics"), "metrics");
-assertFees(SA.feeCopy(feesList, "metrics"));
-assertFees(SA.feeCopy(feesUuid, "metrics"));
+assertPaper(SA.feeCopy(paperUuid, "metrics"), paperUuid, "metrics");
+assertFees(SA.feeCopy(feesList, "metrics"), feesList, "metrics");
+assertFees(SA.feeCopy(feesUuid, "metrics"), feesUuid, "metrics");
 assert.equal(SA.feeCopy(feesList, "metrics").net_text.includes("$0"), false);
 
-assertPaper(SA.feeCopy(paperRow, "overview"), "overview");
+assertPaper(SA.feeCopy(paperRow, "overview"), paperRow, "overview");
 assert.equal(SA.feeLine(paperRow, "overview").pct_field, "net_pct");
 assert.equal(SA.feeLine(paperRow, "overview").pct_value, paperRow.net_pct);
 assert.equal(SA.feeLine(paperRow, "overview").pct_value === (paperRow.equity_usd - paperRow.capital_usd) / paperRow.capital_usd, false);
-assertFees(SA.feeCopy(feesRow, "overview"));
-assertPaper(SA.feeCopy(paperLegacy, "legacy"), "legacy");
+assertFees(SA.feeCopy(feesRow, "overview"), feesRow, "overview");
+assertPaper(SA.feeCopy(paperLegacy, "legacy"), paperLegacy, "legacy");
 assert.equal(SA.feeLine(paperLegacy, "legacy").pct_field, "net_pct");
-assertFees(SA.feeCopy(feesLegacy, "legacy"));
+assertFees(SA.feeCopy(feesLegacy, "legacy"), feesLegacy, "legacy");
 
 const totals = overview.totals;
+const headMoney = money(totals.net_pnl_usd, true);
+const headRate = rateOf(totals.net_pct);
 assert.equal(totals.fees_estimated, true);
-assert.equal(PM.overviewHeadline(totals), "净收益 +$10,150.68（含估算手续费） · +7.25%");
+assert.equal(PM.overviewHeadline(totals), `净收益 ${headMoney}（含估算手续费） · ${headRate}`);
 assert.equal(PM.overviewHeadline(totals).includes("已扣估算手续费"), false);
-assert.equal(PM.overviewHeadline(totals).includes("1,997.46"), false);
-assert.equal(PM.overviewHeadline(totals).includes("6,913.88"), false);
+assert.equal(PM.overviewHeadline(totals).includes(money(totals.fees_uncharged_usd, false)), false);
+assert.equal(PM.overviewHeadline(totals).includes(money(totals.fees_usd, false)), false);
 assert.equal(PM.feeLine(totals, "overview").pct_value, totals.net_pct);
 assert.equal(PM.feeLine(totals, "overview").net_pnl_usd, totals.net_pnl_usd);
 
 const totalsOff = Object.assign({}, totals, { fees_estimated: false });
 assert.equal(PM.overviewHeadline(totalsOff).includes("含估算手续费"), false);
 assert.equal(PM.overviewHeadline(totalsOff).includes("估算"), false);
-assert.match(PM.overviewHeadline(totalsOff), /扣费净盈亏 \+\$10,150\.68 · \+7\.25%/);
+assert.equal(PM.overviewHeadline(totalsOff), `扣费净盈亏 ${headMoney} · ${headRate}`);
 
 const totalsMissing = Object.assign({}, totals);
 delete totalsMissing.fees_estimated;
@@ -170,21 +182,27 @@ assert.equal(PM.overviewHeadline(totalsMissing).includes("估算"), false);
 assert.match(PM.overviewHeadline(totalsMissing), /扣费净盈亏/);
 
 const paperCell = PM.overviewNetCell(paperRow);
-assert.match(paperCell.html, /\+\$5,889\.41/);
-assert.match(paperCell.html, /已扣估算手续费 \$1,997\.46/);
+assert.match(paperCell.html, new RegExp(escRe(money(paperRow.net_pnl_usd, true))));
+assert.match(paperCell.html, new RegExp(escRe("已扣估算手续费 " + money(paperRow.fees_uncharged_usd, false))));
+assert.match(paperCell.html, /fee-tag/);
 assert.match(paperCell.html, /估算/);
-assert.equal(paperCell.pct, PCT);
-assert.equal(paperCell.html.includes("39.4"), false);
+assert.equal(paperCell.pct, rateOf(paperRow.net_pct));
+const rowTrap = SA.formatPct((paperRow.equity_usd - paperRow.capital_usd) / paperRow.capital_usd);
+if (rowTrap !== paperCell.pct) assert.equal(paperCell.html.includes(rowTrap), false);
 const feesCell = PM.overviewNetCell(feesRow);
-assert.match(feesCell.html, /−\$1,801\.11/);
-assert.equal(feesCell.pct, FEES_PCT);
+assert.match(feesCell.html, new RegExp(escRe(money(feesRow.net_pnl_usd, true))));
+assert.equal(feesCell.pct, rateOf(feesRow.net_pct));
 assert.equal(feesCell.html.includes("估算"), false);
 assert.equal(feesCell.html.includes("已扣估算手续费"), false);
 
 const legacy = PM.legacyFeeSpan(paperLegacy);
-assert.match(legacy, /净收益 \+\$5,889\.41（已扣估算手续费 \$1,997\.46） · \+29\.45% · 估算/);
+assert.match(legacy, new RegExp(escRe("净收益 " + money(paperLegacy.net_pnl_usd, true) + " · " + rateOf(paperLegacy.net_pct))));
+assert.match(legacy, /fee-tag/);
+assert.match(legacy, new RegExp(escRe("已扣估算手续费 " + money(paperLegacy.fees_uncharged_usd, false))));
+assert.match(legacy, /估算/);
 const legacyFees = PM.legacyFeeSpan(feesLegacy);
-assert.match(legacyFees, /扣费净盈亏 −\$1,801\.11 · −9\.01%/);
+assert.match(legacyFees, new RegExp(escRe("净收益 " + money(feesLegacy.net_pnl_usd, true) + " · " + rateOf(feesLegacy.net_pct))));
+assert.equal(legacyFees.includes("扣费净盈亏"), false);
 assert.equal(legacyFees.includes("估算"), false);
 assert.equal(legacyFees.includes("已扣估算手续费"), false);
 
@@ -194,7 +212,7 @@ assert.equal(PM.overviewHeadline(quiet).includes("估算"), false);
 assert.match(PM.overviewHeadline(quiet), /扣费净盈亏/);
 assert.match(PM.overviewHeadline(quiet), /\+\$2\.00/);
 
-const bare = { fees_estimated: true, equity_usd: 27886.86, capital_usd: 20000, net_pct: 0.2944702840000014 };
+const bare = { fees_estimated: true, equity_usd: paperRow.equity_usd, capital_usd: paperRow.capital_usd, net_pct: paperRow.net_pct };
 assert.equal(PM.feeLine(bare, "overview").net_pnl_usd, null);
 assert.equal(PM.overviewHeadline(bare).includes("$0"), false);
 assert.match(PM.overviewHeadline(bare), /净收益 <span class="na">—<\/span>（含估算手续费）/);
@@ -214,25 +232,36 @@ const trap = {
   }
 };
 const trapped = SA.feeCopy(trap, "metrics");
-assert.equal(trapped.net_text, NET);
-assert.equal(trapped.net_text.includes("9,999"), false);
-assert.equal(trapped.net_text.includes("312"), false);
-assert.equal(SA.feeCopy({ metrics: { fees_estimated: "true", fees_uncharged_usd: 1997.46, net_pnl_usd: 1, return_pct: 0.1 } }, "metrics").estimated, false);
-assert.equal(SA.feeCopy({ metrics: { fees_estimated: 1, fees_uncharged_usd: 1997.46, net_pnl_usd: 1, return_pct: 0.1 } }, "metrics").estimated, false);
+assert.equal(trapped.net_text, paperNet(paperList.metrics));
+assert.equal(trapped.net_text.includes(money(9999, false)), false);
+assert.equal(trapped.net_text.includes(money(312, false)), false);
+assert.equal(SA.feeCopy({ metrics: { fees_estimated: "true", fees_uncharged_usd: paperList.metrics.fees_uncharged_usd, net_pnl_usd: 1, return_pct: 0.1 } }, "metrics").estimated, false);
+assert.equal(SA.feeCopy({ metrics: { fees_estimated: 1, fees_uncharged_usd: paperList.metrics.fees_uncharged_usd, net_pnl_usd: 1, return_pct: 0.1 } }, "metrics").estimated, false);
 
 const noUncharged = SA.feeCopy({
-  metrics: { equity_usd: 27886.86, net_pnl_usd: 5889.41, return_pct: 0.294470284, fees_estimated: true, fees_estimated_usd: 1997.46 }
+  metrics: {
+    equity_usd: paperList.metrics.equity_usd,
+    net_pnl_usd: paperList.metrics.net_pnl_usd,
+    return_pct: paperList.metrics.return_pct,
+    fees_estimated: true,
+    fees_estimated_usd: paperList.metrics.fees_uncharged_usd
+  }
 }, "metrics");
 assert.equal(noUncharged.show_paren, false);
-assert.equal(noUncharged.net_text, "净收益 +$5,889.41");
+assert.equal(noUncharged.net_text, "净收益 " + money(paperList.metrics.net_pnl_usd, true));
 assert.equal(noUncharged.net_text.includes("（"), false);
 assert.equal(noUncharged.net_text.includes("$0"), false);
 assert.equal(noUncharged.card_fee_text, "估算");
 
 const noNet = SA.feeCopy({
-  metrics: { equity_usd: 27886.86, return_pct: 0.294470284, fees_estimated: true, fees_uncharged_usd: 1997.46 }
+  metrics: {
+    equity_usd: paperList.metrics.equity_usd,
+    return_pct: paperList.metrics.return_pct,
+    fees_estimated: true,
+    fees_uncharged_usd: paperList.metrics.fees_uncharged_usd
+  }
 }, "metrics");
-assert.equal(noNet.net_text, "净收益 —（已扣估算手续费 $1,997.46）");
+assert.equal(noNet.net_text, "净收益 —（已扣估算手续费 " + money(paperList.metrics.fees_uncharged_usd, false) + "）");
 assert.equal(SA.feeCopy({ metrics: { equity_usd: 1, net_pnl_usd: 1, fees_estimated: true, fees_uncharged_usd: 1 } }, "metrics").pct_text, "—");
 assert.equal(SA.feeCopy({ fees_estimated: true, net_pnl_usd: 1, return_pct: 0.1 }, "metrics").net_pnl_usd, null);
 
@@ -248,18 +277,52 @@ const view = {
 await PM.renderOverview(view);
 const sub = pm.store["#ov-sub"].innerHTML;
 const eq = pm.store["#ov-eq"].innerHTML;
-assert.match(eq, /\$152,148\.14/);
-assert.match(sub, /净收益 \+\$10,150\.68（含估算手续费） · \+7\.25%/);
+const eqSum = overview.accounts.reduce((s, a) => s + (a.equity_usd || 0), 0);
+const capSum = overview.accounts.reduce((s, a) => s + (a.capital_usd || 0), 0);
+assert.match(eq, new RegExp(escRe(money(eqSum, false))));
+assert.match(sub, new RegExp(escRe(`净收益 ${headMoney} · ${headRate}`)));
+assert.match(sub, /fee-tag">（含估算手续费）/);
 assert.equal(sub.includes("已扣估算手续费"), false);
-assert.equal(sub.includes("8.68"), false);
+const totalTrap = rateOf((eqSum - capSum) / capSum);
+if (totalTrap !== headRate) assert.equal(sub.includes(totalTrap), false);
 const table = pm.store["#ov-accts"]._table.innerHTML;
-assert.match(table, /已扣估算手续费 \$1,997\.46/);
-assert.match(table, /\+29\.45%/);
-assert.match(table, /\$27,886\.86/);
-assert.match(table, /−\$1,801\.11/);
-assert.match(table, /−9\.01%/);
+assert.match(table, new RegExp(escRe("已扣估算手续费 " + money(paperRow.fees_uncharged_usd, false))));
+assert.match(table, new RegExp(escRe(rateOf(paperRow.net_pct))));
+assert.match(table, new RegExp(escRe(money(paperRow.equity_usd, false))));
+assert.match(table, new RegExp(escRe(money(feesRow.net_pnl_usd, true))));
+assert.match(table, new RegExp(escRe(rateOf(feesRow.net_pct))));
 
 const banned = /待建|校准中|S0|未命名|示意/;
-assert.equal(banned.test(NET + PM.overviewHeadline(totals) + legacy + legacyFees), false);
+assert.equal(banned.test(paperNet(paperList.metrics) + PM.overviewHeadline(totals) + legacy + legacyFees), false);
+
+const fixtureDir = new URL("../test/fixtures/fee-line/", import.meta.url);
+const fixtureNames = fs.readdirSync(fixtureDir).filter((name) => name.endsWith(".json"));
+assert.deepEqual(fixtureNames.sort(), [
+  "demo-alpha-legacy.json",
+  "demo-alpha-uuid.json",
+  "demo-beta-legacy.json",
+  "demo-beta-uuid.json",
+  "demo-list.json",
+  "demo-overview.json"
+]);
+for (const name of fixtureNames) {
+  const text = fs.readFileSync(new URL(name, fixtureDir), "utf8");
+  assert.ok(text.length < 25000, name);
+  const addrs = text.match(/0x[0-9a-fA-F]+/g) || [];
+  assert.ok(addrs.length > 0, name);
+  for (const addr of addrs) assert.equal(addr, "0x0000000000000000000000000000000000000001");
+  assert.equal(/paper20000|7cd31570|d9e9f8b4|2026-10-24|Umraniye|76ers/.test(text), false, name);
+}
+assert.equal(fs.existsSync(new URL("./fixtures/fee-line", import.meta.url)), false);
+const ignore = fs.readFileSync(new URL("./.assetsignore", import.meta.url), "utf8");
+for (const line of ["fixtures/", "*.test.mjs", "*.test.js", "*.md"]) assert.equal(ignore.includes(line), true, line);
+const apiSrc = fs.readFileSync(new URL("./api.js", import.meta.url), "utf8");
+const saSrc = fs.readFileSync(new URL("./sa.js", import.meta.url), "utf8");
+assert.equal(apiSrc.includes("利润归属"), false);
+assert.equal(saSrc.includes("return_pct * 0.35"), false);
+assert.equal(saSrc.includes("sa-chart hero"), false);
+assert.equal(saSrc.includes("function detailFeeBlock"), true);
+assert.equal(saSrc.includes("function legacyChartHtml"), true);
+assert.equal(saSrc.includes("function segListHtml"), true);
 
 console.log("fee line tests ok");
