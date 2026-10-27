@@ -164,21 +164,21 @@ for (const html of [ov, cfg, hl]) {
   assert.equal(html.includes("心跳 10-21 12:40"), false);
   assert.match(html, /pending-metrics/);
 }
-assert.match(ov, /api\.js\?v=mcard/);
-assert.match(ov, /app\.css\?v=mcard/);
-assert.match(ov, /share\.js\?v=p0fe3/);
+assert.match(ov, /api\.js\?v=p39/);
+assert.match(ov, /app\.css\?v=p39/);
+assert.match(ov, /share\.js\?v=p39/);
 const accountHtml = fs.readFileSync(new URL("./account.html", import.meta.url), "utf8");
-assert.match(accountHtml, /api\.js\?v=mcard/);
-assert.match(accountHtml, /app\.css\?v=mcard/);
+assert.match(accountHtml, /api\.js\?v=p39/);
+assert.match(accountHtml, /app\.css\?v=p39/);
 for (const html of [cfg, hl]) {
-  assert.match(html, /api\.js\?v=p0fe3/);
-  assert.match(html, /app\.css\?v=p0fe3/);
+  assert.match(html, /api\.js\?v=p39/);
+  assert.match(html, /app\.css\?v=p39/);
 }
 assert.match(ov, /id="ov-range"/);
 assert.match(ov, /data-range="1h"/);
 assert.match(ov, /data-range="7d"/);
 assert.match(ov, /data-shell="1"/);
-assert.match(ov, /share\.js\?v=p0fe3/);
+assert.match(ov, /share\.js\?v=p39/);
 assert.match(share, /PMShare/);
 assert.match(share, /D\.live!=="1"/);
 assert.match(api, /\/v1\/overview\?range=/);
@@ -264,7 +264,7 @@ assert.match(sa, /id="sa-newcap" type="number"/);
 assert.match(sa, /numeric \? ' type="number"'/);
 for (const page of ["account.html", "compare.html", "leaders.html", "markets.html", "strategies.html"]) {
   const html = fs.readFileSync(new URL("./" + page, import.meta.url), "utf8");
-  assert.match(html, /sa\.js\?v=p0fe4/);
+  assert.match(html, /sa\.js\?v=p39/);
 }
 
 console.log("p0 shell tests ok");

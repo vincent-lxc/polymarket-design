@@ -266,7 +266,7 @@ assert.match(html, /我方对他的累计盈亏/);
 assert.match(html, /他近期输赢/);
 assert.match(html, /data-n="20"/);
 assert.match(html, /data-k="share" hidden/);
-assert.match(html, /title="占所有赚钱 leader 盈利之和，未扣估算手续费"/);
+assert.match(html, /title="占所有赚钱 leader 盈利之和，未扣手续费"/);
 assert.doesNotMatch(html, /已扣估算手续费/);
 assert.match(html, /title="已跟 \/ 信号"/);
 assert.match(html, /class="lbl-note">已跟 \/ 信号</);
@@ -275,7 +275,7 @@ for (const name of ["leader-5c1e.html", "leader-91d4.html", "leader-avalon.html"
   const wire = fs.readFileSync(new URL("./" + name, import.meta.url), "utf8");
   assert.doesNotMatch(wire, /他近 N 笔|N=20|跟单率（已跟/, name);
   assert.match(wire, /他近期输赢/, name);
-  assert.match(wire, /未扣估算手续费/, name);
+  assert.match(wire, /未扣手续费/, name);
   assert.match(wire, /class="lbl-note">已跟 \/ 信号</, name);
 }
 assert.match(html, /他的交易 · 我方镜像/);

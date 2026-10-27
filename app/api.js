@@ -2120,14 +2120,16 @@ function recentWindowTitle(n, who){
   if(known) return "他近 "+rounded+" 笔输赢";
   return who==="overview"?"近期输赢":"他近期输赢";
 }
-/* 字段名暂按 pnl.fees_deducted。缺字段或不是 true 都算未扣。占比和合计共用这一句。 */
-function leaderFeesDeducted(detail){
+/* 优先 pnl.fees_deducted。缺字段或 null 才看 pnl.profit_share_basis。占比和合计共用这一句。 */
+function leaderFeeHover(detail){
+  const on="占所有赚钱 leader 盈利之和，已扣估算手续费";
+  const offFee="占所有赚钱 leader 盈利之和，未扣估算手续费";
+  const offBasis="占所有赚钱 leader 盈利之和，未扣手续费";
   const d=detail&&typeof detail==="object"?detail:{};
   const pnl=d.pnl&&typeof d.pnl==="object"&&!Array.isArray(d.pnl)?d.pnl:null;
-  return !!(pnl&&pnl.fees_deducted===true);
-}
-function leaderFeeHover(detail){
-  return leaderFeesDeducted(detail)?"占所有赚钱 leader 盈利之和，已扣估算手续费":"占所有赚钱 leader 盈利之和，未扣估算手续费";
+  if(pnl&&hasOwn(pnl,"fees_deducted")&&typeof pnl.fees_deducted==="boolean") return pnl.fees_deducted?on:offFee;
+  if(pnl&&pnl.profit_share_basis==="net_of_estimated_fees") return on;
+  return offBasis;
 }
 function shanghaiMMDD(iso){
   const d=parseUtc(iso);
