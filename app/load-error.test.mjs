@@ -176,7 +176,7 @@ skel.classList.add("sa");
 skel._html = '<div class="top"><h1>账户</h1><span class="mu">加载中</span></div>';
 const account = load("account", "", async () => ({ ok: false, status: 500, json: async () => ({ message: "list down" }) }));
 account.sandbox.document.getElementById = (id) => (id === "ac-list-skel" ? skel : walk(skel).find((el) => el.id === id) || null);
-await account.sandbox.PM.renderAccount();
+assert.equal(await account.sandbox.PM.renderAccount(), "error");
 assert.match(skel.innerHTML, /连不上接口/);
 assert.match(skel.innerHTML, /id="ac-list-retry"/);
 assert.equal(skel.innerHTML.includes("list down"), false);
@@ -274,6 +274,26 @@ assert.equal(ovTok.cleared(), false);
 assert.equal(ovTok.replaced(), false);
 assert.equal(overview401.body.classList.contains("live"), false);
 assert.equal(overview401.root.style.display, undefined);
+
+async function accountListBoot(fetchImpl) {
+  const skelBoot = node();
+  skelBoot.id = "ac-list-skel";
+  skelBoot.classList.add("sa");
+  skelBoot._html = '<div class="top"><h1>账户</h1><span class="mu">加载中</span></div>';
+  const box = load("account", "", fetchImpl);
+  armSession(box, "tok-ac-list");
+  box.sandbox.document.getElementById = (id) => {
+    if (id === "ac-list-skel") return skelBoot;
+    return walk(skelBoot).find((el) => el.id === id) || walk(box.main).find((el) => el.id === id) || walk(box.body).find((el) => el.id === id) || null;
+  };
+  await box.boots[0]();
+  assert.match(skelBoot.innerHTML, /连不上接口/);
+  assert.equal(box.body.classList.contains("live"), false);
+  assert.equal(walk(box.body).concat(walk(box.main), walk(skelBoot)).some((el) => el.className === "live-badge" || el.textContent === "数据更新中"), false);
+}
+
+await accountListBoot(async () => ({ ok: false, status: 500, json: async () => ({ message: "list down" }) }));
+await accountListBoot(async () => { throw new Error("failed to fetch"); });
 
 const account401 = load("account", "", async () => ({ ok: false, status: 401, json: async () => ({ message: "account raw" }) }));
 const acTok = armSession(account401, "tok-ac");

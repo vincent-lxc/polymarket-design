@@ -977,11 +977,11 @@ async function renderAccount(){
   let list;
   try{ list=await api("/v1/accounts"); }
   catch(e){
-    if(e&&e.status===401) return;
-    if(!wantId&&!wantName&&paintAccountListWait(e)) return;
+    if(e&&e.status===401) return "error";
+    if(!wantId&&!wantName&&paintAccountListWait(e)) return "error";
     if(e&&e.status===404){ paintAccountEmpty(); return; }
     paintAccountError(e);
-    return;
+    return "error";
   }
   paintHeartbeat(list);
   if(window.PMSA && window.PMSA_UI && PMSA.isAccountListV2(list)) return PMSA_UI.openAccounts(list);
@@ -3129,6 +3129,7 @@ async function boot(){
     const state=await R[PAGE](); stripDemo();
     if(PAGE==="leaders" && state==="fixture"){ badge("demo","本地 fixture（?fixture=1）。去掉 fixture 后走 BFF"); keepMock(); return; }
     if(PAGE==="leaders" && state==="error") return;
+    if(PAGE==="account" && state==="error") return;
     badge("live","BFF");
   }catch(e){ if(e.status===401)return;
     if(PAGE==="leaders"){ console.warn(e); return; }
