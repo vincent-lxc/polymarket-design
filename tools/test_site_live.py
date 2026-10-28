@@ -6,6 +6,7 @@
 再跑：python3 tools/test_site_live.py [http://127.0.0.1:8876] [http://127.0.0.1:8891]
 覆盖：成功后角标隐藏、加载失败/超时文案、10 秒超时、标注、收益率缺数据、曲线隐藏、时区标签。
 """
+import json
 import re
 import sys
 import time
@@ -162,6 +163,57 @@ with sync_playwright() as pw:
         ok(r and r["m"] != "none" and r["cell"], "mobile tags under address " + L + " " + str(r))
         ok(r and r["right"] <= r["wr"] + 0.5, "mobile score column visible " + L + " " + str(r))
         ctx.close()
+
+    # 手机 390：表头不折行（「综合评分」/ Score / Win rate），表格不超出容器，页面不横向滚动
+    for L in ("zh", "en"):
+        ctx, p = open_page(b, "/%s/leaderboard/" % L, width=390)
+        badge_done(p, "[data-live-badge=leaderboard]")
+        r = p.evaluate("""()=>{const t=document.querySelector('[data-live=leaderboard] table');const w=t.parentElement;
+          const ths=[...t.querySelectorAll('thead th')].filter(th=>getComputedStyle(th).display!=='none');
+          const lh=parseFloat(getComputedStyle(ths[0]).lineHeight)||16;
+          const hs=ths.map(th=>{const c=getComputedStyle(th);return [th.innerText,th.clientHeight-parseFloat(c.paddingTop)-parseFloat(c.paddingBottom)]});
+          const sc=t.querySelector('thead th:nth-child(3)').getBoundingClientRect();
+          return {hs,lh,tw:t.scrollWidth,ww:w.clientWidth,dw:document.documentElement.scrollWidth,vw:innerWidth,scR:sc.right,wR:w.getBoundingClientRect().right}}""")
+        ok(all(h <= r["lh"] * 1.5 for _, h in r["hs"]), "mobile headers on one line " + L + " " + str(r["hs"]))
+        ok(r["tw"] <= r["ww"] + 1, "mobile table fits wrapper " + L + " " + str(r))
+        ok(r["dw"] <= r["vw"], "no page horizontal scroll " + L + " " + str(r))
+        ok(r["scR"] <= r["wR"] + 0.5, "mobile score header visible " + L)
+        ctx.close()
+
+    # 摘要句数据来源。SSR：看 meta 和正文；客户端：浏览器里把接口的 source 反过来，确认 site-live.js 自己按 source 写结尾
+    SRC = {"zh": ("数据来自第三方，Wakeloom 还没自己核对。", "数据来自链上公开记录。"),
+           "en": ("Data comes from a third party and hasn't been verified by Wakeloom yet.", "Data from public on-chain records.")}
+    for L in ("zh", "en"):
+        third_s, chain_s = SRC[L]
+        for c, is_third in (("2", True), ("4", True), ("1", False), ("5", False)):
+            want, other = (third_s, chain_s) if is_third else (chain_s, third_s)
+            ctx, p = open_page(b, "/%s/leader/%s/" % (L, A(c)))
+            badge_done(p, "[data-live-badge=leader]")
+            md = p.get_attribute('meta[name="description"]', "content")
+            ok(md.endswith(want) and other not in md, "SSR meta desc %s %s: %s" % (L, c, md))
+            d = p.inner_text("[data-f=desc]")
+            ok(d.endswith(want) and other not in d, "desc %s %s: %s" % (L, c, d))
+            ctx.close()
+            ctx = b.new_context(viewport={"width": 1280, "height": 900}, timezone_id="Asia/Shanghai")
+            ctx.add_init_script("window.WL_API=%r;" % API)
+            def make_flip(new_src):
+                def flip(route):
+                    r = route.fetch()
+                    j = r.json()
+                    j["leader"]["source"] = new_src
+                    route.fulfill(response=r, body=json.dumps(j))
+                return flip
+            ctx.route(re.compile(r".*/v1/public/leaders/0x[0-9a-f]{40}$"), make_flip("local" if is_third else "polymarketscan"))
+            p = ctx.new_page()
+            p.goto(SITE + "/%s/leader/%s/" % (L, A(c)), wait_until="domcontentloaded")
+            badge_done(p, "[data-live-badge=leader]")
+            try:
+                p.wait_for_function("s=>{const e=document.querySelector('[data-f=desc]');return e&&e.textContent.endsWith(s)}", arg=other, timeout=10000)
+            except Exception:
+                pass
+            d = p.inner_text("[data-f=desc]")
+            ok(d.endswith(other) and want not in d, "client desc follows source %s %s: %s" % (L, c, d))
+            ctx.close()
 
     # leader 页失败 + 异地时区
     ctx, p = open_page(b, "/zh/leader/%s/" % A("2"), api=API + "/hang", timeout_ms=400, tz="America/New_York")

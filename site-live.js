@@ -504,11 +504,11 @@
         var parts, desc, who = short(addr);
         if (lang === "zh") {
           parts = [sc ? "综合评分 " + sc : null, wr ? "近90天胜率 " + wr : null, roi ? "收益率 " + roi + roiNote : null, dd ? "最大回撤 " + dd : null].filter(Boolean);
-          desc = who + (parts.length ? "：" + parts.join("、") + "。" : "。") + (rm ? "已结算市场 " + rm + " 个。" : "") + "数据来自链上公开记录。";
+          desc = who + (parts.length ? "：" + parts.join("、") + "。" : "。") + (rm ? "已结算市场 " + rm + " 个。" : "") + (f.third ? "数据来自第三方，Wakeloom 还没自己核对。" : "数据来自链上公开记录。");
           if (root.getAttribute("data-paper") === "1") desc += "模拟盘数据，不是实盘成交。";
         } else {
           parts = [sc ? "score " + sc : null, wr ? "90-day win rate " + wr : null, roi ? "ROI " + roi + roiNote : null, dd ? "max drawdown " + dd : null].filter(Boolean);
-          desc = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ") + (rm ? rm + " resolved markets. " : "") + "Data from public on-chain records.";
+          desc = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ") + (rm ? rm + " resolved markets. " : "") + (f.third ? "Data comes from a third party and hasn't been verified by Wakeloom yet." : "Data from public on-chain records.");
           if (root.getAttribute("data-paper") === "1") desc += " Paper-trading figures, not live fills.";
         }
         descEl.textContent = desc;

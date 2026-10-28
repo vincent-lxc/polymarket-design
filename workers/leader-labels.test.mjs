@@ -140,4 +140,42 @@ const live = fs.readFileSync(path.join(repo, "site-live.js"), "utf8");
 assert.match(live, /var TIMEOUT_MS = 10000;/);
 assert.match(live, /new AbortController\(\)/);
 
+// 9. 摘要句结尾的数据来源：第三方地址不写「链上公开记录」；本地地址保留。正文、meta、og、JSON-LD 都检查。
+{
+  const THIRD = { zh: "数据来自第三方，Wakeloom 还没自己核对。", en: "Data comes from a third party and hasn't been verified by Wakeloom yet." };
+  const CHAIN = { zh: "数据来自链上公开记录。", en: "Data from public on-chain records." };
+  const escHtml = (t) => t.replace(/&/g, "&amp;").replace(/'/g, "&#39;");
+  for (const lang of ["zh", "en"]) {
+    for (const src of ["polymarketscan", "third_party"]) {
+      const l = leader({ source: src, checks_incomplete: true });
+      const c = leaderCopy(lang, addr, l);
+      assert.ok(c.description.endsWith(THIRD[lang]), `${lang} ${src}: ${c.description}`);
+      assert.ok(!c.description.includes(CHAIN[lang]), `${lang} ${src} still says on-chain`);
+      const h = page(lang, l);
+      assert.ok(!h.includes(CHAIN[lang]), `${lang} ${src} page still says on-chain`);
+      const d = desc(h);
+      assert.ok(d === c.description || d === escHtml(c.description), `${lang} meta: ${d}`);
+      assert.ok(d.endsWith(escHtml(THIRD[lang])) || d.endsWith(THIRD[lang]), `${lang} meta end: ${d}`);
+      const og = h.match(/<meta property="og:description" content="([^"]*)">/)[1];
+      assert.equal(og, d);
+      const ld = h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
+      assert.ok(ld.includes(lang === "zh" ? THIRD.zh : "hasn"), `${lang} JSON-LD`);
+      assert.ok(!ld.includes(CHAIN[lang]), `${lang} JSON-LD still on-chain`);
+      assert.match(h, lang === "zh" ? /data-f="desc">[^<]*数据来自第三方，Wakeloom 还没自己核对。<\/p>/ : /data-f="desc">[^<]*verified by Wakeloom yet\.<\/p>/);
+    }
+    for (const l of [leader(), leader({ source: "local", checks_incomplete: false })]) {
+      const c = leaderCopy(lang, addr, l);
+      assert.ok(c.description.endsWith(CHAIN[lang]), `${lang} local: ${c.description}`);
+      assert.ok(!c.description.includes(lang === "zh" ? "第三方" : "third party"));
+      const h = page(lang, l);
+      assert.ok(desc(h).endsWith(CHAIN[lang]));
+      assert.ok(!h.includes(THIRD[lang]) && !h.includes(escHtml(THIRD[lang])));
+    }
+  }
+  // 客户端刷新用同一组句子
+  const js = fs.readFileSync(path.join(repo, "site-live.js"), "utf8");
+  assert.ok(js.includes('(f.third ? "' + THIRD.zh + '" : "' + CHAIN.zh + '")'));
+  assert.ok(js.includes('(f.third ? "' + THIRD.en + '" : "' + CHAIN.en + '")'));
+}
+
 console.log("leader labels tests ok");

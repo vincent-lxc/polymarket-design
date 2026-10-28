@@ -134,6 +134,12 @@ export function publicMetrics(leader) {
 /** 后端 #85/#87 的标注字段。字段缺失时三项都是 false，页面保持原样。顶层 response.source（stats_table 等）不看。 */
 const THIRD_PARTY_SOURCES = new Set(["polymarketscan", "third_party"]);
 
+/** 摘要句结尾的数据来源句。第三方地址不能写「链上公开记录」。 */
+export const SOURCE_LINE = {
+  zh: { chain: "数据来自链上公开记录。", third: "数据来自第三方，Wakeloom 还没自己核对。" },
+  en: { chain: "Data from public on-chain records.", third: "Data comes from a third party and hasn't been verified by Wakeloom yet." },
+};
+
 export const LABELS = {
   zh: {
     score: "综合评分",
@@ -229,7 +235,7 @@ export function leaderCopy(lang, addr, leader) {
     if (dd) parts.push(`最大回撤 ${dd}`);
     description = who + (parts.length ? "：" + parts.join("、") + "。" : "。");
     if (rm) description += `已结算市场 ${rm} 个。`;
-    description += "数据来自链上公开记录。";
+    description += flags.thirdParty ? SOURCE_LINE.zh.third : SOURCE_LINE.zh.chain;
     if (paper.on) description += "模拟盘数据，不是实盘成交。";
   } else {
     const parts = [];
@@ -239,7 +245,7 @@ export function leaderCopy(lang, addr, leader) {
     if (dd) parts.push(`max drawdown ${dd}`);
     description = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ");
     if (rm) description += `${rm} resolved markets. `;
-    description += "Data from public on-chain records.";
+    description += flags.thirdParty ? SOURCE_LINE.en.third : SOURCE_LINE.en.chain;
     if (paper.on) description += " Paper-trading figures, not live fills.";
   }
   // 有综合评分：综合评分、胜率、回撤；疑似做市：只写胜率、回撤；两样都没有（现网字段缺失）：保持原标题。
