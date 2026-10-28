@@ -165,6 +165,33 @@
       mm: !!l && l.suspected_market_maker === true,
     };
   }
+  /* copy-engine #89 index_basis：门槛读的成交数、已结算数。没有这个字段时返回 null，页面保持旧显示。与 workers/leader-page.mjs 一致。 */
+  var IBT = lang === "zh"
+    ? { settled: "已结算市场（全部历史）", trades: "成交笔数（全部历史）", col: "已结算（全部历史）", thirdCount: "第三方口径", capNote: "第三方只统计到这个数", window: "胜率、收益率按近 90 天", quiet: "近 30 天无成交" }
+    : { settled: "Resolved markets (all time)", trades: "Trades (all time)", col: "Resolved (all time)", thirdCount: "third-party basis", capNote: "Third-party data stops counting here", window: "Win rate and ROI: last 90 days", quiet: "No trades in the last 30 days" };
+  function basis(l) {
+    var ib = l && l.index_basis;
+    return ib && typeof ib === "object" && !Array.isArray(ib) ? ib : null;
+  }
+  /* 封顶写「20,000+」；null（第三方没给）返回 null，显示「无数据」 */
+  function basisCount(n, capped) {
+    var v = num(n);
+    return v == null ? null : v + (capped === true ? "+" : "");
+  }
+  function basisTag(ib, capped) {
+    if (!ib) return "";
+    var src = typeof ib.source === "string" ? ib.source.trim().toLowerCase() : "";
+    if (src !== "polymarketscan" && src !== "third_party" && capped !== true) return "";
+    return tag(IBT.thirdCount, capped === true ? IBT.capNote : null);
+  }
+  /* 已结算 / 成交笔数格：这一格总在，没数写「无数据」 */
+  function basisStat(key, ib) {
+    var capped = ib[key + "_capped"] === true;
+    var v = basisCount(ib[key], capped);
+    var t = basisTag(ib, capped);
+    var b = v == null ? '<b class="nd">' + ND + "</b>" : '<b class="num"' + (capped ? ' title="' + esc(IBT.capNote) + '"' : "") + ">" + esc(v) + "</b>";
+    return '<div class="st" data-f="' + key + '"><span>' + esc(IBT[key]) + (t ? " " + t : "") + "</span>" + b + "</div>";
+  }
   function tag(text, title) {
     return '<span class="ck"' + (title ? ' title="' + esc(title) + '"' : "") + ">" + esc(text) + "</span>";
   }
@@ -261,6 +288,15 @@
     el.innerHTML = "";
   }
 
+  /* 排行榜「已结算」：有 index_basis 时读 index_basis.settled（封顶「20,000+」，悬停说明） */
+  function settledCell(l, m) {
+    var ib = basis(l);
+    if (!ib) return cellHm(num(m.resolved_markets));
+    var capped = ib.settled_capped === true;
+    var v = basisCount(ib.settled, capped);
+    if (v == null) return cellHm(null);
+    return '<td class="r num hm"' + (capped ? ' title="' + esc(IBT.capNote) + '"' : "") + ">" + esc(v) + "</td>";
+  }
   function rowFull(i, l) {
     var m = l.metrics || {};
     var f = flags(l);
@@ -284,7 +320,7 @@
       cell(pct(m.win_rate, false, 0)) +
       tagCell(roiMissing(f, m) ? null : pct(m.roi, true), tone(m.roi), f.third ? tag(TXT.third, f.checks ? null : TXT.checksNote) : "") +
       cellHm(pct(m.max_drawdown)) +
-      cellHm(num(m.resolved_markets)) +
+      settledCell(l, m) +
       cellHm(usd(m.realized_pnl, true), tone(m.realized_pnl)) +
       "</tr>"
     );
@@ -401,6 +437,10 @@
       var j = await get(LB);
       var b = j.leaderboard || {};
       var leaders = sortBySmartScore(b.leaders || []);
+      if (leaders.some(function (l) { return !!basis(l); })) {
+        var th = tbody.closest("table").querySelectorAll("thead th");
+        if (th[6]) th[6].textContent = IBT.col;
+      }
       tbody.innerHTML = leaders.map(function (l, i) {
         return rowFull(i + 1, l);
       }).join("");
@@ -499,7 +539,8 @@
       var wr = pct(m.win_rate, false, 1),
         roi = roiNd ? null : pct(m.roi, true),
         dd = pct(m.max_drawdown),
-        rm = num(m.resolved_markets);
+        ib = basis(d),
+        rm = ib ? basisCount(ib.settled, ib.settled_capped) : num(m.resolved_markets);
       var titleEl = root.querySelector("[data-f=name]");
       if (titleEl) {
         var rk = f.mm ? null : titleEl.querySelector(".rk");
@@ -510,11 +551,11 @@
         var parts, desc, who = short(addr);
         if (lang === "zh") {
           parts = [sc ? "综合评分 " + sc : null, wr ? "近90天胜率 " + wr : null, roi ? "收益率 " + roi + roiNote : null, dd ? "最大回撤 " + dd : null].filter(Boolean);
-          desc = who + (parts.length ? "：" + parts.join("、") + "。" : "。") + (rm ? "已结算市场 " + rm + " 个。" : "") + (f.third ? "数据来自第三方，Wakeloom 还没自己核对。" : "数据来自链上公开记录。");
+          desc = who + (parts.length ? "：" + parts.join("、") + "。" : "。") + (rm ? (ib ? "已结算市场（全部历史）" : "已结算市场 ") + rm + " 个。" : "") + (f.third ? "数据来自第三方，Wakeloom 还没自己核对。" : "数据来自链上公开记录。");
           if (root.getAttribute("data-paper") === "1") desc += "模拟盘数据，不是实盘成交。";
         } else {
           parts = [sc ? "score " + sc : null, wr ? "90-day win rate " + wr : null, roi ? "ROI " + roi + roiNote : null, dd ? "max drawdown " + dd : null].filter(Boolean);
-          desc = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ") + (rm ? rm + " resolved markets. " : "") + (f.third ? "Data comes from a third party and hasn't been verified by Wakeloom yet." : "Data from public on-chain records.");
+          desc = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ") + (rm ? rm + (ib ? " resolved markets (all time). " : " resolved markets. ") : "") + (f.third ? "Data comes from a third party and hasn't been verified by Wakeloom yet." : "Data from public on-chain records.");
           if (root.getAttribute("data-paper") === "1") desc += " Paper-trading figures, not live fills.";
         }
         descEl.textContent = desc;
@@ -522,7 +563,7 @@
       var asofEl = root.querySelector("[data-f=asof]");
       if (asofEl && asof) {
         asofEl.setAttribute("data-asof-iso", String(asofIso));
-        asofEl.textContent = (lang === "zh" ? "数据截至 " : "Data as of ") + asof + (lang === "zh" ? " · 统计窗口：近 90 天" : " · Window: last 90 days");
+        asofEl.textContent = (lang === "zh" ? "数据截至 " : "Data as of ") + asof + (ib ? " · " + IBT.window : lang === "zh" ? " · 统计窗口：近 90 天" : " · Window: last 90 days");
       }
       var L = function (z, e) {
         return lang === "zh" ? z : e;
@@ -531,7 +572,8 @@
         [L("胜率（近90天）", "Win rate (90d)"), wr, "", "", true],
         [L("收益率（近90天）", "ROI (90d)"), roi, tone(m.roi), f.third ? tag(TXT.third) : "", true],
         [L("最大回撤", "Max drawdown"), dd, ""],
-        [L("已结算市场", "Resolved markets"), rm, ""],
+        ib ? ["settled"] : [L("已结算市场", "Resolved markets"), rm, ""],
+        ib ? ["trades"] : null,
         [L("已实现盈亏", "Realized P&L"), usd(m.realized_pnl, true), tone(m.realized_pnl)],
         [L("近30天盈亏", "P&L (30d)"), usd(m.pnl_30d, true), tone(m.pnl_30d)],
         [L("成交额", "Volume"), usd(m.volume_usd), ""],
@@ -547,6 +589,8 @@
       ];
       var grid = root.querySelector("[data-f=grid]");
       if (grid) grid.innerHTML = stats.map(function (s) {
+        if (!s) return "";
+        if (s.length === 1) return basisStat(s[0], ib);
         return stat(s[0], s[1], s[2], s[3], s[4]);
       }).join("");
 
@@ -563,6 +607,7 @@
           bits.push(tag(TXT.checks, f.third ? TXT.checksNote : null));
           if (f.third) notes.push(TXT.checksNote);
         }
+        if (ib && ib.no_trades_30d === true) bits.push('<span class="ck ck-quiet">' + esc(IBT.quiet) + "</span>");
         ckEl.innerHTML = bits.length
           ? '<div class="ck-line">' + bits.join("") + "</div>" + notes.map(function (n) {
               return '<p class="mu xs ck-note">' + esc(n) + "</p>";
@@ -588,7 +633,8 @@
           return lang === "zh" ? CAT[c] || c : c;
         });
       if (cats.length) facts.push(L("主要市场类别：", "Main categories: ") + cats.join(lang === "zh" ? "、" : ", ") + L("。", "."));
-      var lt = stamp(m.last_trade_at);
+      /* 有 index_basis 时只认 index_basis.last_trade_at；null 时整行不显示 */
+      var lt = stamp(ib ? ib.last_trade_at : m.last_trade_at);
       if (lt) facts.push(L("最近一次成交：", "Last trade: ") + lt + L("。", "."));
       var xn = d.x_username || (wal && wal.x_username);
       if (xn) facts.push(L("X 账号：", "X account: ") + "@" + xn + L("（自报，未核实）。", " (self-reported, unverified)."));

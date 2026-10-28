@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Wakeloom 织迹 官网静态生成器。
 用法：python3 tools/build_site.py   （在仓库根目录运行，输出写到 zh/ en/ 及根目录的 index.html、sitemap.xml、robots.txt、llms.txt）
+     python3 tools/build_site.py --refresh-snapshot
+         只刷新爬虫看到的数据快照：排行榜页、首页前 3 的表格（含综合评分列）、排行榜 ItemList，以及 zh/en/leader/<地址>/ 静态快照里的收益曲线；
+         其余手改过的 HTML 原样保留。全量重建会把多次手改（等候名单开关、App 链接、壳页文案等）冲掉，不要用全量重建刷数据。
 数据：构建时读公开接口生成 SEO 快照（排行榜 + 前 50 详情 + JSON-LD）；页面打开后由 site-live.js 再请求接口刷新数字。其余 leader 走 _shell + _redirects。
 """
-import json, os, re, sys, html, shutil, urllib.request, datetime as dt
+import json, os, re, sys, html, shutil, time, urllib.request, datetime as dt
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,6 +18,14 @@ MIN_RESOLVED = 20          # 详情页只收录已结算市场数 ≥ N 的地�
 BUILT = dt.datetime.now(dt.timezone.utc)
 E = html.escape
 
+# 与 site-live.js、App 公开榜同一口径：综合评分榜，本地再按综合评分降序排一次（没有分的排最后，同分保持接口顺序）。
+LB_PATH = "/v1/public/leaderboard?window=90d&metric=smart_score&limit=50"
+def fnum(x):
+    return x if isinstance(x, (int, float)) and not isinstance(x, bool) and x == x and x not in (float("inf"), float("-inf")) else None
+def sort_by_smart_score(leaders):
+    idx = list(enumerate(leaders or []))
+    return [l for _, l in sorted(idx, key=lambda t: (fnum(t[1].get("smart_score")) is None, -(fnum(t[1].get("smart_score")) or 0), t[0]))]
+
 def get(path):
     req = urllib.request.Request(API + path, headers={"Accept": "application/json", "User-Agent": "wakeloom-site-build"})
     with urllib.request.urlopen(req, timeout=30) as r:
@@ -24,10 +35,10 @@ def get(path):
 def load():
     data = {"ok": False, "as_of": None, "leaders": [], "wallets": {}, "pages": [], "details": {}, "source": None, "err": None, "sitemap_ok": False}
     try:
-        lb = get("/v1/public/leaderboard")
+        lb = get(LB_PATH)
         b = lb.get("leaderboard") or {}
         for l in b.get("leaders") or []: l["address"] = l["address"].lower()
-        data.update(ok=True, as_of=b.get("as_of"), leaders=b.get("leaders") or [], source="/v1/public/leaderboard", window=b.get("window"))
+        data.update(ok=True, as_of=b.get("as_of"), leaders=sort_by_smart_score(b.get("leaders") or []), source=LB_PATH, window=b.get("window"))
     except Exception as e:
         data["err"] = "leaderboard: " + str(e)
     # 详情页清单：/v1/public/sitemap（服务端已按成交笔数过滤），分页拉全
@@ -251,15 +262,25 @@ def stat(label, val, nd, cls=""):
     return f'<div class="st"><span>{label}</span>{v}</div>'
 def tone(x): return "" if x is None else ("up" if x > 0 else "dn" if x < 0 else "")
 
+def curve_pts(curve):
+    """与 site-live.js curvePts 相同：画累计已实现盈亏；没有 realized_pnl 时只在浮动为 0 时退回 equity。"""
+    out = []
+    for c in curve or []:
+        if not isinstance(c, dict): continue
+        v = fnum(c.get("realized_pnl"))
+        if v is None and c.get("unrealized_pnl") == 0: v = fnum(c.get("equity"))
+        if v is not None: out.append((c.get("t"), v))
+    return out
 def spark(curve, lang):
-    pts = [(c.get("t"), c.get("equity")) for c in (curve or []) if isinstance(c.get("equity"), (int, float))]
-    if len(pts) < 2: return ""
+    pts = curve_pts(curve)
+    # 0 个点、1 个点、或全部相等：不画（与 site-live.js curveFlat 一致）
+    if len(pts) < 2 or all(v == pts[0][1] for _, v in pts): return ""
     vs = [v for _, v in pts]; lo, hi = min(vs), max(vs); rng = (hi - lo) or 1
     W, H = 640, 160
     d = " ".join(f"{'M' if i==0 else 'L'}{i*(W/(len(pts)-1)):.1f},{H-8-(v-lo)/rng*(H-16):.1f}" for i, (_, v) in enumerate(pts))
-    cap = ("全部历史收益曲线（已实现 + 浮动，美元）" if lang == "zh" else "All-time equity curve (realized + unrealized, USD)")
+    cap = ("累计已实现盈亏（美元）" if lang == "zh" else "Cumulative realized P&L (USD)")
     rngt = f'{bj(pts[0][0], lang)[:10]} – {bj(pts[-1][0], lang)[:10]}' if bj(pts[0][0], lang) and bj(pts[-1][0], lang) else ""
-    return f'''<figure class="card spark"><figcaption>{cap}<span class="mu">{E(rngt)}</span></figcaption><svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" role="img" aria-label="{cap}"><path d="{d}" fill="none" stroke="#FF6A1F" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="sp-y num mu"><span>{E(usd(hi) or "")}</span><span>{E(usd(lo) or "")}</span></div></figure>'''
+    return f'''<figure class="card spark"><figcaption>{E(cap)}<span class="mu">{E(rngt)}</span></figcaption><svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" role="img" aria-label="{E(cap)}"><path d="{d}" fill="none" stroke="#FF6A1F" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="sp-y num mu"><span>{E(usd(hi) or "")}</span><span>{E(usd(lo) or "")}</span></div></figure>'''
 
 # ---------------- 各页 ----------------
 def L2(zh, a, b): return a if zh else b
@@ -307,24 +328,78 @@ def home(lang, D):
     body = hero + f'<section class="feats">{fh}</section>' + shots_html + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/board">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
     write(f"{lang}/index.html", page(lang, "", "home", body, [softapp(lang), crumbs(lang, []), {"@type": "WebPage", "url": f"{SITE}/{lang}/", "name": DESC[lang]["home"][0], "inLanguage": T[lang]["html"], "isPartOf": {"@id": SITE + "/#website"}}]))
 
-def lhead(lang, short=False):
+# 排行榜表格：和 site-live.js rowFull / rowShort / fillHead 输出同一套 HTML，爬虫看到的就是浏览器刷新后的样子。
+LBT = {
+    "zh": {"third": "第三方口径", "checks": "部分检查未完成", "checksNote": "该地址数据来自第三方，尚未完成集中度、做市、刷量检查。",
+           "roiNote": "自算地址的收益率 = 已实现盈亏 ÷ 投入，不含浮动。", "ibCol": "已结算（全部历史）", "capNote": "第三方只统计到这个数"},
+    "en": {"third": "third-party basis", "checks": "Some checks pending", "checksNote": "This address uses third-party data; concentration, market-making and wash-trading checks are not done yet.",
+           "roiNote": "For addresses we compute ourselves, ROI = realized P&L ÷ capital invested, excluding unrealized P&L.", "ibCol": "Resolved (all time)", "capNote": "Third-party data stops counting here"},
+}
+def lb_flags(l):
+    src = l.get("source").strip().lower() if isinstance(l.get("source"), str) else ""
+    return {"third": src in ("polymarketscan", "third_party"), "checks": l.get("checks_incomplete") is True, "mm": l.get("suspected_market_maker") is True}
+def lb_basis(l):
+    ib = l.get("index_basis")
+    return ib if isinstance(ib, dict) else None
+def lb_score(l):
+    """综合评分：与 site-live.js scoreText 一致，有限数值保留 1 位（JS toFixed 同为四舍五入到 1 位）。"""
+    v = fnum(l.get("smart_score"))
+    return None if v is None else f"{v:.1f}"
+def lb_roi_missing(f, m):
+    if not f["third"]: return False
+    r = fnum(m.get("roi"))
+    if r is None: return True
+    if r != 0: return False
+    rp = fnum(m.get("realized_pnl"))
+    return rp is not None and rp != 0
+def lb_name(l, w=None):
+    """与 site-live.js dname 一致。"""
+    a = (l.get("address") or "").lower()
+    n = (l.get("user_name") or l.get("name") or (w or {}).get("user_name") or "")
+    if not n or n.lower().startswith("0x") or re.search(r"-\d{10,}$", n) or len(n) > 24 or (a and a[2:8] in n.lower()): return short(a)
+    return "@" + n
+def lb_tag(text, title=None):
+    return f'<span class="ck"{f' title="{E(title)}"' if title else ""}>{E(text)}</span>'
+def lhead(lang, short=False, basis=False):
     zh = lang == "zh"
-    c = ["#", "地址" if zh else "Wallet", "胜率" if zh else "Win rate", "收益率" if zh else "ROI"]
-    if not short: c += ["最大回撤" if zh else "Max drawdown", "已结算市场" if zh else "Resolved", "已实现" if zh else "Realized"]
-    cls = ["num", "", "r", "r", "r hm", "r hm", "r hm"]
-    return "<tr>" + "".join(f'<th class="{k}">{x}</th>' for x, k in zip(c, cls)) + "</tr>"
+    c = [("#", "num"), ("地址" if zh else "Wallet", ""), ("综合评分" if zh else "Score", "r"), ("胜率" if zh else "Win rate", "r"), ("收益率" if zh else "ROI", "r")]
+    if not short:
+        c += [("最大回撤" if zh else "Max drawdown", "r hm"), (LBT[lang]["ibCol"] if basis else ("已结算" if zh else "Resolved"), "r hm"), ("已实现" if zh else "Realized", "r hm")]
+    return "<tr>" + "".join(f'<th class="{k}">{E(x)}</th>' for x, k in c) + "</tr>"
 def lrow(lang, i, l, D, short=True):
-    m = l.get("metrics") or {}; a = l["address"]; w = D["wallets"].get(a) or {}
-    nm = dname(w, a)
+    m = l.get("metrics") or {}; a = l["address"].lower(); w = (D or {}).get("wallets", {}).get(a) or {}
+    X = LBT[lang]; f = lb_flags(l)
     nd = f'<span class="nd">{T[lang]["nd"]}</span>'
     def c(v, cls=""): return f'<td class="r num {cls}">{E(v)}</td>' if v is not None else f'<td class="r">{nd}</td>'
-    r = f'<tr><td class="num mu">{i}</td><td><a href="/{lang}/leader/{a}/"><b>{E(nm)}</b></a><div class="mu xs num">{E(short_(a))}</div></td>' + c(pct(m.get("win_rate"), d=0)) + c(pct(m.get("roi"), True), tone(m.get("roi")))
+    def tc(v, cls, t):
+        if not t: return c(v, cls)
+        body = f'<span class="num {cls}">{E(v)}</span>' if v is not None else nd
+        return f'<td class="r">{body}{t}</td>'
+    mt = []
+    if f["checks"]: mt.append(lb_tag(X["checks"], X["checksNote"] if f["third"] else None))
+    if f["third"]: mt.append(lb_tag(X["third"]))
+    mobile = f'<div class="ck-m">{"".join(mt)}</div>' if mt else ""
+    sc = lb_score(l)
+    sc_t = lb_tag(X["checks"], X["checksNote"] if f["third"] else None) if f["checks"] else ""
+    # 与 site-live.js scoreCell 一致：没有综合评分写「—」（只用在这一列），不写「无数据」或 0
+    score = tc(sc, "", sc_t) if sc is not None else f'<td class="r"><span class="num mu" data-nd="score">—</span>{sc_t}</td>'
+
+    roi = None if lb_roi_missing(f, m) else pct(m.get("roi"), True)
+    r = (f'<tr><td class="num mu">{i}</td><td><a href="/{lang}/leader/{a}/"><b>{E(lb_name(l, w))}</b></a><div class="mu xs num">{E(short_(a))}</div>{mobile}</td>'
+         + score + c(pct(m.get("win_rate"), d=0)) + tc(roi, tone(m.get("roi")), lb_tag(X["third"], None if f["checks"] else X["checksNote"]) if f["third"] else ""))
     return r + "</tr>"
 def lrow_full(lang, i, l, D):
     m = l.get("metrics") or {}
     nd = f'<span class="nd">{T[lang]["nd"]}</span>'
     def c(v, cls=""): return f'<td class="r num hm {cls}">{E(v)}</td>' if v is not None else f'<td class="r hm">{nd}</td>'
-    return lrow(lang, i, l, D)[:-5] + c(pct(m.get("max_drawdown"))) + c(num(m.get("resolved_markets"))) + c(usd(m.get("realized_pnl"), True), tone(m.get("realized_pnl"))) + "</tr>"
+    ib = lb_basis(l)
+    if ib is None:
+        settled = c(num(m.get("resolved_markets")))
+    else:
+        capped = ib.get("settled_capped") is True
+        v = fnum(ib.get("settled"))
+        settled = c(None) if v is None else f'<td class="r num hm"{f' title="{E(LBT[lang]["capNote"])}"' if capped else ""}>{E(f"{int(v):,}" + ("+" if capped else ""))}</td>'
+    return lrow(lang, i, l, D)[:-5] + c(pct(m.get("max_drawdown"))) + settled + c(usd(m.get("realized_pnl"), True), tone(m.get("realized_pnl"))) + "</tr>"
 short_ = short
 
 def leaderboard(lang, D):
@@ -333,7 +408,7 @@ def leaderboard(lang, D):
     if not D["ok"]:
         tbl = f'<p class="nd pad">{T[lang]["nd"]}</p><p class="mu pad">{"构建时排行榜接口不可用，本页为占位，下次构建会自动补上。" if zh else "The leaderboard API was unavailable at build time; this is a placeholder until the next build."}</p>'
     else:
-        tbl = f'<div class="tw"><table class="lt"><thead>{lhead(lang)}</thead><tbody>{rows}</tbody></table></div>'
+        tbl = f'<div class="tw"><table class="lt"><thead>{lhead(lang, basis=any(lb_basis(l) for l in D["leaders"]))}</thead><tbody>{rows}</tbody></table></div>'
     intro = ("按综合评分排序。胜率和收益率只作展示，不是排序依据。Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查，请自己再看一下。只收录成交笔数足够多的地址。排名不代表以后的表现。" if zh else
              "Ranked by composite score. Win rate and ROI are display columns, not the sort key. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Most addresses currently use third-party data and have not been through these checks yet, so please review them yourself. We only list wallets with enough trades. A ranking does not predict future results.")
     meta = f'<p class="mu sm"><span data-live-meta="leaderboard">{"数据截至" if zh else "Data as of"} {E(asof)} · {"共" if zh else ""} {len(D["leaders"])} {"位" if zh else "traders"}</span> · <span class="live-badge" data-live-badge="leaderboard"></span> · <a class="ln" href="/{lang}/how-it-works/">{"选人方法" if zh else "How we pick"} →</a></p>' if asof else '<p class="mu sm"><span data-live-meta="leaderboard"></span> <span class="live-badge" data-live-badge="leaderboard"></span></p>'
@@ -664,4 +739,89 @@ def main():
     json.dump({"built_at": BUILT.strftime("%Y-%m-%dT%H:%M:%SZ"), "data_as_of": D["as_of"], "source": API + (D["source"] or ""), "leaders": len(D["leaders"]), "leader_pages_seo": len(snaps), "sitemap_addrs": len(D["pages"]), "mode": "client-live+seo-snap-50", "sitemap_api": D["sitemap_ok"], "error": D["err"]},
               open(os.path.join(ROOT, "build-info.json"), "w"), indent=1)
 
-if __name__ == "__main__": main()
+# ---------------- 只刷新数据快照（--refresh-snapshot） ----------------
+def utc_stamp(iso, lang):
+    b = bj(iso, lang)
+    if not b: return None
+    b = b.replace(" UTC", "")
+    return b + ("（UTC）" if lang == "zh" else " (UTC)")
+def _sub1(pat, repl, html, what):
+    out, n = re.subn(pat, lambda _m: repl, html, count=1, flags=re.S)
+    if n != 1: raise SystemExit(f"refresh-snapshot: {what} not found")
+    return out
+def refresh_tables(D):
+    leaders = D["leaders"]; n = len(leaders); asof = D["as_of"]
+    basis = any(lb_basis(l) for l in leaders)
+    for lang in ("zh", "en"):
+        zh = lang == "zh"; st = utc_stamp(asof, lang) or T[lang]["nd"]
+        # 排行榜页
+        f = os.path.join(ROOT, lang, "leaderboard", "index.html"); h = open(f, encoding="utf-8").read()
+        body = "".join(lrow_full(lang, i + 1, l, D) for i, l in enumerate(leaders))
+        h, k = re.subn(r'(<section class="card" data-live="leaderboard"[^>]*><div class="tw"><table class="lt">)<thead>.*?</tbody>',
+                   lambda m_: m_.group(1) + f"<thead>{lhead(lang, basis=basis)}</thead><tbody>{body}</tbody>", h, count=1, flags=re.S)
+        if k != 1: raise SystemExit("refresh-snapshot: leaderboard table not found")
+        meta = (f"数据截至 {st} · 按综合评分 · 共 {n} 位" if zh else f"Data as of {st} · Ranked by score · {n} traders")
+        h = _sub1(r'<span data-live-meta="leaderboard"[^>]*>[^<]*</span>', f'<span data-live-meta="leaderboard" data-asof-iso="{E(asof or "")}" data-sort="smart_score">{E(meta)}</span>', h, "leaderboard meta")
+        h = re.sub(r'<p class="mu xs ck-foot" data-f="roi-note">[^<]*</p>', "", h)
+        if any(lb_flags(l)["third"] for l in leaders):
+            h = re.sub(r'(<section class="card" data-live="leaderboard".*?</table></div>)', lambda m_: m_.group(1) + f'<p class="mu xs ck-foot" data-f="roi-note">{E(LBT[lang]["roiNote"])}</p>', h, count=1, flags=re.S)
+        items = [{"@type": "ListItem", "position": i + 1, "url": f"{SITE}/{lang}/leader/{l['address']}/", "name": lb_name(l)} for i, l in enumerate(leaders)]
+        def fix_ld(m_):
+            g = json.loads(m_.group(1))
+            for node in (g.get("@graph") or [g]):
+                if node.get("@type") == "ItemList":
+                    node["numberOfItems"] = n; node["itemListElement"] = items
+                if node.get("@type") in ("CollectionPage", "WebPage", "Dataset") and "dateModified" in node and asof:
+                    node["dateModified"] = asof
+            return '<script type="application/ld+json">' + json.dumps(g, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/") + "</script>"
+        h = re.sub(r'<script type="application/ld\+json">(.*?)</script>', fix_ld, h, count=1, flags=re.S)
+        open(f, "w", encoding="utf-8").write(h)
+        # 首页前 3
+        f = os.path.join(ROOT, lang, "index.html"); h = open(f, encoding="utf-8").read()
+        top = "".join(lrow(lang, i + 1, l, D) for i, l in enumerate(leaders[:3]))
+        h, k = re.subn(r'(data-live="home-top".*?<table class="lt">)<thead>.*?</tbody>', lambda m_: m_.group(1) + f"<thead>{lhead(lang, short=True)}</thead><tbody>{top}</tbody>", h, count=1, flags=re.S)
+        if k != 1: raise SystemExit("refresh-snapshot: home-top table not found")
+        hm = (f"数据截至 {st} · 按综合评分" if zh else f"Data as of {st} · Ranked by score")
+        h = _sub1(r'<span class="mu sm" data-live-meta="home-top"[^>]*>[^<]*</span>', f'<span class="mu sm" data-live-meta="home-top" data-asof-iso="{E(asof or "")}" data-sort="smart_score">{E(hm)}</span>', h, "home-top meta")
+        h, k = re.subn(r'(<a class="more" data-live-more="home-top"[^>]*>)[^<]*(</a>)', lambda m_: m_.group(1) + (f"看全部 {n} 位 →" if zh else f"View all {n} traders →") + m_.group(2), h, count=1)
+        if k != 1: raise SystemExit("refresh-snapshot: home more link not found")
+        open(f, "w", encoding="utf-8").write(h)
+def refresh_snapshot_curves():
+    """zh/en/leader/<地址>/ 静态快照（线上不提供，由 Worker 服务端渲染）里的曲线改成「累计已实现盈亏」，曲线截到快照时间，其余不动。"""
+    done = 0; failed = []
+    for lang in ("zh", "en"):
+        base = os.path.join(ROOT, lang, "leader")
+        for a in sorted(os.listdir(base)):
+            f = os.path.join(base, a, "index.html")
+            if not re.match(r"^0x[0-9a-f]{40}$", a) or not os.path.exists(f): continue
+            h = open(f, encoding="utf-8").read()
+            if 'data-f="spark"' not in h: continue
+            mod = re.search(r'"dateModified":"([^"]+)"', h)
+            cut = mod.group(1) if mod else None
+            w = None
+            for attempt in range(4):
+                try: w = get("/v1/public/wallets/" + a) or {}; break
+                except Exception as e:
+                    print(f"refresh-snapshot: wallets {a} attempt {attempt + 1}: {e}"); time.sleep(2 * (attempt + 1))
+            if w is None:
+                # 拉不到曲线：去掉旧曲线（旧标题配的是旧口径的数），留空和线上没有曲线时一样
+                failed.append(f"{lang}/{a}"); w = {}
+            curve = [c for c in (w.get("equity_curve") or []) if not cut or str((c or {}).get("t") or "")[:10] <= cut[:10]]
+            h2 = re.sub(r'<div data-f="spark">(?:<figure class="card spark">.*?</figure>)?</div>', lambda m_: f'<div data-f="spark">{spark(curve, lang)}</div>', h, count=1, flags=re.S)
+            if h2 != h: open(f, "w", encoding="utf-8").write(h2); done += 1
+    print(f"refresh-snapshot: {done} leader snapshot curves updated; no curve (API failed): {failed or 'none'}")
+
+if __name__ == "__main__":
+    if "--refresh-snapshot" in sys.argv:
+        D = {"wallets": {}, "err": None}
+        try:
+            b = get(LB_PATH).get("leaderboard") or {}
+            for l in b.get("leaders") or []: l["address"] = l["address"].lower()
+            D.update(ok=True, as_of=b.get("as_of"), leaders=sort_by_smart_score(b.get("leaders") or []))
+        except Exception as e:
+            D.update(ok=False, err=str(e))
+        if not D.get("ok") or not D.get("leaders"): raise SystemExit(f"refresh-snapshot: leaderboard API failed: {D.get('err')}")
+        refresh_tables(D); refresh_snapshot_curves()
+        print(f"refresh-snapshot: {len(D['leaders'])} leaders, as_of {D['as_of']}")
+    else:
+        main()

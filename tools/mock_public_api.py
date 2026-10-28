@@ -13,6 +13,12 @@ copy-engine #90 的 null 情况（字段名和位置按 #90 openapi / BFF.md）�
   0xcccc… 第三方，roi 缺省 0 → null（third_party_default），已实现盈亏不为 0；曲线 null（scan_summary_not_series）
   0xdddd… 自算，曲线 null（curve_metric_mismatch），roi null（no_invested），smart_score 有值
   0xeeee… 自算，曲线空数组，win_rate null（no_settled_markets），smart_score null（not_scored）
+  以下带 copy-engine #89 的 index_basis（门槛读的成交数、已结算数）：
+  0x6666… 自算地址，index_basis 正常，近 30 天无成交（no_trades_30d=true）
+  0x7777… 第三方，成交数、已结算数都封顶（20,000+），没有最近成交时间
+  0x8888… 第三方，没封顶，last_trade_at / no_trades_30d 为 null（隐藏这一行）
+  0x9999… 自算地址，不可收录（indexable=false，reason=below_min_settled），页面仍 200
+  0xaaaa… 第三方没给成交数、已结算数（null，reasons=third_party_missing）
 """
 import json
 import sys
@@ -29,6 +35,29 @@ def addr(c):
 def curve(vals):
     days = ["2026-10-%02d" % d for d in range(13, 13 + len(vals))]
     return [{"t": d + "T00:00:00.000Z", "equity": v, "cum_pnl": v, "realized_pnl": v, "unrealized_pnl": 0} for d, v in zip(days, vals)]
+
+
+def basis(c):
+    th = {"min_trades": 50, "min_settled": 20}
+    if c == "6":
+        return {"source": "local", "trades": 9310, "trades_capped": False, "settled": 1842, "settled_capped": False,
+                "last_trade_at": "2026-09-12T03:20:00.000Z", "no_trades_30d": True, "thresholds": th, "reason": None, "reasons": {}}
+    if c == "7":
+        return {"source": "polymarketscan", "trades": 20000, "trades_capped": True, "settled": 20000, "settled_capped": True,
+                "last_trade_at": None, "no_trades_30d": None, "thresholds": th, "reason": None,
+                "reasons": {"last_trade_at": "third_party_no_trade_history"}}
+    if c == "8":
+        return {"source": "polymarketscan", "trades": 4120, "trades_capped": False, "settled": 3296, "settled_capped": False,
+                "last_trade_at": None, "no_trades_30d": None, "thresholds": th, "reason": None,
+                "reasons": {"last_trade_at": "third_party_no_trade_history"}}
+    if c == "9":
+        return {"source": "local", "trades": 133, "trades_capped": False, "settled": 12, "settled_capped": False,
+                "last_trade_at": "2026-10-26T09:05:00.000Z", "no_trades_30d": False, "thresholds": th, "reason": "below_min_settled", "reasons": {}}
+    if c == "a":
+        return {"source": "polymarketscan", "trades": None, "trades_capped": False, "settled": None, "settled_capped": False,
+                "last_trade_at": None, "no_trades_30d": None, "thresholds": th, "reason": "below_min_trades",
+                "reasons": {"last_trade_at": "third_party_no_trade_history", "trades": "third_party_missing", "settled": "third_party_missing"}}
+    return None
 
 
 def leader(c):
@@ -75,6 +104,14 @@ def leader(c):
         base["metrics"].update(win_rate=None, profit_factor=None, resolved_markets=0)
         base["metric_reasons"] = {"win_rate": "no_settled_markets", "profit_factor": "no_settled_markets"}
         base["reasons"] = {"smart_score": "not_scored"}
+    ib = basis(c)
+    if ib is not None:
+        base["index_basis"] = ib
+        base.update(source=ib["source"], checks_incomplete=ib["source"] != "local", skipped_checks=["mm_score", "wash_score"] if ib["source"] != "local" else [],
+                    suspected_market_maker=False)
+        if c == "9":
+            base["indexable"] = False
+            base["smart_score"] = None
     return base
 
 
@@ -88,11 +125,13 @@ CURVES = {"1": curve([0, 3200, 2900, 8100, 15400, 21900, 30500, 41200, 48210.5])
           "d": None,
           "e": []}
 CURVE_REASON = {"c": "scan_summary_not_series", "d": "curve_metric_mismatch", "e": "no_points_in_window"}
+for _c in "6789a":
+    CURVES[_c] = curve([0, 900, 2100, 1800, 3900, 5200, 6100])
 
 
 def board():
     rows = []
-    for i, c in enumerate(["1", "2", "5", "4", "1", "2"]):
+    for i, c in enumerate(["1", "2", "5", "4", "1", "2", "6", "7", "a"]):
         l = leader(c)
         l["address"] = "0x" + (c * 39) + str(i)
         l["user_name"] = None
@@ -142,7 +181,7 @@ class H(BaseHTTPRequestHandler):
             if p.startswith(pre):
                 a = p[len(pre):].strip("/").lower()
                 c = a[2:3]
-                if len(a) != 42 or a != addr(c) or c not in "12345bcde":
+                if len(a) != 42 or a != addr(c) or c not in "123456789abcde":
                     return self.send(404, {"error": "not found"})
                 if kind == "leader":
                     l = leader(c)

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyLeaderShell, leaderCopy, checkFlags, roiMissing, formatAsOf, scoreText } from "./leader-page.mjs";
+import { applyLeaderShell, leaderCopy, checkFlags, roiMissing, formatAsOf, scoreText, basisCount, leaderIndexable } from "./leader-page.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const shell = (lang) => fs.readFileSync(path.join(repo, lang, "leader", "_shell", "index.html"), "utf8");
@@ -233,6 +233,130 @@ assert.match(live, /new AbortController\(\)/);
   // 曲线 null / [] / 0–1 个点：整块不画（Casey 定稿），不出「无数据」卡片
   assert.ok(js.includes("sparkHost.innerHTML = spark(curve);") && !js.includes("sparkNd") && !js.includes('data-nd="curve"'), "client hides empty curve");
   assert.match(js, /function curveFlat\(curve\) \{\s*var pts = curvePts\(curve\);\s*if \(pts\.length < 2\) return true;/);
+}
+
+// 10. copy-engine #89 index_basis：已结算 / 成交笔数读门槛的数；封顶「20,000+」+「第三方口径」；缺数「无数据」；
+//     「近 30 天无成交」/「最近一次成交」为 null 时整行隐藏；窗口说明改成「胜率、收益率按近 90 天」。没有 index_basis 时保持原样。
+{
+  const IB = {
+    zh: { settled: "已结算市场（全部历史）", trades: "成交笔数（全部历史）", tag: "第三方口径", cap: "第三方只统计到这个数", win: "数据截至 2026-10-28 07:09（UTC） · 胜率、收益率按近 90 天", oldWin: "统计窗口：近 90 天", quiet: "近 30 天无成交", last: "最近一次成交：", nd: "无数据" },
+    en: { settled: "Resolved markets (all time)", trades: "Trades (all time)", tag: "third-party basis", cap: "Third-party data stops counting here", win: "Data as of 2026-10-28 07:09 (UTC) · Win rate and ROI: last 90 days", oldWin: "Window: last 90 days", quiet: "No trades in the last 30 days", last: "Last trade: ", nd: "No data" },
+  };
+  const th = { min_trades: 50, min_settled: 20 };
+  const local = { source: "local", trades: 9310, trades_capped: false, settled: 1842, settled_capped: false, last_trade_at: "2026-09-12T03:20:00.000Z", no_trades_30d: true, thresholds: th, reason: null, reasons: {} };
+  const capped = { source: "polymarketscan", trades: 20000, trades_capped: true, settled: 20000, settled_capped: true, last_trade_at: null, no_trades_30d: null, thresholds: th, reason: null, reasons: { last_trade_at: "third_party_no_trade_history" } };
+  const scan = Object.assign({}, capped, { trades: 4120, trades_capped: false, settled: 3296, settled_capped: false });
+  const missing = Object.assign({}, capped, { trades: null, trades_capped: false, settled: null, settled_capped: false, reason: "below_min_trades", reasons: { last_trade_at: "third_party_no_trade_history", trades: "third_party_missing", settled: "third_party_missing" } });
+  const grid = (h) => h.match(/<section class="card grid" data-f="grid">([\s\S]*?)<\/section>/)[1];
+  const cellOf = (h, k) => (grid(h).match(new RegExp(`<div class="st" data-f="${k}">([\\s\\S]*?)</div>`)) || [])[1];
+  const ld = (h) => JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+  const vm = (h) => ld(h)["@graph"].find((g) => g["@type"] === "Dataset").variableMeasured;
+
+  assert.equal(basisCount(20000, true), "20,000+");
+  assert.equal(basisCount(1842, false), "1,842");
+  assert.equal(basisCount(null, false), null);
+
+  for (const lang of ["zh", "en"]) {
+    const T = IB[lang];
+    // 10a. 没有 index_basis：旧标签、旧窗口说明都不变
+    {
+      const h = page(lang, leader());
+      assert.ok(h.includes(lang === "zh" ? "<span>已结算市场</span><b class=\"num \">120</b>" : "<span>Resolved markets</span><b class=\"num \">120</b>"));
+      assert.ok(h.includes(T.oldWin));
+      assert.ok(!h.includes(T.settled) && !h.includes(T.trades) && !h.includes(T.quiet) && !h.includes(T.win.split(" · ")[1]));
+      assert.ok(desc(h).includes(lang === "zh" ? "已结算市场 120 个。" : "120 resolved markets. "));
+    }
+    // 10b. 本地来源：读 index_basis.settled / trades，不读 metrics.resolved_markets；近 30 天无成交显示在页头；最近一次成交读 index_basis
+    {
+      const h = page(lang, leader({ source: "local", index_basis: local }, { last_trade_at: "2026-10-27T22:41:00.000Z" }));
+      assert.match(cellOf(h, "settled"), new RegExp(`^<span>${T.settled.replace(/[()]/g, "\\$&")}</span><b class="num">1,842</b>$`));
+      assert.match(cellOf(h, "trades"), new RegExp(`^<span>${T.trades.replace(/[()]/g, "\\$&")}</span><b class="num">9,310</b>$`));
+      assert.ok(!grid(h).includes(">120<"), "metrics.resolved_markets not shown");
+      assert.ok(!grid(h).includes(T.tag), "local has no third-party tag");
+      assert.ok(h.includes(T.win), "window note");
+      assert.ok(!h.includes(T.oldWin));
+      assert.match(h, new RegExp(`data-f="checks"><div class="ck-line">.*<span class="ck ck-quiet">${T.quiet}</span>`));
+      assert.ok(h.includes(T.last + (lang === "zh" ? "2026-09-12 03:20（UTC）。" : "2026-09-12 03:20 (UTC).")), "last trade from index_basis");
+      assert.ok(!h.includes("2026-10-27 22:41"), "metrics.last_trade_at ignored");
+      assert.ok(desc(h).includes(lang === "zh" ? "已结算市场（全部历史）1,842 个。" : "1,842 resolved markets (all time). "));
+      const names = vm(h).map((x) => x.name);
+      assert.ok(names.includes(T.settled) && names.includes(T.trades));
+      assert.equal(vm(h).find((x) => x.name === T.trades).value, "9,310");
+      // no_trades_30d=false：不出标签
+      const h2 = page(lang, leader({ source: "local", index_basis: Object.assign({}, local, { no_trades_30d: false }) }));
+      assert.ok(!h2.includes(T.quiet));
+    }
+    // 10c. 第三方封顶：20,000+、第三方口径、悬停说明；没有最近成交时间 → 这一行和「近 30 天无成交」都不出现，也不写「未知」
+    {
+      const h = page(lang, leader({ source: "polymarketscan", checks_incomplete: true, index_basis: capped }, { last_trade_at: "2026-10-27T22:41:00.000Z" }));
+      for (const k of ["settled", "trades"]) {
+        const c = cellOf(h, k);
+        assert.ok(c.includes(`<span class="ck" title="${T.cap}">${T.tag}</span>`), `${lang} ${k} tag: ${c}`);
+        assert.ok(c.includes(`<b class="num" title="${T.cap}">20,000+</b>`), `${lang} ${k} value: ${c}`);
+      }
+      assert.ok(!h.includes(T.last) && !h.includes(T.quiet) && !/未知|Unknown/.test(h));
+      assert.equal(vm(h).find((x) => x.name === T.settled).value, "20,000+");
+      assert.ok(desc(h).includes(lang === "zh" ? "已结算市场（全部历史）20,000+ 个。" : "20,000+ resolved markets (all time). "));
+      assert.doesNotMatch(h, FORBIDDEN);
+    }
+    // 10d. 第三方没封顶：有「第三方口径」但不带悬停、不带「+」；last_trade_at=null 隐藏整行
+    {
+      const h = page(lang, leader({ source: "polymarketscan", index_basis: scan }));
+      assert.equal(cellOf(h, "settled"), `<span>${T.settled} <span class="ck">${T.tag}</span></span><b class="num">3,296</b>`);
+      assert.equal(cellOf(h, "trades"), `<span>${T.trades} <span class="ck">${T.tag}</span></span><b class="num">4,120</b>`);
+      assert.ok(!h.includes(T.last) && !h.includes(T.quiet));
+    }
+    // 10e. third_party_missing：两格都在，显示「无数据」，不显示「—」
+    {
+      const h = page(lang, leader({ source: "polymarketscan", index_basis: missing }));
+      for (const k of ["settled", "trades"]) {
+        assert.equal(cellOf(h, k), `<span>${T[k]} <span class="ck">${T.tag}</span></span><b class="nd">${T.nd}</b>`);
+      }
+      assert.ok(!grid(h).includes("—"));
+      assert.ok(!desc(h).includes(lang === "zh" ? "已结算市场" : "resolved markets"));
+      assert.ok(!vm(h).some((x) => x.name === T.settled || x.name === T.trades));
+    }
+    // 10f. indexable=false：noindex,follow，页面照常渲染；true 时没有 robots meta
+    {
+      const h = page(lang, leader({ source: "local", indexable: false, index_basis: Object.assign({}, local, { reason: "below_min_settled" }) }));
+      assert.match(h, /<meta name="robots" content="noindex,follow">/);
+      assert.ok(cellOf(h, "settled"));
+      const h2 = page(lang, leader({ source: "local", index_basis: local }));
+      assert.doesNotMatch(h2, /<meta name="robots"/);
+    }
+  }
+  assert.equal(leaderIndexable(leader({ index_basis: local })), true);
+  assert.equal(leaderIndexable(leader({ indexable: false, index_basis: local })), false);
+  assert.equal(leaderIndexable(leader({ index_basis: Object.assign({ indexable: false }, local) })), false);
+  assert.equal(leaderIndexable(leader({ indexable: undefined })), false);
+  // 静态快照页里不再有旧曲线标题
+  for (const lang of ["zh", "en"]) {
+    const dir = path.join(repo, lang, "leader");
+    for (const d of fs.readdirSync(dir)) {
+      const f = path.join(dir, d, "index.html");
+      if (!fs.existsSync(f)) continue;
+      const s = fs.readFileSync(f, "utf8");
+      assert.doesNotMatch(s, /全部历史收益曲线|All-time equity curve|已实现 \+ 浮动|realized \+ unrealized/, f);
+    }
+  }
+  // 客户端用同一组文案
+  const js = fs.readFileSync(path.join(repo, "site-live.js"), "utf8");
+  for (const lang of ["zh", "en"]) for (const k of ["settled", "trades", "tag", "cap", "quiet"]) assert.ok(js.includes(IB[lang][k]), `site-live.js missing ${lang} ${k}`);
+  // 封顶标注英文与 #46 ROI 标签同一个词（Casey 定稿）：third-party basis；不再出现 third-party count
+  assert.ok(!/third-party count/i.test(js) && !/third-party count/i.test(fs.readFileSync(path.join(repo, "workers", "leader-page.mjs"), "utf8")), "old wording gone");
+  // #89 + #90 同时出现：封顶 index_basis + 胜率/收益率 null → 封顶两格照常，比例两格「无数据」，摘要句不写比例
+  for (const lang of ["zh", "en"]) {
+    const T = IB[lang];
+    const l = leader({ source: "polymarketscan", checks_incomplete: true, win_rate: null, roi: null, index_basis: capped },
+      { win_rate: null, roi: null, profit_factor: null, settled_capped: true, trades_capped: true });
+    const h = page(lang, l);
+    assert.ok(cellOf(h, "settled").includes(`<b class="num" title="${T.cap}">20,000+</b>`));
+    assert.ok(cellOf(h, "settled").includes(`<span class="ck" title="${T.cap}">${T.tag}</span>`));
+    assert.match(cellOf(h, "win_rate"), new RegExp(`<b class="nd">${T.nd}</b>$`));
+    assert.match(cellOf(h, "roi"), new RegExp(`<b class="nd">${T.nd}</b>$`));
+    assert.doesNotMatch(desc(h), lang === "zh" ? /胜率|收益率/ : /win rate|ROI/);
+    assert.ok(!vm(h).some((x) => x.propertyID === "win_rate" || x.propertyID === "roi"));
+  }
 }
 
 console.log("leader labels tests ok");

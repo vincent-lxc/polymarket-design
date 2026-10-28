@@ -3,7 +3,7 @@
  *  /sitemap.xml 只消费 BFF 门槛清单，失败返回 503，不回落静态大表。
  *  IndexNow 密钥和 /llms.txt 在资产层之前返回，避免被重定向或改写。 */
 
-import { applyLeaderShell } from "./leader-page.mjs";
+import { applyLeaderShell, leaderIndexable } from "./leader-page.mjs";
 import { loadSitemapLeaders, renderSitemap } from "./sitemap-bff.mjs";
 
 export const BFF_ORIGIN = "https://api.wakeloom.com";
@@ -193,7 +193,7 @@ export async function leaderPage(request, env, lang, addr) {
     const leader = await fetchPublicLeader(env, addr);
     const shell = await readShell(request, env, lang);
     const html = applyLeaderShell(shell, lang, addr, leader);
-    const indexable = leader.indexable === true;
+    const indexable = leaderIndexable(leader);
     const headers = {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "public, max-age=60",

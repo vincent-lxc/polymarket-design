@@ -169,6 +169,67 @@ export function checkFlags(leader) {
   };
 }
 
+/**
+ * copy-engine #89：公开 leader 和排行每一行上的 index_basis（门槛读的成交数、已结算数）。
+ * 不是对象（含旧接口没有这个字段）时返回 null，页面保持原来的显示和标签。
+ */
+export function indexBasis(leader) {
+  const ib = leader && leader.index_basis;
+  return ib && typeof ib === "object" && !Array.isArray(ib) ? ib : null;
+}
+
+/**
+ * 能不能收录：只有 leader.indexable === true 才收录（字段缺失、false 都输出 noindex,follow）。
+ * index_basis 里如果也带了 indexable 且为 false，同样不收录。
+ */
+export function leaderIndexable(leader) {
+  if (!leader || leader.indexable !== true) return false;
+  const ib = indexBasis(leader);
+  return !(ib && ib.indexable === false);
+}
+
+/** index_basis 的文案。英文封顶标注「third-party basis」与 ROI 标签一致（Casey 2026-10-28 定稿）。 */
+export const IB_LABELS = {
+  zh: {
+    settled: "已结算市场（全部历史）",
+    trades: "成交笔数（全部历史）",
+    thirdCount: "第三方口径",
+    capNote: "第三方只统计到这个数",
+    window: "胜率、收益率按近 90 天",
+    windowN: (n) => `胜率、收益率按近 ${n} 天`,
+    lastTrade: "最近一次成交：",
+    quiet: "近 30 天无成交",
+    nd: "无数据",
+  },
+  en: {
+    settled: "Resolved markets (all time)",
+    trades: "Trades (all time)",
+    thirdCount: "third-party basis",
+    capNote: "Third-party data stops counting here",
+    window: "Win rate and ROI: last 90 days",
+    windowN: (n) => `Win rate and ROI: last ${n} days`,
+    lastTrade: "Last trade: ",
+    quiet: "No trades in the last 30 days",
+    nd: "No data",
+  },
+};
+
+/** 门槛数：封顶时写「20,000+」；第三方没给（null）时返回 null，由调用方显示「无数据」。 */
+export function basisCount(n, capped) {
+  const v = finite(n);
+  if (v == null) return null;
+  return num(v) + (capped === true ? "+" : "");
+}
+
+/** 「第三方口径」标签：来源是第三方或数字封顶时出现；封顶时悬停说明「第三方只统计到这个数」。 */
+export function basisTag(lang, ib, capped) {
+  if (!ib) return "";
+  const src = typeof ib.source === "string" ? ib.source.trim().toLowerCase() : "";
+  if (!THIRD_PARTY_SOURCES.has(src) && capped !== true) return "";
+  const L = IB_LABELS[lang === "zh" ? "zh" : "en"];
+  return tag(L.thirdCount, capped === true ? L.capNote : null);
+}
+
 /** 综合评分只在接口给了有限数值、且不是疑似做市时显示。 */
 export function scoreText(leader) {
   if (!leader || typeof leader !== "object") return null;
@@ -204,6 +265,12 @@ export function paperSignal(leader) {
 
 function windowClause(lang, leader) {
   const w = leader && leader.window;
+  if (indexBasis(leader)) {
+    const L = IB_LABELS[lang === "zh" ? "zh" : "en"];
+    if (w == null || w === "" || w === "90d") return " · " + L.window;
+    if (typeof w === "string" && /^\d+d$/.test(w)) return " · " + L.windowN(w.slice(0, -1));
+    return "";
+  }
   if (w == null || w === "" || w === "90d") {
     return lang === "zh" ? " · 统计窗口：近 90 天" : " · Window: last 90 days";
   }
@@ -224,7 +291,8 @@ export function leaderCopy(lang, addr, leader) {
   const roi = roiNd ? null : pct(m.roi, true);
   const roiNote = flags.thirdParty ? (zh ? "（第三方口径）" : " (third-party basis)") : "";
   const dd = pct(m.max_drawdown);
-  const rm = num(m.resolved_markets);
+  const ib = indexBasis(leader);
+  const rm = ib ? basisCount(ib.settled, ib.settled_capped) : num(m.resolved_markets);
   const paper = paperSignal(leader);
   let description;
   if (zh) {
@@ -234,7 +302,7 @@ export function leaderCopy(lang, addr, leader) {
     if (roi) parts.push(`收益率 ${roi}${roiNote}`);
     if (dd) parts.push(`最大回撤 ${dd}`);
     description = who + (parts.length ? "：" + parts.join("、") + "。" : "。");
-    if (rm) description += `已结算市场 ${rm} 个。`;
+    if (rm) description += ib ? `已结算市场（全部历史）${rm} 个。` : `已结算市场 ${rm} 个。`;
     description += flags.thirdParty ? SOURCE_LINE.zh.third : SOURCE_LINE.zh.chain;
     if (paper.on) description += "模拟盘数据，不是实盘成交。";
   } else {
@@ -244,7 +312,7 @@ export function leaderCopy(lang, addr, leader) {
     if (roi) parts.push(`ROI ${roi}${roiNote}`);
     if (dd) parts.push(`max drawdown ${dd}`);
     description = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ");
-    if (rm) description += `${rm} resolved markets. `;
+    if (rm) description += ib ? `${rm} resolved markets (all time). ` : `${rm} resolved markets. `;
     description += flags.thirdParty ? SOURCE_LINE.en.third : SOURCE_LINE.en.chain;
     if (paper.on) description += " Paper-trading figures, not live fills.";
   }
@@ -268,7 +336,7 @@ export function leaderCopy(lang, addr, leader) {
     ? (zh ? "数据截至 " : "Data as of ") + asof + windowClause(lang, leader)
     : "";
   const asofIso = leader && (leader.as_of || leader.updated_at);
-  return { title, description, who, name: displayName(leader, addr), wr, roi, dd, rm, asof, asofLine, asofIso, paper, metrics: m, flags, score, roiNd };
+  return { title, description, who, name: displayName(leader, addr), wr, roi, dd, rm, asof, asofLine, asofIso, paper, metrics: m, flags, score, roiNd, ib };
 }
 
 function stat(label, val, cls) {
@@ -305,6 +373,17 @@ function roiStat(lang, m, opts) {
   return `<div class="st" data-f="roi"><span>${esc(label)} ${t}</span>${b}</div>`;
 }
 
+/** index_basis 的已结算 / 成交笔数格：这一格总在；没数时「无数据」，封顶时「20,000+」并在数字上悬停说明。 */
+function basisStat(lang, key, ib) {
+  const L = IB_LABELS[lang === "zh" ? "zh" : "en"];
+  const capped = ib[key + "_capped"] === true;
+  const val = basisCount(ib[key], capped);
+  const t = basisTag(lang, ib, capped);
+  const tip = capped ? ` title="${esc(L.capNote)}"` : "";
+  const b = val == null ? `<b class="nd">${esc(L.nd)}</b>` : `<b class="num"${tip}>${esc(val)}</b>`;
+  return `<div class="st" data-f="${key}"><span>${esc(L[key])}${t ? " " + t : ""}</span>${b}</div>`;
+}
+
 function statsGrid(lang, m, opts) {
   const zh = lang === "zh";
   const cards = [
@@ -313,7 +392,9 @@ function statsGrid(lang, m, opts) {
       : stat(zh ? "胜率（近90天）" : "Win rate (90d)", pct(m.win_rate, false, 1), ""),
     roiStat(lang, m, opts),
     stat(zh ? "最大回撤" : "Max drawdown", pct(m.max_drawdown), ""),
-    stat(zh ? "已结算市场" : "Resolved markets", num(m.resolved_markets), ""),
+    ...(opts && opts.ib
+      ? [basisStat(lang, "settled", opts.ib), basisStat(lang, "trades", opts.ib)]
+      : [stat(zh ? "已结算市场" : "Resolved markets", num(m.resolved_markets), "")]),
     stat(zh ? "已实现盈亏" : "Realized P&L", usd(m.realized_pnl, true), finite(m.realized_pnl) > 0 ? "up" : finite(m.realized_pnl) < 0 ? "dn" : ""),
     stat(zh ? "近30天盈亏" : "P&L (30d)", usd(m.pnl_30d, true), finite(m.pnl_30d) > 0 ? "up" : finite(m.pnl_30d) < 0 ? "dn" : ""),
     stat(zh ? "成交额" : "Volume", usd(m.volume_usd), ""),
@@ -348,7 +429,9 @@ function factsBlock(lang, leader, metrics) {
   if (cats.length) {
     facts.push((zh ? "主要市场类别：" : "Main categories: ") + cats.join(zh ? "、" : ", ") + (zh ? "。" : "."));
   }
-  const lt = formatAsOf(metrics && metrics.last_trade_at, lang);
+  const ib = indexBasis(leader);
+  // 有 index_basis 时只认 index_basis.last_trade_at；为 null（第三方来源）时整行不显示，不写「未知」。
+  const lt = formatAsOf(ib ? ib.last_trade_at : metrics && metrics.last_trade_at, lang);
   if (lt) facts.push((zh ? "最近一次成交：" : "Last trade: ") + lt + (zh ? "。" : "."));
   const xn = leader && leader.x_username;
   if (typeof xn === "string" && xn.trim() && !/^(null|nan)$/i.test(xn.trim())) {
@@ -390,7 +473,12 @@ function measured(lang, copy) {
     [zh ? "胜率（近90天）" : "Win rate (90d)", "win_rate", pct(m.win_rate, false, 1)],
     [(zh ? "收益率（近90天）" : "ROI (90d)") + (copy.flags && copy.flags.thirdParty ? (zh ? "（第三方口径）" : " (third-party basis)") : ""), "roi", copy.roiNd ? null : pct(m.roi, true)],
     [zh ? "最大回撤" : "Max drawdown", "max_drawdown", pct(m.max_drawdown)],
-    [zh ? "已结算市场" : "Resolved markets", "resolved_markets", num(m.resolved_markets)],
+    ...(copy.ib
+      ? [
+          [IB_LABELS[zh ? "zh" : "en"].settled, "index_basis.settled", basisCount(copy.ib.settled, copy.ib.settled_capped)],
+          [IB_LABELS[zh ? "zh" : "en"].trades, "index_basis.trades", basisCount(copy.ib.trades, copy.ib.trades_capped)],
+        ]
+      : [[zh ? "已结算市场" : "Resolved markets", "resolved_markets", num(m.resolved_markets)]]),
     [zh ? "已实现盈亏" : "Realized P&L", "realized_pnl", usd(m.realized_pnl, true)],
     [zh ? "近30天盈亏" : "P&L (30d)", "pnl_30d", usd(m.pnl_30d, true)],
     [zh ? "成交额" : "Volume", "volume_usd", usd(m.volume_usd)],
@@ -505,6 +593,8 @@ export function checksBlock(lang, copy) {
     bits.push(tag(L.checks, f.thirdParty ? L.checksNote : null));
     if (f.thirdParty) notes.push(L.checksNote);
   }
+  // 「近 30 天无成交」只在 index_basis.no_trades_30d === true 时出现；null（不知道）不显示。
+  if (copy.ib && copy.ib.no_trades_30d === true) bits.push(tag(IB_LABELS[lang === "zh" ? "zh" : "en"].quiet, null, "ck-quiet"));
   if (!bits.length) return `<div class="ckrow" data-f="checks" hidden></div>`;
   const ns = notes.map((n) => `<p class="mu xs ck-note">${esc(n)}</p>`).join("");
   return `<div class="ckrow" data-f="checks"><div class="ck-line">${bits.join("")}</div>${ns}</div>`;
@@ -532,7 +622,7 @@ export function renderLeaderMain(lang, addr, leader) {
 <h1 data-f="name">${esc(copy.name)}</h1><p class="addr num" data-f="addr" title="${esc(addr)}">${esc(addr)}</p>${checks}<p class="lead" data-f="desc">${esc(copy.description)}</p>
 ${asof}${paperNote}
 <span class="live-badge" data-live-badge="leader"></span></section>
-${statsGrid(lang, copy.metrics, { thirdParty: copy.flags.thirdParty, roiNd: copy.roiNd, keepRates: true })}
+${statsGrid(lang, copy.metrics, { thirdParty: copy.flags.thirdParty, roiNd: copy.roiNd, ib: copy.ib, keepRates: true })}
 <div data-f="spark"></div>
 ${factsBlock(lang, leader, copy.metrics)}
 ${recentBlock(lang, leader)}
@@ -579,7 +669,7 @@ export function applyLeaderShell(shellHtml, lang, addr, leader) {
   put(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(copy.description)}">`);
   put(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${canonical}">`);
   put(/<script type="application\/ld\+json">[\s\S]*?<\/script>/, jsonScript(leaderJsonLd(lang, addr, leader, copy)));
-  if (leader && leader.indexable === true) {
+  if (leaderIndexable(leader)) {
     html = html.replace(/<meta name="robots" content="[^"]*">/g, "");
   } else if (html.includes('name="robots"')) {
     html = html.replace(/<meta name="robots" content="[^"]*">/, '<meta name="robots" content="noindex,follow">');
