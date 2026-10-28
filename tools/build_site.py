@@ -160,7 +160,7 @@ DESC = {
 FAQ = {
  "zh": [
   ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例下单。Wakeloom 第一期只做模拟盘：选定钱包、设好比例和上限，它成交时我们按当时盘口模拟成交，并记录价差。"),
-  ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。我们用近 90 天数据，同时看胜率、收益率、最大回撤和收益是否集中在一个事件上。"),
+  ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。我们用近 90 天数据，同时看胜率、收益率、最大回撤和收益是否集中在一个事件上。被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查。"),
   ("Polymarket 排行榜第一名值得跟吗？", "不一定。按金额排的榜首常常是一次重仓押中，或者成交量里有大量刷量和做市对冲，这类表现很难复制。Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查，请自己再看一下。上榜也不代表以后还会这样。"),
   ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。我们发现对方成交到自己下单之间有延迟，价格可能已经变了，薄盘口还会吃到更差的价。所以每一笔都记录和对方的成交价差，偏离超过阈值就放弃，先在模拟盘里算清楚扣掉成本后的结果。"),
   ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。钱包登录只签署登录接口返回的那段文案（例如 Sign in to Wakeloom.），该签名不能用来转账，也不能授权交易。"),
@@ -172,7 +172,7 @@ FAQ = {
  ],
  "en": [
   ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet's fills and place proportional orders. Wakeloom's first phase is paper trading only: pick a wallet, set a ratio and caps, and each time it fills we simulate a fill at the live order book and record the price gap."),
-  ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event."),
+  ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event. Addresses flagged as likely market makers are not ranked. Most addresses currently use third-party data and haven't been through these checks yet."),
   ("Is the #1 trader on a Polymarket leaderboard worth copying?", "Not necessarily. The top spot by dollars is often one large bet that paid off, or volume inflated by wash trades and market-making hedges, which you can't replicate. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Most addresses currently use third-party data and have not been through these checks yet, so please review them yourself. A ranking doesn't predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. By the time we see a fill and place our own order the price may have moved, and thin books give worse prices. We log the price gap on every trade, skip trades that deviate past a threshold, and measure net results after costs in paper trading first."),
   ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or custodied your private key. Wallet login only signs the nonce text returned by the API (e.g. Sign in to Wakeloom.); that signature cannot transfer funds or approve trades."),
@@ -270,7 +270,7 @@ def home(lang, D):
     asof = bj(D["as_of"], lang)
     hero = (f'''<section class="hero"><div class="hx"><p class="eyebrow">{"用于 Polymarket 的钱包分析 · 模拟盘" if zh else "Wallet analytics & paper trading for Polymarket"}</p>
 <h1>{"Polymarket 跟单前，先看清谁靠实力、谁靠运气" if zh else "Before you copy a Polymarket trader, see if it's skill or luck"}</h1>
-<p class="lead">{"排除刷量、做市和单次重仓，看近 90 天胜率、回撤与收益；先用模拟盘跟单，零资金看真实滑点（公测中）" if zh else "Filter wash trading, market makers, and one-hit wonders. See 90-day win rate, drawdown, and returns — then paper-copy with zero capital to feel real slippage (public beta)."}</p>
+<p class="lead">{"按综合评分排序，看近 90 天胜率、回撤与收益；先用模拟盘跟单，零资金看真实滑点（公测中）" if zh else "Ranked by composite score. See 90-day win rate, drawdown, and returns — then paper-copy with zero capital to feel real slippage (public beta)."}</p>
 <div class="ctas"><a class="btn pri mag" href="https://app.wakeloom.com/board">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
 <p class="mu sm">{"第一期只有模拟盘，不动真钱，不需要私钥。" if zh else "Phase one is paper trading only: no real money, no private key."}</p></div>
 <div class="hv card rise" data-live="home-top"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b><span class="live-badge" data-live-badge="home-top"></span>{f'<span class="mu sm" data-live-meta="home-top">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else '<span class="mu sm" data-live-meta="home-top"></span>'}</div>
