@@ -39,6 +39,14 @@ for _L in ("zh", "en"):
     assert not re.search(r"NaN|None|null|undefined|(?<![\d.])0\.0%", _row), ("static fake number", _L, _row)
     _row2 = _bs.lrow_full(_L, 1, {"address": "0x" + "1" * 40, "source": "local", "smart_score": 66, "metrics": {"win_rate": 0.62}}, {"wallets": {}})
     assert ">66.0<" in _row2 and "—" not in _row2, ("static score kept", _L, _row2)
+    # 封顶（*_capped=true）一律固定写「20,000+」，不露原始数 19,991（Blake 2026-10-28）：metrics 路径与 index_basis 路径
+    _row3 = _bs.lrow_full(_L, 5, {"address": "0x" + "b" * 40, "source": "polymarketscan", "smart_score": 66,
+                                  "metrics": {"resolved_markets": 19991, "settled_capped": True, "trade_count": 20000, "trades_capped": True}}, {"wallets": {}})
+    assert re.findall(r"<td[^>]*>(.*?)</td>", _row3)[6] == "20,000+" and "19,991" not in _row3, ("static metrics capped", _L, _row3)
+    _row4 = _bs.lrow_full(_L, 9, {"address": "0x" + "7" * 40, "source": "polymarketscan", "smart_score": 56.9, "metrics": {},
+                                  "index_basis": {"source": "polymarketscan", "settled": 19991, "settled_capped": True, "trades": 19998, "trades_capped": True}}, {"wallets": {}})
+    assert '<td class="r num hm" title="%s">20,000+</td>' % _bs.LBT[_L]["capNote"] in _row4 and "19,991" not in _row4, ("static ib capped", _L, _row4)
+    assert _bs.basis_count(19991, True) == "20,000+" and _bs.basis_count(19991, False) == "19,991" and _bs.basis_count(None, False) is None
 
 
 def snap_local(iso):
@@ -119,6 +127,9 @@ with sync_playwright() as pw:
         ok(cell(9).inner_text() == nd, "third_party_missing settled ND " + cell(9).inner_text())
         ok(cell(0).inner_text() == "120" or re.match(r"^[\d,]+$", cell(0).inner_text()), "row without ib keeps resolved_markets " + cell(0).inner_text())
         ok("—" not in "".join(rows.nth(i).locator("td").nth(6).inner_text() for i in range(11)), "no dash in settled column")
+        # 封顶：#90 metrics.settled_capped（b 行，原始 19,991）与 #89 index_basis（7 行，原始 19,991/19,998）都只写「20,000+」
+        ok(cell(5).inner_text() == "20,000+", "metrics capped settled " + cell(5).inner_text())
+        ok(not re.search(r"19,99\d|1999\d", allt), "raw capped count not on leaderboard")
         ctx.close()
 
     # 排行榜关 JS（爬虫看到的版本）：综合评分列每行都有数，没有「—」
@@ -254,6 +265,12 @@ with sync_playwright() as pw:
                         ok(word not in p.inner_text("[data-f=desc]"), "desc no %s %s" % (k, tagj))
                         ok('"propertyID":"%s"' % k not in ld, "JSON-LD no %s %s" % (k, tagj))
                     ok(not FAKE.search(md) and not re.search(r"NaN|undefined|null", ld), "meta/LD clean " + tagj)
+                    if c == "b":
+                        # metrics.settled_capped：已结算市场固定「20,000+」，原始 19,991 不出现在格子、摘要、meta、JSON-LD
+                        rmv = next((v for lb, v in gl if lb.startswith("已结算市场" if Z else "Resolved markets")), None)
+                        ok(rmv == "20,000+", "capped resolved %s: %s" % (tagj, rmv))
+                        ok("20,000+" in md and "20,000+" in ld, "capped in meta/LD " + tagj)
+                        ok(not re.search(r"19,991|19991", main + md + ld), "raw capped count hidden " + tagj)
                     ok(("66.0" if c == "b" else "61.3" if c == "c" else "73.9" if c == "d" else None) in (p.inner_text("[data-f=checks]") or "") if c != "e"
                        else p.locator("[data-f=checks] .sc").count() == 0, "score %s" % tagj)
                     fig = p.locator("[data-f=spark] figure")
@@ -307,6 +324,10 @@ with sync_playwright() as pw:
                 ok((X["tag"] in d["tag"]) == w[2], "third-party basis tag %s %s" % (tag, d))
                 ok((d["vtitle"] == X["cap"] and d["ttitle"] == X["cap"]) if w[3] else (d["vtitle"] is None and d["ttitle"] is None), "cap hover %s %s" % (tag, d))
         ok("—" not in p.inner_text("[data-f=grid]"), "no dash in grid " + tag)
+        if c == "7":
+            # 封顶原始数 19,991 / 19,998 不出现在页面、meta、JSON-LD 任何地方
+            raw = t + (p.get_attribute('meta[name="description"]', "content") or "") + (p.locator('script[type="application/ld+json"]').first.text_content() or "")
+            ok(not re.search(r"19,99\d|1999\d", raw), "raw capped count hidden " + tag)
         asof = p.inner_text("[data-f=asof]")
         ok(X["win"] in asof and X["old"] not in asof, "window wording %s %s" % (tag, asof))
         facts = p.inner_text("[data-f=facts]") if p.locator("[data-f=facts]").count() else ""

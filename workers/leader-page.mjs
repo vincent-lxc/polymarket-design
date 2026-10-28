@@ -214,11 +214,15 @@ export const IB_LABELS = {
   },
 };
 
-/** 门槛数：封顶时写「20,000+」；第三方没给（null）时返回 null，由调用方显示「无数据」。 */
+/** 封顶数的固定写法（Blake 2026-10-28 确认）：*_capped 为 true 时一律显示这个，不用原始数（原始数可能是 19,991）。 */
+export const CAPPED_COUNT = "20,000+";
+
+/** 门槛数：封顶（capped===true）时固定写「20,000+」，中英一样；第三方没给（null）时返回 null，由调用方显示「无数据」。 */
 export function basisCount(n, capped) {
+  if (capped === true) return CAPPED_COUNT;
   const v = finite(n);
   if (v == null) return null;
-  return num(v) + (capped === true ? "+" : "");
+  return num(v);
 }
 
 /** 「第三方口径」标签：来源是第三方或数字封顶时出现；封顶时悬停说明「第三方只统计到这个数」。 */
@@ -292,7 +296,7 @@ export function leaderCopy(lang, addr, leader) {
   const roiNote = flags.thirdParty ? (zh ? "（第三方口径）" : " (third-party basis)") : "";
   const dd = pct(m.max_drawdown);
   const ib = indexBasis(leader);
-  const rm = ib ? basisCount(ib.settled, ib.settled_capped) : num(m.resolved_markets);
+  const rm = ib ? basisCount(ib.settled, ib.settled_capped) : basisCount(m.resolved_markets, m.settled_capped);
   const paper = paperSignal(leader);
   let description;
   if (zh) {
@@ -394,7 +398,7 @@ function statsGrid(lang, m, opts) {
     stat(zh ? "最大回撤" : "Max drawdown", pct(m.max_drawdown), ""),
     ...(opts && opts.ib
       ? [basisStat(lang, "settled", opts.ib), basisStat(lang, "trades", opts.ib)]
-      : [stat(zh ? "已结算市场" : "Resolved markets", num(m.resolved_markets), "")]),
+      : [stat(zh ? "已结算市场" : "Resolved markets", basisCount(m.resolved_markets, m.settled_capped), "")]),
     stat(zh ? "已实现盈亏" : "Realized P&L", usd(m.realized_pnl, true), finite(m.realized_pnl) > 0 ? "up" : finite(m.realized_pnl) < 0 ? "dn" : ""),
     stat(zh ? "近30天盈亏" : "P&L (30d)", usd(m.pnl_30d, true), finite(m.pnl_30d) > 0 ? "up" : finite(m.pnl_30d) < 0 ? "dn" : ""),
     stat(zh ? "成交额" : "Volume", usd(m.volume_usd), ""),
@@ -478,7 +482,7 @@ function measured(lang, copy) {
           [IB_LABELS[zh ? "zh" : "en"].settled, "index_basis.settled", basisCount(copy.ib.settled, copy.ib.settled_capped)],
           [IB_LABELS[zh ? "zh" : "en"].trades, "index_basis.trades", basisCount(copy.ib.trades, copy.ib.trades_capped)],
         ]
-      : [[zh ? "已结算市场" : "Resolved markets", "resolved_markets", num(m.resolved_markets)]]),
+      : [[zh ? "已结算市场" : "Resolved markets", "resolved_markets", basisCount(m.resolved_markets, m.settled_capped)]]),
     [zh ? "已实现盈亏" : "Realized P&L", "realized_pnl", usd(m.realized_pnl, true)],
     [zh ? "近30天盈亏" : "P&L (30d)", "pnl_30d", usd(m.pnl_30d, true)],
     [zh ? "成交额" : "Volume", "volume_usd", usd(m.volume_usd)],

@@ -84,6 +84,11 @@ def usd(x, sign=False):
     return f"{s}${abs(x):,.2f}" if abs(x) < 100 else f"{s}${abs(x):,.0f}"
 def num(x):
     return None if x is None else f"{x:,}"
+CAPPED_COUNT = "20,000+"  # *_capped 为 true 时一律固定写这个，不用原始数（Blake 2026-10-28），与 workers/leader-page.mjs basisCount 一致
+def basis_count(x, capped):
+    if capped is True: return CAPPED_COUNT
+    v = fnum(x)
+    return None if v is None else f"{int(v):,}" if float(v).is_integer() else f"{v:,}"
 def short(a): return a[:6] + "…" + a[-4:]
 def dname(w, a):
     n = (w or {}).get("user_name") or ""
@@ -394,11 +399,11 @@ def lrow_full(lang, i, l, D):
     def c(v, cls=""): return f'<td class="r num hm {cls}">{E(v)}</td>' if v is not None else f'<td class="r hm">{nd}</td>'
     ib = lb_basis(l)
     if ib is None:
-        settled = c(num(m.get("resolved_markets")))
+        settled = c(basis_count(m.get("resolved_markets"), m.get("settled_capped")))
     else:
         capped = ib.get("settled_capped") is True
-        v = fnum(ib.get("settled"))
-        settled = c(None) if v is None else f'<td class="r num hm"{f' title="{E(LBT[lang]["capNote"])}"' if capped else ""}>{E(f"{int(v):,}" + ("+" if capped else ""))}</td>'
+        v = basis_count(ib.get("settled"), capped)
+        settled = c(None) if v is None else f'<td class="r num hm"{f' title="{E(LBT[lang]["capNote"])}"' if capped else ""}>{E(v)}</td>'
     return lrow(lang, i, l, D)[:-5] + c(pct(m.get("max_drawdown"))) + settled + c(usd(m.get("realized_pnl"), True), tone(m.get("realized_pnl"))) + "</tr>"
 short_ = short
 
@@ -427,7 +432,7 @@ def leader(lang, a, upd, rank, D):
         if d.get(k) is not None: m[k] = d[k]
     nm = dname(w, a)
     asof_raw = w.get("as_of") or D["as_of"]; asof = bj(asof_raw, lang)
-    wr, roi, dd_, rm = pct(m.get("win_rate"), d=1), pct(m.get("roi"), True), pct(m.get("max_drawdown")), num(m.get("resolved_markets"))
+    wr, roi, dd_, rm = pct(m.get("win_rate"), d=1), pct(m.get("roi"), True), pct(m.get("max_drawdown")), basis_count(m.get("resolved_markets"), m.get("settled_capped"))
     # 描述：缺值整句删
     if zh:
         parts = [f"近90天胜率 {wr}" if wr else None, f"收益率 {roi}" if roi else None, f"最大回撤 {dd_}" if dd_ else None]

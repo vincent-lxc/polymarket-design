@@ -173,10 +173,11 @@
     var ib = l && l.index_basis;
     return ib && typeof ib === "object" && !Array.isArray(ib) ? ib : null;
   }
-  /* 封顶写「20,000+」；null（第三方没给）返回 null，显示「无数据」 */
+  /* 封顶（capped===true）一律固定写「20,000+」，不用原始数（Blake 2026-10-28）；null（第三方没给）返回 null，显示「无数据」。与 workers/leader-page.mjs 一致 */
+  var CAPPED_COUNT = "20,000+";
   function basisCount(n, capped) {
-    var v = num(n);
-    return v == null ? null : v + (capped === true ? "+" : "");
+    if (capped === true) return CAPPED_COUNT;
+    return num(n);
   }
   function basisTag(ib, capped) {
     if (!ib) return "";
@@ -291,7 +292,7 @@
   /* 排行榜「已结算」：有 index_basis 时读 index_basis.settled（封顶「20,000+」，悬停说明） */
   function settledCell(l, m) {
     var ib = basis(l);
-    if (!ib) return cellHm(num(m.resolved_markets));
+    if (!ib) return cellHm(basisCount(m.resolved_markets, m.settled_capped));
     var capped = ib.settled_capped === true;
     var v = basisCount(ib.settled, capped);
     if (v == null) return cellHm(null);
@@ -540,7 +541,7 @@
         roi = roiNd ? null : pct(m.roi, true),
         dd = pct(m.max_drawdown),
         ib = basis(d),
-        rm = ib ? basisCount(ib.settled, ib.settled_capped) : num(m.resolved_markets);
+        rm = ib ? basisCount(ib.settled, ib.settled_capped) : basisCount(m.resolved_markets, m.settled_capped);
       var titleEl = root.querySelector("[data-f=name]");
       if (titleEl) {
         var rk = f.mm ? null : titleEl.querySelector(".rk");

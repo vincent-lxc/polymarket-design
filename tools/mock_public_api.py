@@ -43,7 +43,8 @@ def basis(c):
         return {"source": "local", "trades": 9310, "trades_capped": False, "settled": 1842, "settled_capped": False,
                 "last_trade_at": "2026-09-12T03:20:00.000Z", "no_trades_30d": True, "thresholds": th, "reason": None, "reasons": {}}
     if c == "7":
-        return {"source": "polymarketscan", "trades": 20000, "trades_capped": True, "settled": 20000, "settled_capped": True,
+        # 原始数故意给 19991 / 19998：封顶时页面只能写固定「20,000+」，不能露出原始数（Blake 2026-10-28）
+        return {"source": "polymarketscan", "trades": 19998, "trades_capped": True, "settled": 19991, "settled_capped": True,
                 "last_trade_at": None, "no_trades_30d": None, "thresholds": th, "reason": None,
                 "reasons": {"last_trade_at": "third_party_no_trade_history"}}
     if c == "8":

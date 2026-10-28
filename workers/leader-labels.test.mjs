@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyLeaderShell, leaderCopy, checkFlags, roiMissing, formatAsOf, scoreText, basisCount, leaderIndexable } from "./leader-page.mjs";
+import { applyLeaderShell, leaderCopy, checkFlags, roiMissing, formatAsOf, scoreText, basisCount, CAPPED_COUNT, leaderIndexable } from "./leader-page.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const shell = (lang) => fs.readFileSync(path.join(repo, lang, "leader", "_shell", "index.html"), "utf8");
@@ -213,6 +213,13 @@ assert.match(live, /new AbortController\(\)/);
         if (nulls.includes("roi")) assert.doesNotMatch(text, lang === "zh" ? /收益率/ : /ROI/, `${lang} ${name} desc roi: ${text}`);
       }
       for (const k of nulls) assert.ok(!ids.includes(k), `${lang} ${name}: JSON-LD has ${k}`);
+      // metrics.settled_capped（没有 index_basis）：已结算市场也固定写「20,000+」，不露原始数 19,991
+      if (l.metrics && l.metrics.settled_capped === true) {
+        assert.ok(grid.includes(`<b class="num ">20,000+</b>`), `${lang} ${name}: capped resolved shows 20,000+`);
+        assert.doesNotMatch(h, /19,991|19991/, `${lang} ${name}: raw capped count leaked`);
+        assert.ok(c.description.includes("20,000+") && og.includes("20,000+"), `${lang} ${name}: desc capped`);
+        assert.equal(ds.variableMeasured.find((v) => v.propertyID === "resolved_markets").value, "20,000+");
+      }
       for (const v of ds.variableMeasured) assert.doesNotMatch(String(v.value), /NaN|undefined|null/, `${lang} ${name}: LD ${v.propertyID}=${v.value}`);
       // 综合评分：有值写 1 位小数，null 不写
       if (l.smart_score == null) {
@@ -244,7 +251,8 @@ assert.match(live, /new AbortController\(\)/);
   };
   const th = { min_trades: 50, min_settled: 20 };
   const local = { source: "local", trades: 9310, trades_capped: false, settled: 1842, settled_capped: false, last_trade_at: "2026-09-12T03:20:00.000Z", no_trades_30d: true, thresholds: th, reason: null, reasons: {} };
-  const capped = { source: "polymarketscan", trades: 20000, trades_capped: true, settled: 20000, settled_capped: true, last_trade_at: null, no_trades_30d: null, thresholds: th, reason: null, reasons: { last_trade_at: "third_party_no_trade_history" } };
+  // 原始数 19991 / 19998：封顶时一律固定显示「20,000+」，原始数不能出现（Blake 2026-10-28）
+  const capped = { source: "polymarketscan", trades: 19998, trades_capped: true, settled: 19991, settled_capped: true, last_trade_at: null, no_trades_30d: null, thresholds: th, reason: null, reasons: { last_trade_at: "third_party_no_trade_history" } };
   const scan = Object.assign({}, capped, { trades: 4120, trades_capped: false, settled: 3296, settled_capped: false });
   const missing = Object.assign({}, capped, { trades: null, trades_capped: false, settled: null, settled_capped: false, reason: "below_min_trades", reasons: { last_trade_at: "third_party_no_trade_history", trades: "third_party_missing", settled: "third_party_missing" } });
   const grid = (h) => h.match(/<section class="card grid" data-f="grid">([\s\S]*?)<\/section>/)[1];
@@ -253,6 +261,10 @@ assert.match(live, /new AbortController\(\)/);
   const vm = (h) => ld(h)["@graph"].find((g) => g["@type"] === "Dataset").variableMeasured;
 
   assert.equal(basisCount(20000, true), "20,000+");
+  assert.equal(basisCount(19991, true), "20,000+");
+  assert.equal(basisCount(19998, true), "20,000+");
+  assert.equal(basisCount(19991, false), "19,991");
+  assert.equal(CAPPED_COUNT, "20,000+");
   assert.equal(basisCount(1842, false), "1,842");
   assert.equal(basisCount(null, false), null);
 
@@ -298,6 +310,9 @@ assert.match(live, /new AbortController\(\)/);
       assert.equal(vm(h).find((x) => x.name === T.settled).value, "20,000+");
       assert.ok(desc(h).includes(lang === "zh" ? "已结算市场（全部历史）20,000+ 个。" : "20,000+ resolved markets (all time). "));
       assert.doesNotMatch(h, FORBIDDEN);
+      // 原始数不出现在页面任何地方（格子、摘要、meta、og、JSON-LD）
+      assert.doesNotMatch(h, /19,991|19991|19,998|19998|20,000\+\+/, `${lang} capped raw count leaked`);
+      assert.equal(vm(h).find((x) => x.name === T.trades).value, "20,000+");
     }
     // 10d. 第三方没封顶：有「第三方口径」但不带悬停、不带「+」；last_trade_at=null 隐藏整行
     {
