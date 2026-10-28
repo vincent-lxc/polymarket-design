@@ -9,9 +9,9 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 - [首页（语言选择，中英）](https://www.wakeloom.com/): 双语入口。公测前预览，尚未正式上线。
 - [首页（中文）](https://www.wakeloom.com/zh/): 用于 Polymarket 的钱包分析与模拟盘跟单。
 - [Home (English)](https://www.wakeloom.com/en/): Wallet analytics and paper copy trading for Polymarket.
-- [排行榜](https://www.wakeloom.com/zh/leaderboard/): 按长期表现排序，而不是单次重仓。
-- [Leaderboard](https://www.wakeloom.com/en/leaderboard/): Consistent traders, not one-off whales.
-- [选人方法](https://www.wakeloom.com/zh/how-it-works/): 近 90 天窗口、回撤，以及排除单次重仓和刷量的规则。
+- [排行榜](https://www.wakeloom.com/zh/leaderboard/): 按综合评分排序。目前多数地址的数据来自第三方，还没做收益集中度等检查。
+- [Leaderboard](https://www.wakeloom.com/en/leaderboard/): Ranked by composite score. Most addresses currently use third-party data and haven't been through concentration checks yet.
+- [选人方法](https://www.wakeloom.com/zh/how-it-works/): 近 90 天窗口、回撤和选人规则。
 - [How it works](https://www.wakeloom.com/en/how-it-works/): How wallets are selected and which stats are shown.
 - [模拟盘跟单](https://www.wakeloom.com/zh/copy-trading/): 第一期只有模拟盘。实盘跟单即将推出。
 - [Paper copy trading](https://www.wakeloom.com/en/copy-trading/): Paper trading only in phase one. Live copy trading is coming soon (即将推出).
