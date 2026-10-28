@@ -136,8 +136,8 @@ def softapp(lang):
 DESC = {
  "zh": {
   "home": ("Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘跟单工具", "从链上历史筛出长期表现稳定的 Polymarket 交易者，看胜率、收益率和回撤，先用模拟盘跟单再决定。"),
-  "leaderboard": ("Polymarket 交易者排行榜：长期稳定，而非单次重仓 | Wakeloom 织迹", "按链上近 90 天表现排序，排除单次重仓和刷量地址，定期刷新。"),
-  "how": ("我们怎么挑值得跟的 Polymarket 交易者 | Wakeloom 织迹", "Wakeloom 的选人规则与统计口径：近 90 天窗口、已结算市场、回撤、集中度，以及排除单次重仓、刷量和做市地址的方法。"),
+  "leaderboard": ("Polymarket 交易者排行榜：长期稳定，而非单次重仓 | Wakeloom 织迹", "按综合评分排序。胜率和收益率只作展示。"),
+  "how": ("我们怎么挑值得跟的 Polymarket 交易者 | Wakeloom 织迹", "Wakeloom 的选人规则与统计口径：近 90 天窗口、已结算市场、回撤、集中度，按综合评分排序。"),
   "copy": ("用于 Polymarket 的模拟盘跟单 | Wakeloom 织迹", "按比例跟随目标钱包，设单笔和单市场上限、价格偏离阈值、跟随平仓；全局停止即将推出。第一期只有模拟盘，不动真钱。"),
   "faq": ("Polymarket 跟单常见问题 | Wakeloom 织迹", "关于 Polymarket 跟单、排行榜、延迟和滑点、私钥与数据来源的常见问题，每题第一句先给结论。"),
   "risk": ("风险提示 | Wakeloom 织迹", "预测市场交易与跟单的主要风险说明。"),
@@ -147,8 +147,8 @@ DESC = {
  },
  "en": {
   "home": ("Wakeloom – Wallet Analytics & Paper Copy Trading for Polymarket", "Find Polymarket traders with steady long-term results, see their win rate, ROI and drawdown, and paper-trade copying them before risking money."),
-  "leaderboard": ("Leaderboard of Polymarket Traders: Consistent Traders, Not One-Off Whales | Wakeloom", "Ranked by 90-day on-chain results, excluding single big bets and wash volume. Updated regularly."),
-  "how": ("How We Pick Polymarket Traders to Follow | Wakeloom", "Wakeloom's selection rules and stats: a 90-day window, resolved markets, drawdown, concentration, and how we exclude one-off bets, wash volume and market makers."),
+  "leaderboard": ("Leaderboard of Polymarket Traders: Consistent Traders, Not One-Off Whales | Wakeloom", "Ranked by composite score. Win rate and ROI are display columns."),
+  "how": ("How We Pick Polymarket Traders to Follow | Wakeloom", "Wakeloom's selection rules and stats: a 90-day window, resolved markets, drawdown and concentration, with wallets ranked by composite score."),
   "copy": ("Paper-Trade Copy Trading for Polymarket | Wakeloom", "Mirror a wallet proportionally with per-trade and per-market caps, a price-deviation limit, and follow-the-close; a global stop is coming soon. Phase one is paper trading only."),
   "faq": ("Polymarket Copy Trading FAQ | Wakeloom", "Answers about copy trading on Polymarket, leaderboards, latency and slippage, private keys and data sources. Each answer leads with the conclusion."),
   "risk": ("Risk Notice | Wakeloom", "The main risks of prediction-market trading and copy trading."),
@@ -160,8 +160,8 @@ DESC = {
 FAQ = {
  "zh": [
   ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例下单。Wakeloom 第一期只做模拟盘：选定钱包、设好比例和上限，它成交时我们按当时盘口模拟成交，并记录价差。"),
-  ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。我们用近 90 天数据，同时看胜率、收益率、最大回撤和收益是否集中在一个事件上，样本太少或靠一次重仓的地址不进榜。"),
-  ("Polymarket 排行榜第一名值得跟吗？", "不一定。按金额排的榜首常常是一次重仓押中，或者成交量里有大量刷量和做市对冲，这类表现很难复制。我们的排行榜先排除这些地址，再按长期表现排序，但上榜也不代表以后还会这样。"),
+  ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。我们用近 90 天数据，同时看胜率、收益率、最大回撤和收益是否集中在一个事件上。"),
+  ("Polymarket 排行榜第一名值得跟吗？", "不一定。按金额排的榜首常常是一次重仓押中，或者成交量里有大量刷量和做市对冲，这类表现很难复制。Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查，请自己再看一下。上榜也不代表以后还会这样。"),
   ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。我们发现对方成交到自己下单之间有延迟，价格可能已经变了，薄盘口还会吃到更差的价。所以每一笔都记录和对方的成交价差，偏离超过阈值就放弃，先在模拟盘里算清楚扣掉成本后的结果。"),
   ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。钱包登录只签署登录接口返回的那段文案（例如 Sign in to Wakeloom.），该签名不能用来转账，也不能授权交易。"),
   ("胜率和收益率哪个更重要？", "单看哪个都不够，要结合买入价格和回撤一起看。在 90¢ 买入的高胜率可能一次失手就抹掉多次收益，低胜率但买得便宜的人也可能长期为正，所以我们同时展示胜率、收益率、最大回撤和平均买入价。"),
@@ -172,8 +172,8 @@ FAQ = {
  ],
  "en": [
   ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet's fills and place proportional orders. Wakeloom's first phase is paper trading only: pick a wallet, set a ratio and caps, and each time it fills we simulate a fill at the live order book and record the price gap."),
-  ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event; wallets with too few markets or one oversized bet are left out."),
-  ("Is the #1 trader on a Polymarket leaderboard worth copying?", "Not necessarily. The top spot by dollars is often one large bet that paid off, or volume inflated by wash trades and market-making hedges, which you can't replicate. Our leaderboard removes those wallets first and then ranks by long-term results, but a ranking doesn't predict the future."),
+  ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event."),
+  ("Is the #1 trader on a Polymarket leaderboard worth copying?", "Not necessarily. The top spot by dollars is often one large bet that paid off, or volume inflated by wash trades and market-making hedges, which you can't replicate. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Most addresses currently use third-party data and have not been through these checks yet, so please review them yourself. A ranking doesn't predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. By the time we see a fill and place our own order the price may have moved, and thin books give worse prices. We log the price gap on every trade, skip trades that deviate past a threshold, and measure net results after costs in paper trading first."),
   ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or custodied your private key. Wallet login only signs the nonce text returned by the API (e.g. Sign in to Wakeloom.); that signature cannot transfer funds or approve trades."),
   ("Which matters more, win rate or ROI?", "Neither alone; read them with entry price and drawdown. A high win rate bought at 90¢ can be wiped out by one loss, while a lower win rate bought cheaply can still come out ahead, so we show win rate, ROI, max drawdown and average entry price together."),
@@ -277,7 +277,7 @@ def home(lang, D):
 {f'<table class="lt"><thead>{lhead(lang, short=True)}</thead><tbody>{rows}</tbody></table>' if rows else f'<p class="nd pad">{T[lang]["nd"]}</p>'}
 <a class="more" data-live-more="home-top" href="/{lang}/leaderboard/">{"看全部" if zh else "View all"}{f" {n} " if n else " "}{"位 →" if zh else "traders →"}</a></div></section>''')
     feats = [
-     ("01", "排除单次重仓与刷量" if zh else "No one-off whales or wash volume", "收益集中在一个事件、成交量远大于收益、自成交或双边做市的地址不进榜。" if zh else "Wallets whose results hinge on one event, whose volume dwarfs their results, or that self-cross or make markets are excluded.", "how-it-works/"),
+     ("01", "先筛掉靠运气和刷量的地址" if zh else "Filter out luck and wash trading", "收益集中在一两个事件、或刷量的地址拿不到综合评分；疑似做市的地址不参与排名。目前多数地址的检查还在补。" if zh else "Addresses whose profit comes from one or two events, or from wash trading, get no score; likely market makers are not ranked. Checks for most addresses are still in progress.", "how-it-works/"),
      ("02", "每个地址一页数据" if zh else "A data page for every wallet", "近 90 天胜率、收益率、最大回撤、已结算市场数和收益曲线，缺的数据直接写「无数据」。" if zh else "90-day win rate, ROI, max drawdown, resolved markets and equity curve. Missing values say \"No data\".", "leaderboard/"),
      ("03", "模拟盘先算清成本" if zh else "Paper trading counts the costs", "按比例跟随，设上限和偏离阈值，每笔记录和对方的价差与延迟。" if zh else "Proportional mirroring with caps and a deviation limit; every trade logs its price gap and delay.", "copy-trading/"),
     ]
@@ -334,8 +334,8 @@ def leaderboard(lang, D):
         tbl = f'<p class="nd pad">{T[lang]["nd"]}</p><p class="mu pad">{"构建时排行榜接口不可用，本页为占位，下次构建会自动补上。" if zh else "The leaderboard API was unavailable at build time; this is a placeholder until the next build."}</p>'
     else:
         tbl = f'<div class="tw"><table class="lt"><thead>{lhead(lang)}</thead><tbody>{rows}</tbody></table></div>'
-    intro = ("按链上近 90 天表现排序。进榜前先排除单次重仓、刷量、自成交和做市地址，并且只收录成交笔数足够多的地址。排名不代表以后的表现。" if zh else
-             f"Ranked by 90-day on-chain results. Before ranking we exclude one-off bets, wash volume, self-crossing and market makers, and we only list wallets with enough trades. A ranking does not predict future results.")
+    intro = ("按综合评分排序。胜率和收益率只作展示，不是排序依据。Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查，请自己再看一下。只收录成交笔数足够多的地址。排名不代表以后的表现。" if zh else
+             "Ranked by composite score. Win rate and ROI are display columns, not the sort key. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Most addresses currently use third-party data and have not been through these checks yet, so please review them yourself. We only list wallets with enough trades. A ranking does not predict future results.")
     meta = f'<p class="mu sm"><span data-live-meta="leaderboard">{"数据截至" if zh else "Data as of"} {E(asof)} · {"共" if zh else ""} {len(D["leaders"])} {"位" if zh else "traders"}</span> · <span class="live-badge" data-live-badge="leaderboard"></span> · <a class="ln" href="/{lang}/how-it-works/">{"选人方法" if zh else "How we pick"} →</a></p>' if asof else '<p class="mu sm"><span data-live-meta="leaderboard"></span> <span class="live-badge" data-live-badge="leaderboard"></span></p>'
     body = f'''<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {"排行榜" if zh else "Leaderboard"}</p><h1>{"Polymarket 交易者排行榜" if zh else "Leaderboard of Polymarket traders"}</h1><p class="lead">{E(intro)}</p>
 {meta}</section>
@@ -425,11 +425,10 @@ def article(lang, path, key, h1, secs, crumb):
 def content(lang):
     zh = lang == "zh"; L = (lambda z, e: z if zh else e)
     article(lang, "how-it-works/", "how", L("我们怎么挑值得跟的 Polymarket 交易者", "How we pick Polymarket traders to follow"), [
-      (L("统计口径", "What we measure"), [L("统计窗口是近 90 天，只算已经结算的市场。每个地址展示胜率、收益率（已实现加浮动，除以投入）、最大回撤、已结算市场数、平均买入价、单笔中位金额和持仓中位时长。", "The window is the last 90 days and only resolved markets count. For each wallet we show win rate, ROI (realized plus unrealized over capital invested), max drawdown, resolved markets, average entry price, median trade size and median holding time."),
+      (L("统计口径", "What we measure"), [L("统计窗口是近 90 天，只算已经结算的市场。每个地址展示胜率、收益率、最大回撤、已结算市场数、平均买入价、单笔中位金额和持仓中位时长。", "The window is the last 90 days and only resolved markets count. For each wallet we show win rate, ROI, max drawdown, resolved markets, average entry price, median trade size and median holding time."),
+        L("收益率 = 已实现盈亏 ÷ 投入，不含未结算持仓的浮动盈亏。目前多数地址的数据来自第三方，收益率用对方给的数字，口径可能不同。", "ROI = realized P&L ÷ capital invested, excluding unrealized P&L on open positions. For most addresses, which currently use third-party data, ROI is the provider's figure and may be calculated differently."),
         L("成交笔数太少的地址样本太小，不生成详情页。", "Wallets with too few trades are too small a sample and get no detail page.")]),
-      (L("先排除，再排序", "Exclude first, then rank"), [L("单次重仓：收益大部分来自同一个事件的地址会被排除，这种结果靠运气的成分太大。", "One-off bets: wallets whose results mostly come from a single event are excluded; too much of that is luck."),
-        L("刷量与自成交：成交量远大于收益、或者出现自己和自己成交的地址会被排除。", "Wash volume and self-crossing: wallets whose volume dwarfs their results, or that trade against themselves, are excluded."),
-        L("做市：双边挂单比例高的地址赚的是价差，跟着它的方向下单复制不了，也会被排除。", "Market makers: wallets that quote both sides earn the spread, which copying their direction can't replicate, so they are excluded."),
+      (L("先打分，再排序", "Score first, then rank"), [L("Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查，请自己再看一下。", "Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Most addresses currently use third-party data and have not been through these checks yet, so please review them yourself."),
         L("通过筛选的地址再按长期表现综合排序。排序用的综合分是内部指标，不对外公布。", "Wallets that pass are ranked by long-term results. The composite used for ranking is internal and not published.")]),
       (L("数据来源与更新", "Sources and updates"), [L("成交来自 Polygon 链上记录和 Polymarket 公开接口。排行榜和详情页由浏览器请求公开接口刷新数字；仓库里的 HTML 是 SEO 快照。每页写明数据截至时间（按你浏览器的本地时区显示）。拿不到的数值显示「无数据」，不用 0 填充。", "Fills come from Polygon on-chain records and Polymarket's public APIs. Website pages are rebuilt daily and show their data time in your local timezone. Values we can't get show \"No data\" and are never filled with 0.")]),
       (L("限制", "Limitations"), [L("过去 90 天的表现不代表以后。筛选规则能去掉明显的噪音，但去不掉所有运气，也看不到地址背后的人是否改变了策略。", "Past 90-day results don't predict the future. The filters remove obvious noise but not all luck, and they can't see whether the person behind a wallet has changed strategy.")]),
@@ -613,7 +612,7 @@ def write_llms():
         (f"{SITE}/en/", "Home (English)", "Wallet analytics and paper copy trading for Polymarket."),
         (f"{SITE}/zh/leaderboard/", "排行榜", "按长期表现排序，而不是单次重仓。"),
         (f"{SITE}/en/leaderboard/", "Leaderboard", "Consistent traders, not one-off whales."),
-        (f"{SITE}/zh/how-it-works/", "选人方法", "近 90 天窗口、回撤，以及排除单次重仓和刷量的规则。"),
+        (f"{SITE}/zh/how-it-works/", "选人方法", "近 90 天窗口、回撤和选人规则。"),
         (f"{SITE}/en/how-it-works/", "How it works", "How wallets are selected and which stats are shown."),
         (f"{SITE}/zh/copy-trading/", "模拟盘跟单", "第一期只有模拟盘。实盘跟单即将推出。"),
         (f"{SITE}/en/copy-trading/", "Paper copy trading", "Paper trading only in phase one. Live copy trading is coming soon (即将推出)."),
