@@ -105,6 +105,8 @@ function safeFile(urlPath) {
 }
 
 const env = {
+  // 本地预览可用 BFF_ORIGIN=http://127.0.0.1:8791 指向 mock 接口；不设就是现网 api.wakeloom.com。
+  ...(process.env.BFF_ORIGIN ? { BFF_ORIGIN: process.env.BFF_ORIGIN } : {}),
   ASSETS: {
     async fetch(request) {
       const u = new URL(request.url);
