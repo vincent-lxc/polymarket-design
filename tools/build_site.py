@@ -136,7 +136,7 @@ def softapp(lang):
 DESC = {
  "zh": {
   "home": ("Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘跟单工具", "从链上历史筛出长期表现稳定的 Polymarket 交易者，看胜率、收益率和回撤，先用模拟盘跟单再决定。"),
-  "leaderboard": ("Polymarket 交易者排行榜：长期稳定，而非单次重仓 | Wakeloom 织迹", "按综合评分排序。胜率和收益率只作展示。"),
+  "leaderboard": ("Polymarket 交易者排行榜：按综合评分排序 | Wakeloom 织迹", "按综合评分排序。胜率和收益率只作展示。"),
   "how": ("我们怎么挑值得跟的 Polymarket 交易者 | Wakeloom 织迹", "Wakeloom 的选人规则与统计口径：近 90 天窗口、已结算市场、回撤、集中度，按综合评分排序。"),
   "copy": ("用于 Polymarket 的模拟盘跟单 | Wakeloom 织迹", "按比例跟随目标钱包，设单笔和单市场上限、价格偏离阈值、跟随平仓；全局停止即将推出。第一期只有模拟盘，不动真钱。"),
   "faq": ("Polymarket 跟单常见问题 | Wakeloom 织迹", "关于 Polymarket 跟单、排行榜、延迟和滑点、私钥与数据来源的常见问题，每题第一句先给结论。"),
@@ -147,7 +147,7 @@ DESC = {
  },
  "en": {
   "home": ("Wakeloom – Wallet Analytics & Paper Copy Trading for Polymarket", "Find Polymarket traders with steady long-term results, see their win rate, ROI and drawdown, and paper-trade copying them before risking money."),
-  "leaderboard": ("Leaderboard of Polymarket Traders: Consistent Traders, Not One-Off Whales | Wakeloom", "Ranked by composite score. Win rate and ROI are display columns."),
+  "leaderboard": ("Polymarket Trader Leaderboard: Ranked by Composite Score | Wakeloom", "Ranked by composite score. Win rate and ROI are display columns."),
   "how": ("How We Pick Polymarket Traders to Follow | Wakeloom", "Wakeloom's selection rules and stats: a 90-day window, resolved markets, drawdown and concentration, with wallets ranked by composite score."),
   "copy": ("Paper-Trade Copy Trading for Polymarket | Wakeloom", "Mirror a wallet proportionally with per-trade and per-market caps, a price-deviation limit, and follow-the-close; a global stop is coming soon. Phase one is paper trading only."),
   "faq": ("Polymarket Copy Trading FAQ | Wakeloom", "Answers about copy trading on Polymarket, leaderboards, latency and slippage, private keys and data sources. Each answer leads with the conclusion."),
@@ -610,7 +610,7 @@ def write_llms():
         (f"{SITE}/", "首页（语言选择，中英）", "双语入口。公测前预览，尚未正式上线。"),
         (f"{SITE}/zh/", "首页（中文）", "用于 Polymarket 的钱包分析与模拟盘跟单。"),
         (f"{SITE}/en/", "Home (English)", "Wallet analytics and paper copy trading for Polymarket."),
-        (f"{SITE}/zh/leaderboard/", "排行榜", "按长期表现排序，而不是单次重仓。"),
+        (f"{SITE}/zh/leaderboard/", "排行榜", "按综合评分排序。目前多数地址的数据来自第三方，还没做收益集中度等检查。"),
         (f"{SITE}/en/leaderboard/", "Leaderboard", "Consistent traders, not one-off whales."),
         (f"{SITE}/zh/how-it-works/", "选人方法", "近 90 天窗口、回撤和选人规则。"),
         (f"{SITE}/en/how-it-works/", "How it works", "How wallets are selected and which stats are shown."),
@@ -644,7 +644,8 @@ def write_llms():
     lines += [f"- **{q}** {a}" for q, a in LLMS_SUMMARY["en"]]
     lines += [""]
     text = "\n".join(lines)
-    low = text.lower()
+    # 「综合评分排序」是 Casey 定的排序口径（2026-10-28），不是星级/用户评分；只放行这个词组，其余「评分」仍拦。
+    low = text.lower().replace("综合评分", "")
     for w in LLMS_BAN:
         if w.lower() in low:
             raise SystemExit(f"llms.txt 含红线用词 {w}")
