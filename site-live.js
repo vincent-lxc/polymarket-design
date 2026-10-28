@@ -77,7 +77,33 @@
           return [x.type, x.value];
         })
     );
-    return p.year + "-" + p.month + "-" + p.day + " " + p.hour + ":" + p.minute;
+    return p.year + "-" + p.month + "-" + p.day + " " + (p.hour === "24" ? "00" : p.hour) + ":" + p.minute;
+  }
+  /* 浏览器时区标签，如 UTC+8、UTC−5:30、UTC */
+  function tzName(d) {
+    var off = -d.getTimezoneOffset();
+    if (!off) return "UTC";
+    var a = Math.abs(off), h = Math.floor(a / 60), mi = a % 60;
+    return "UTC" + (off > 0 ? "+" : "−") + h + (mi ? ":" + (mi < 10 ? "0" : "") + mi : "");
+  }
+  /* 「数据截至」等时间：本地时区 + 时区标签，例：2026-10-28 15:09（UTC+8） */
+  function stamp(iso) {
+    var d = parseUtc(iso);
+    var t = bj(iso);
+    if (!d || !t) return null;
+    var z = tzName(d);
+    return t + (lang === "zh" ? "（" + z + "）" : " (" + z + ")");
+  }
+  /* 服务端/构建快照里写的是 UTC。页面一打开就按 data-asof-iso 换成本地时区，刷新失败时也一致。 */
+  function localizeAsof() {
+    var els = document.querySelectorAll("[data-asof-iso]");
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      var iso = el.getAttribute("data-asof-iso");
+      var s = stamp(iso);
+      if (!s) continue;
+      el.textContent = el.textContent.replace(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?:（UTC[^）]*）| \(UTC[^)]*\)| UTC)/, s);
+    }
   }
   function dname(l, a) {
     var n = (l && (l.user_name || l.name)) || "";
@@ -88,8 +114,86 @@
   function cell(v, cls) {
     return v != null ? '<td class="r num ' + (cls || "") + '">' + esc(v) + "</td>" : '<td class="r"><span class="nd">' + ND + "</span></td>";
   }
+  /* 手机上数值格的标签改挂到地址下面，避免评分被挤出屏幕（CSS 控制显示哪一份） */
+  function mobileTags(f) {
+    var t = [];
+    if (f.checks) t.push(tag(TXT.checks, f.third ? TXT.checksNote : null));
+    if (f.third) t.push(tag(TXT.third));
+    return t.length ? '<div class="ck-m">' + t.join("") + "</div>" : "";
+  }
+  /* 数值格下方挂一个小标签；标签单独一行，不挤数字 */
+  function tagCell(v, cls, t) {
+    if (!t) return cell(v, cls);
+    var body = v != null ? '<span class="num ' + (cls || "") + '">' + esc(v) + "</span>" : '<span class="nd">' + ND + "</span>";
+    return '<td class="r">' + body + t + "</td>";
+  }
+  /* 排行榜分数列：没有综合评分（smart_score 为 null）时写「—」，不写「无数据」或 0。「—」只用在这一列。 */
+  function scoreCell(v, t) {
+    if (v != null) return tagCell(v, "", t);
+    return '<td class="r"><span class="num mu" data-nd="score">—</span>' + (t || "") + "</td>";
+  }
   function cellHm(v, cls) {
     return v != null ? '<td class="r num hm ' + (cls || "") + '">' + esc(v) + "</td>" : '<td class="r hm"><span class="nd">' + ND + "</span></td>";
+  }
+  /* 后端 #85/#87 标注字段。字段不在时全部为 false，页面保持原样；顶层 response.source 不看。 */
+  var TXT = lang === "zh"
+    ? {
+        third: "第三方口径",
+        checks: "部分检查未完成",
+        checksNote: "该地址数据来自第三方，尚未完成集中度、做市、刷量检查。",
+        mm: "疑似做市，不参与排名",
+        mmNote: "该地址常在同一市场双边挂单，盈亏可能主要来自买卖价差，跟单难以复制。",
+        score: "综合评分",
+        roiNote: "自算地址的收益率 = 已实现盈亏 ÷ 投入，不含浮动。",
+        fail: "暂时无法刷新，显示的是截至上次更新的数据",
+      }
+    : {
+        third: "third-party basis",
+        checks: "Some checks pending",
+        checksNote: "This address uses third-party data; concentration, market-making and wash-trading checks are not done yet.",
+        mm: "Likely market maker · not ranked",
+        mmNote: "This address often quotes both sides of a market; its P&L may come mainly from spreads and is hard to copy.",
+        score: "Score",
+        roiNote: "For addresses we compute ourselves, ROI = realized P&L ÷ capital invested, excluding unrealized P&L.",
+        fail: "Couldn't refresh; showing data from the last update",
+      };
+  function flags(l) {
+    var src = l && typeof l.source === "string" ? l.source.trim().toLowerCase() : "";
+    return {
+      third: src === "polymarketscan" || src === "third_party",
+      checks: !!l && l.checks_incomplete === true,
+      mm: !!l && l.suspected_market_maker === true,
+    };
+  }
+  function tag(text, title) {
+    return '<span class="ck"' + (title ? ' title="' + esc(title) + '"' : "") + ">" + esc(text) + "</span>";
+  }
+  /* 第三方收益率：null，或正好 0 但已实现盈亏不是 0 / 曲线是平的 → 显示「无数据」，不显示 0.0% */
+  function roiMissing(f, m, flat) {
+    if (!f.third) return false;
+    var r = m && m.roi;
+    if (r == null || !isFinite(r)) return true;
+    if (r !== 0) return false;
+    var rp = m && m.realized_pnl;
+    return (typeof rp === "number" && isFinite(rp) && rp !== 0) || flat === true;
+  }
+  /* 净值点：画「累计已实现盈亏」；没有 realized_pnl 时只在浮动为 0 时退回 equity */
+  function curvePts(curve) {
+    return (curve || [])
+      .map(function (c) {
+        var v = c && typeof c.realized_pnl === "number" ? c.realized_pnl : c && c.unrealized_pnl === 0 ? c.equity : null;
+        return [c && c.t, v];
+      })
+      .filter(function (p) {
+        return typeof p[1] === "number" && isFinite(p[1]);
+      });
+  }
+  /* 0 个点、1 个点、或全部相等，都算没有有效曲线 */
+  function curveFlat(curve) {
+    var pts = curvePts(curve);
+    if (pts.length < 2) return true;
+    for (var i = 1; i < pts.length; i++) if (pts[i][1] !== pts[0][1]) return false;
+    return true;
   }
   /* 与 App 公开榜同一口径：GET /v1/public/leaderboard?metric=smart_score，本地再按综合评分降序排一次。 */
   var LB = "/v1/public/leaderboard?window=90d&metric=smart_score&limit=50";
@@ -128,22 +232,38 @@
     if (lang === "zh") return "数据截至 " + (asof || ND) + " · 按综合评分 · 共 " + n + " 位";
     return "Data as of " + (asof || ND) + " · Ranked by score · " + n + " traders";
   }
-  var UPDATING = lang === "zh" ? "数据更新中" : "Data updating";
-
+  /* 接口 10 秒没回就算失败，走各自的 catch。window.WL_API_TIMEOUT_MS 只给测试用。 */
+  var TIMEOUT_MS = 10000;
   async function get(path) {
-    var res = await fetch(API + path, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return res.json();
+    var ms = typeof window.WL_API_TIMEOUT_MS === "number" ? window.WL_API_TIMEOUT_MS : TIMEOUT_MS;
+    var ctl = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, ms) : null;
+    try {
+      var res = await fetch(API + path, { headers: { Accept: "application/json" }, signal: ctl ? ctl.signal : undefined });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return await res.json();
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
 
+  /* 加载中/失败才显示角标；成功后隐藏并清空，只留「数据截至 …」 */
   function setBadge(el, state, text) {
     if (!el) return;
+    el.hidden = false;
     el.className = "live-badge " + (state || "");
     el.innerHTML = "<i></i><span>" + esc(text) + "</span>";
+  }
+  function hideBadge(el) {
+    if (!el) return;
+    el.hidden = true;
+    el.className = "live-badge";
+    el.innerHTML = "";
   }
 
   function rowFull(i, l) {
     var m = l.metrics || {};
+    var f = flags(l);
     var a = (l.address || "").toLowerCase();
     var nm = dname(l, a);
     return (
@@ -157,10 +277,12 @@
       esc(nm) +
       '</b></a><div class="mu xs num">' +
       esc(short(a)) +
-      "</div></td>" +
-      cell(scoreText(l)) +
+      "</div>" +
+      mobileTags(f) +
+      "</td>" +
+      scoreCell(scoreText(l), f.checks ? tag(TXT.checks, f.third ? TXT.checksNote : null) : "") +
       cell(pct(m.win_rate, false, 0)) +
-      cell(pct(m.roi, true), tone(m.roi)) +
+      tagCell(roiMissing(f, m) ? null : pct(m.roi, true), tone(m.roi), f.third ? tag(TXT.third, f.checks ? null : TXT.checksNote) : "") +
       cellHm(pct(m.max_drawdown)) +
       cellHm(num(m.resolved_markets)) +
       cellHm(usd(m.realized_pnl, true), tone(m.realized_pnl)) +
@@ -169,6 +291,7 @@
   }
   function rowShort(i, l) {
     var m = l.metrics || {};
+    var f = flags(l);
     var a = (l.address || "").toLowerCase();
     var nm = dname(l, a);
     return (
@@ -182,23 +305,19 @@
       esc(nm) +
       '</b></a><div class="mu xs num">' +
       esc(short(a)) +
-      "</div></td>" +
-      cell(scoreText(l)) +
+      "</div>" +
+      mobileTags(f) +
+      "</td>" +
+      scoreCell(scoreText(l), f.checks ? tag(TXT.checks, f.third ? TXT.checksNote : null) : "") +
       cell(pct(m.win_rate, false, 0)) +
-      cell(pct(m.roi, true), tone(m.roi)) +
+      tagCell(roiMissing(f, m) ? null : pct(m.roi, true), tone(m.roi), f.third ? tag(TXT.third, f.checks ? null : TXT.checksNote) : "") +
       "</tr>"
     );
   }
 
   function spark(curve) {
-    var pts = (curve || [])
-      .map(function (c) {
-        return [c.t, c.equity];
-      })
-      .filter(function (p) {
-        return typeof p[1] === "number" && isFinite(p[1]);
-      });
-    if (pts.length < 2) return "";
+    if (curveFlat(curve)) return "";
+    var pts = curvePts(curve);
     var vs = pts.map(function (p) {
       return p[1];
     });
@@ -212,7 +331,7 @@
         return (i === 0 ? "M" : "L") + (i * (W / (pts.length - 1))).toFixed(1) + "," + (H - 8 - ((p[1] - lo) / rng) * (H - 16)).toFixed(1);
       })
       .join(" ");
-    var cap = lang === "zh" ? "全部历史收益曲线（已实现 + 浮动，美元）" : "All-time equity curve (realized + unrealized, USD)";
+    var cap = lang === "zh" ? "累计已实现盈亏（美元）" : "Cumulative realized P&L (USD)";
     var t0 = bj(pts[0][0]),
       t1 = bj(pts[pts.length - 1][0]);
     var rngt = t0 && t1 ? t0.slice(0, 10) + " – " + t1.slice(0, 10) : "";
@@ -237,9 +356,32 @@
     );
   }
 
-  function stat(label, val, cls) {
-    if (val == null) return "";
-    return '<div class="st"><span>' + esc(label) + "</span>" + '<b class="num ' + (cls || "") + '">' + esc(val) + "</b></div>";
+  /* t：标签旁的小标签。带标签的格即使没值也保留，显示「无数据」 */
+  /* keep：胜率、收益率这类格子为 null 时也保留，显示「无数据」（copy-engine #90 会置 null），不写 0 */
+  function stat(label, val, cls, t, keep) {
+    if (val == null && !t && !keep) return "";
+    var b = val == null ? '<b class="nd">' + ND + "</b>" : '<b class="num ' + (cls || "") + '">' + esc(val) + "</b>";
+    return '<div class="st"><span>' + esc(label) + (t ? " " + t : "") + "</span>" + b + "</div>";
+  }
+
+  /* 榜里有第三方地址时，在表格下面写一次收益率口径 */
+  function roiFootnote(host, on) {
+    if (!host) return;
+    var el = host.querySelector("[data-f=roi-note]");
+    if (!on) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement("p");
+      el.className = "mu xs ck-foot";
+      el.setAttribute("data-f", "roi-note");
+      var tb = host.querySelector("table");
+      var after = tb && tb.closest(".tw") ? tb.closest(".tw") : tb;
+      if (after && after.parentNode) after.parentNode.insertBefore(el, after.nextSibling);
+      else host.appendChild(el);
+    }
+    el.textContent = TXT.roiNote;
   }
 
   async function refreshLeaderboard() {
@@ -264,17 +406,20 @@
       }).join("");
       tbody.classList.remove("live-skel");
       if (meta) {
-        var asof = bj(b.as_of);
+        var asof = stamp(b.as_of);
         meta.textContent = boardMeta(leaders.length, asof);
         meta.setAttribute("data-asof", b.as_of || "");
         meta.setAttribute("data-sort", "smart_score");
       }
+      roiFootnote(tbody.closest("[data-live=leaderboard]"), leaders.some(function (l) {
+        return flags(l).third;
+      }));
 
       /* 排行榜页无 recent 块；勿引用未定义的 root/d，否则成功刷新后仍会落入 catch 显示红字 */
-      setBadge(badge, "", UPDATING);
+      hideBadge(badge);
     } catch (e) {
       tbody.classList.remove("live-skel");
-      setBadge(badge, "err", lang === "zh" ? "接口暂不可用，显示构建快照" : "API unavailable — showing build snapshot");
+      setBadge(badge, "err", TXT.fail);
     }
   }
 
@@ -301,7 +446,7 @@
       }).join("");
       tbody.classList.remove("live-skel");
       if (meta) {
-        var asof = bj(b.as_of);
+        var asof = stamp(b.as_of);
         meta.textContent = asof ? (lang === "zh" ? "数据截至 " : "Data as of ") + asof + (lang === "zh" ? " · 按综合评分" : " · Ranked by score") : "";
         meta.setAttribute("data-asof", b.as_of || "");
         meta.setAttribute("data-sort", "smart_score");
@@ -310,10 +455,10 @@
         var n = (b.leaders || []).length;
         more.textContent = (lang === "zh" ? "看全部 " : "View all ") + n + (lang === "zh" ? " 位 →" : " traders →");
       }
-      setBadge(badge, "", UPDATING);
+      hideBadge(badge);
     } catch (e) {
       tbody.classList.remove("live-skel");
-      setBadge(badge, "err", lang === "zh" ? "接口暂不可用" : "API unavailable");
+      setBadge(badge, "err", TXT.fail);
     }
   }
 
@@ -330,6 +475,7 @@
     var addr = (root.getAttribute("data-addr") || parseAddr() || "").toLowerCase();
     if (!/^0x[a-f0-9]{40}$/.test(addr)) return;
     var badge = document.querySelector("[data-live-badge=leader]");
+    localizeAsof();
     setBadge(badge, "load", lang === "zh" ? "刷新中…" : "Refreshing…");
     try {
       var det = await get("/v1/public/leaders/" + addr);
@@ -343,40 +489,47 @@
         if (d[k] != null) m[k] = d[k];
       });
       var nm = dname(Object.assign({}, wal || {}, d), addr);
-      var asof = bj(d.updated_at || (wal && wal.as_of));
+      var asofIso = d.as_of || d.updated_at || (wal && wal.as_of);
+      var asof = stamp(asofIso);
+      var f = flags(d);
+      var curve = (wal && wal.equity_curve) || [];
+      var roiNd = roiMissing(f, m, wal ? curveFlat(curve) : undefined);
+      var sc = f.mm ? null : scoreText(d);
+      var roiNote = f.third ? (lang === "zh" ? "（第三方口径）" : " (third-party basis)") : "";
       var wr = pct(m.win_rate, false, 1),
-        roi = pct(m.roi, true),
+        roi = roiNd ? null : pct(m.roi, true),
         dd = pct(m.max_drawdown),
         rm = num(m.resolved_markets);
       var titleEl = root.querySelector("[data-f=name]");
       if (titleEl) {
-        var rk = titleEl.querySelector(".rk");
+        var rk = f.mm ? null : titleEl.querySelector(".rk");
         titleEl.innerHTML = esc(nm) + (rk ? " " + rk.outerHTML : "");
       }
       var descEl = root.querySelector("[data-f=desc]");
       if (descEl) {
         var parts, desc, who = short(addr);
         if (lang === "zh") {
-          parts = [wr ? "近90天胜率 " + wr : null, roi ? "收益率 " + roi : null, dd ? "最大回撤 " + dd : null].filter(Boolean);
-          desc = who + (parts.length ? "：" + parts.join("、") + "。" : "。") + (rm ? "已结算市场 " + rm + " 个。" : "") + "数据来自链上公开记录。";
+          parts = [sc ? "综合评分 " + sc : null, wr ? "近90天胜率 " + wr : null, roi ? "收益率 " + roi + roiNote : null, dd ? "最大回撤 " + dd : null].filter(Boolean);
+          desc = who + (parts.length ? "：" + parts.join("、") + "。" : "。") + (rm ? "已结算市场 " + rm + " 个。" : "") + (f.third ? "数据来自第三方，Wakeloom 还没自己核对。" : "数据来自链上公开记录。");
           if (root.getAttribute("data-paper") === "1") desc += "模拟盘数据，不是实盘成交。";
         } else {
-          parts = [wr ? "90-day win rate " + wr : null, roi ? "ROI " + roi : null, dd ? "max drawdown " + dd : null].filter(Boolean);
-          desc = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ") + (rm ? rm + " resolved markets. " : "") + "Data from public on-chain records.";
+          parts = [sc ? "score " + sc : null, wr ? "90-day win rate " + wr : null, roi ? "ROI " + roi + roiNote : null, dd ? "max drawdown " + dd : null].filter(Boolean);
+          desc = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ") + (rm ? rm + " resolved markets. " : "") + (f.third ? "Data comes from a third party and hasn't been verified by Wakeloom yet." : "Data from public on-chain records.");
           if (root.getAttribute("data-paper") === "1") desc += " Paper-trading figures, not live fills.";
         }
         descEl.textContent = desc;
       }
       var asofEl = root.querySelector("[data-f=asof]");
       if (asofEl && asof) {
+        asofEl.setAttribute("data-asof-iso", String(asofIso));
         asofEl.textContent = (lang === "zh" ? "数据截至 " : "Data as of ") + asof + (lang === "zh" ? " · 统计窗口：近 90 天" : " · Window: last 90 days");
       }
       var L = function (z, e) {
         return lang === "zh" ? z : e;
       };
       var stats = [
-        [L("胜率（近90天）", "Win rate (90d)"), wr, ""],
-        [L("收益率（近90天）", "ROI (90d)"), roi, tone(m.roi)],
+        [L("胜率（近90天）", "Win rate (90d)"), wr, "", "", true],
+        [L("收益率（近90天）", "ROI (90d)"), roi, tone(m.roi), f.third ? tag(TXT.third) : "", true],
         [L("最大回撤", "Max drawdown"), dd, ""],
         [L("已结算市场", "Resolved markets"), rm, ""],
         [L("已实现盈亏", "Realized P&L"), usd(m.realized_pnl, true), tone(m.realized_pnl)],
@@ -394,11 +547,33 @@
       ];
       var grid = root.querySelector("[data-f=grid]");
       if (grid) grid.innerHTML = stats.map(function (s) {
-        return stat(s[0], s[1], s[2]);
+        return stat(s[0], s[1], s[2], s[3], s[4]);
       }).join("");
 
+      var ckEl = root.querySelector("[data-f=checks]");
+      if (ckEl) {
+        var bits = [], notes = [];
+        if (f.mm) {
+          bits.push('<span class="ck ck-mm">' + esc(TXT.mm) + "</span>");
+          notes.push(TXT.mmNote);
+        } else if (sc) {
+          bits.push('<span class="sc"><span class="mu">' + esc(TXT.score) + '</span> <b class="num">' + esc(sc) + "</b></span>");
+        }
+        if (f.checks) {
+          bits.push(tag(TXT.checks, f.third ? TXT.checksNote : null));
+          if (f.third) notes.push(TXT.checksNote);
+        }
+        ckEl.innerHTML = bits.length
+          ? '<div class="ck-line">' + bits.join("") + "</div>" + notes.map(function (n) {
+              return '<p class="mu xs ck-note">' + esc(n) + "</p>";
+            }).join("")
+          : "";
+        ckEl.hidden = !bits.length;
+      }
+
       var sparkHost = root.querySelector("[data-f=spark]");
-      if (sparkHost) sparkHost.innerHTML = spark((wal && wal.equity_curve) || []);
+      /* 曲线 null / [] / 0–1 个点 / 全部相等：整块不画（Casey 2026-10-28 定稿，copy-engine #90 约 45% 本地地址曲线为 null） */
+      if (sparkHost) sparkHost.innerHTML = spark(curve);
 
       var facts = [];
       var cats = (d.categories || m.categories || [])
@@ -413,7 +588,7 @@
           return lang === "zh" ? CAT[c] || c : c;
         });
       if (cats.length) facts.push(L("主要市场类别：", "Main categories: ") + cats.join(lang === "zh" ? "、" : ", ") + L("。", "."));
-      var lt = bj(m.last_trade_at);
+      var lt = stamp(m.last_trade_at);
       if (lt) facts.push(L("最近一次成交：", "Last trade: ") + lt + L("。", "."));
       var xn = d.x_username || (wal && wal.x_username);
       if (xn) facts.push(L("X 账号：", "X account: ") + "@" + xn + L("（自报，未核实）。", " (self-reported, unverified)."));
@@ -429,15 +604,16 @@
           factsEl.innerHTML = "";
         }
       }
-      setBadge(badge, "", UPDATING);
+      hideBadge(badge);
     } catch (e) {
-      setBadge(badge, "err", lang === "zh" ? "接口暂不可用，显示构建快照" : "API unavailable — showing build snapshot");
+      setBadge(badge, "err", TXT.fail);
       var miss = root.querySelector("[data-f=missing]");
       if (miss) miss.hidden = false;
     }
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    localizeAsof();
     if (document.querySelector("[data-live=leaderboard]")) refreshLeaderboard();
     if (document.querySelector("[data-live=home-top]")) refreshHomeTop();
     if (document.querySelector("[data-live=leader]")) refreshLeader();
