@@ -276,6 +276,11 @@ function stat(label, val, cls) {
   return `<div class="st"><span>${esc(label)}</span><b class="num ${cls || ""}">${esc(val)}</b></div>`;
 }
 
+/** 胜率、收益率为 null（copy-engine #90 会把第三方缺省 0、封顶样本置 null）：格子保留，写「无数据」，不写 0。 */
+function ndStat(lang, label, field) {
+  return `<div class="st" data-f="${esc(field)}"><span>${esc(label)}</span><b class="nd">${lang === "zh" ? "无数据" : "No data"}</b></div>`;
+}
+
 /** 小号灰色描边标签。不加新强调色。 */
 export function tag(text, title, extra) {
   const t = title ? ` title="${esc(title)}"` : "";
@@ -289,7 +294,10 @@ function roiStat(lang, m, opts) {
   const third = opts && opts.thirdParty;
   const nd = opts && opts.roiNd;
   const val = nd ? null : pct(m.roi, true);
-  if (!third) return stat(label, val, finite(m.roi) > 0 ? "up" : finite(m.roi) < 0 ? "dn" : "");
+  if (!third) {
+    if (val == null && opts && opts.keepRates) return ndStat(lang, label, "roi");
+    return stat(label, val, finite(m.roi) > 0 ? "up" : finite(m.roi) < 0 ? "dn" : "");
+  }
   const t = tag(LABELS[zh ? "zh" : "en"].thirdParty);
   const b = val == null
     ? `<b class="nd">${zh ? "无数据" : "No data"}</b>`
@@ -300,7 +308,9 @@ function roiStat(lang, m, opts) {
 function statsGrid(lang, m, opts) {
   const zh = lang === "zh";
   const cards = [
-    stat(zh ? "胜率（近90天）" : "Win rate (90d)", pct(m.win_rate, false, 1), ""),
+    opts && opts.keepRates && pct(m.win_rate, false, 1) == null
+      ? ndStat(lang, zh ? "胜率（近90天）" : "Win rate (90d)", "win_rate")
+      : stat(zh ? "胜率（近90天）" : "Win rate (90d)", pct(m.win_rate, false, 1), ""),
     roiStat(lang, m, opts),
     stat(zh ? "最大回撤" : "Max drawdown", pct(m.max_drawdown), ""),
     stat(zh ? "已结算市场" : "Resolved markets", num(m.resolved_markets), ""),
@@ -522,7 +532,7 @@ export function renderLeaderMain(lang, addr, leader) {
 <h1 data-f="name">${esc(copy.name)}</h1><p class="addr num" data-f="addr" title="${esc(addr)}">${esc(addr)}</p>${checks}<p class="lead" data-f="desc">${esc(copy.description)}</p>
 ${asof}${paperNote}
 <span class="live-badge" data-live-badge="leader"></span></section>
-${statsGrid(lang, copy.metrics, { thirdParty: copy.flags.thirdParty, roiNd: copy.roiNd })}
+${statsGrid(lang, copy.metrics, { thirdParty: copy.flags.thirdParty, roiNd: copy.roiNd, keepRates: true })}
 <div data-f="spark"></div>
 ${factsBlock(lang, leader, copy.metrics)}
 ${recentBlock(lang, leader)}

@@ -178,4 +178,61 @@ assert.match(live, /new AbortController\(\)/);
   assert.ok(js.includes('(f.third ? "' + THIRD.en + '" : "' + CHAIN.en + '")'));
 }
 
+// 11. copy-engine #90 同次上线：胜率 / 收益率 / 盈亏比为 null、smart_score 有值或 null。
+//     胜率、收益率格子保留写「无数据」/ No data；摘要句、meta、og、JSON-LD 不出现假数字。
+{
+  const ND = { zh: "无数据", en: "No data" };
+  const BADNUM = /NaN|undefined|null|>0\.0%|>0%<|\b0\.0%/;
+  const cases = [
+    ["scan capped", leader({ source: "polymarketscan", checks_incomplete: true, win_rate: null, roi: null, smart_score: 66 },
+      { win_rate: null, roi: null, profit_factor: null, resolved_markets: 19991, trade_count: 20000, settled_capped: true, trades_capped: true }), ["win_rate", "roi"]],
+    ["scan roi default", leader({ source: "polymarketscan", checks_incomplete: true, roi: null }, { roi: null, realized_pnl: 12840, profit_factor: 1.42 }), ["roi"]],
+    ["local roi null", leader({ source: "local", roi: null }, { roi: null }), ["roi"]],
+    ["local wr null, unscored", leader({ source: "local", win_rate: null, smart_score: null }, { win_rate: null, profit_factor: null, resolved_markets: 0 }), ["win_rate"]],
+  ];
+  for (const lang of ["zh", "en"]) {
+    for (const [name, l, nulls] of cases) {
+      const h = page(lang, l);
+      const grid = h.match(/<section class="card grid" data-f="grid">([\s\S]*?)<\/section>/)[1];
+      for (const k of nulls) {
+        const label = k === "win_rate" ? (lang === "zh" ? "胜率（近90天）" : "Win rate (90d)") : (lang === "zh" ? "收益率（近90天）" : "ROI (90d)");
+        const cellRe = new RegExp(`<div class="st"[^>]*><span>${label.replace(/[()（）]/g, "\\$&")}[^<]*(?:<span[^>]*>[^<]*</span>)?</span><b class="nd">${ND[lang]}</b></div>`);
+        assert.match(grid, cellRe, `${lang} ${name}: ${k} cell shows ${ND[lang]}`);
+      }
+      assert.doesNotMatch(grid, BADNUM, `${lang} ${name}: grid has fake number`);
+      assert.doesNotMatch(h, /盈亏比|Profit factor|profit_factor|1\.42/, `${lang} ${name}: profit factor not rendered`);
+      const c = leaderCopy(lang, addr, l);
+      const d = desc(h);
+      const og = h.match(/<meta property="og:description" content="([^"]*)">/)[1];
+      const ld = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+      const ds = ld["@graph"].find((g) => g["@type"] === "Dataset");
+      const ids = ds.variableMeasured.map((v) => v.propertyID);
+      for (const text of [c.description, d, og, ds.description]) {
+        assert.doesNotMatch(text, /NaN|undefined|null|(?<![\d.])0\.0%/, `${lang} ${name}: ${text}`);
+        if (nulls.includes("win_rate")) assert.doesNotMatch(text, lang === "zh" ? /胜率/ : /win rate/i, `${lang} ${name} desc wr: ${text}`);
+        if (nulls.includes("roi")) assert.doesNotMatch(text, lang === "zh" ? /收益率/ : /ROI/, `${lang} ${name} desc roi: ${text}`);
+      }
+      for (const k of nulls) assert.ok(!ids.includes(k), `${lang} ${name}: JSON-LD has ${k}`);
+      for (const v of ds.variableMeasured) assert.doesNotMatch(String(v.value), /NaN|undefined|null/, `${lang} ${name}: LD ${v.propertyID}=${v.value}`);
+      // 综合评分：有值写 1 位小数，null 不写
+      if (l.smart_score == null) {
+        assert.equal(scoreText(l), null);
+        assert.doesNotMatch(h, /class="sc"/, `${lang} ${name}: unscored shows no score`);
+        assert.doesNotMatch(c.description, lang === "zh" ? /综合评分/ : /score/, `${lang} ${name}`);
+      } else {
+        assert.match(h, new RegExp(`<b class="num">${l.smart_score.toFixed(1).replace(".", "\\.")}</b>`), `${lang} ${name}: score shown`);
+      }
+    }
+  }
+  // 客户端：分数列 null 写「—」；胜率、收益率格子保留；曲线 null / 空数组整块隐藏
+  const js = fs.readFileSync(path.join(repo, "site-live.js"), "utf8");
+  assert.ok(js.includes('data-nd="score">—</span>'), "client score dash");
+  assert.equal((js.match(/scoreCell\(scoreText\(l\)/g) || []).length, 2, "rowFull + rowShort use scoreCell");
+  assert.ok(js.includes('[L("胜率（近90天）", "Win rate (90d)"), wr, "", "", true]'), "client keeps win rate cell");
+  assert.ok(/\[L\("收益率（近90天）", "ROI \(90d\)"\), roi, tone\(m\.roi\), [^\]]*, true\]/.test(js), "client keeps roi cell");
+  // 曲线 null / [] / 0–1 个点：整块不画（Casey 定稿），不出「无数据」卡片
+  assert.ok(js.includes("sparkHost.innerHTML = spark(curve);") && !js.includes("sparkNd") && !js.includes('data-nd="curve"'), "client hides empty curve");
+  assert.match(js, /function curveFlat\(curve\) \{\s*var pts = curvePts\(curve\);\s*if \(pts\.length < 2\) return true;/);
+}
+
 console.log("leader labels tests ok");

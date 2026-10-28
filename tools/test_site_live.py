@@ -62,7 +62,7 @@ with sync_playwright() as pw:
         meta = p.inner_text("[data-live-meta=leaderboard]")
         ok(re.search(r"2026-10-28 15:09(（UTC\+8）| \(UTC\+8\))", meta), "local tz label in meta: " + meta)
         rows = p.locator("[data-live=leaderboard] tbody tr")
-        ok(rows.count() == 6, "6 rows")
+        ok(rows.count() == 8, "8 rows")
         third = "第三方口径" if lang == "zh" else "third-party basis"
         chk = "部分检查未完成" if lang == "zh" else "Some checks pending"
         nd = "无数据" if lang == "zh" else "No data"
@@ -71,6 +71,14 @@ with sync_playwright() as pw:
         ok(third in r1 and chk in r1, "third-party row has both tags")
         ok(third not in r2 and chk not in r2, "row without fields unchanged")
         ok(nd in r3 and "0.0%" not in r3, "third-party roi 0 with realized pnl -> ND")
+        # copy-engine #90：封顶行胜率/收益率为 null → 无数据，分数照常；未评分行分数列写「—」，排最后
+        cells = lambda i: [td.inner_text().split("\n")[0].strip() for td in rows.nth(i).locator("td").all()]
+        r5, r7 = cells(5), cells(7)
+        ok(r5[2] == "66.0" and r5[3] == nd and r5[4] == nd, "capped row: score kept, wr/roi ND " + str(r5))
+        ok(r7[2] == "—" and r7[3] == nd, "unscored row: score dash, wr ND " + str(r7))
+        allt = p.inner_text("[data-live=leaderboard] tbody")
+        ok(not re.search(r"NaN|undefined|null|(?<![\d.])0\.0%", allt), "no fake numbers in leaderboard")
+        ok(sum(1 for i in range(8) if "—" in rows.nth(i).inner_text()) == 1, "dash only in the unscored score cell")
         tip = rows.nth(1).locator(".ck").first.get_attribute("title") or ""
         ok("集中度" in tip or "concentration" in tip, "checks tag tooltip")
         foot = p.locator("[data-f=roi-note]")
@@ -151,6 +159,60 @@ with sync_playwright() as pw:
                 ok(("无数据" if Z else "No data") in roi and third in roi and "0.0%" not in roi, "roi ND: " + roi)
                 ok(spark.count() == 0, "flat curve hidden")
             ctx.close()
+
+    # copy-engine #90 null 情况：b 封顶（胜率/收益率 null）、c 第三方 roi 缺省 null + 曲线 null、d 自算 roi null + 曲线 null、e 胜率 null + 曲线 [] + 未评分。曲线空：整块隐藏（Casey 定稿）
+    NULLS = {"b": ("win_rate", "roi"), "c": ("roi",), "d": ("roi",), "e": ("win_rate",)}
+    FAKE = re.compile(r"NaN|undefined|null|(?<![\d.])0\.0%")
+    for L in ("zh", "en"):
+        Z = L == "zh"
+        nd = "无数据" if Z else "No data"
+        lab = {"win_rate": "胜率（近90天）" if Z else "Win rate (90d)", "roi": "收益率（近90天）" if Z else "ROI (90d)"}
+        for c, nulls in NULLS.items():
+            for js in (False, True):
+                for width in ((1280, 390) if js else (1280,)):
+                    ctx = b.new_context(viewport={"width": width, "height": 900}, timezone_id="Asia/Shanghai", java_script_enabled=js)
+                    ctx.add_init_script("window.WL_API=%r;" % API)
+                    p = ctx.new_page()
+                    errs = []
+                    p.on("pageerror", lambda e: errs.append(str(e)))
+                    p.goto(SITE + "/%s/leader/%s/" % (L, A(c)), wait_until="domcontentloaded")
+                    tagj = "%s %s %s %d" % (L, c, "JS" if js else "SSR", width)
+                    if js:
+                        badge_done(p, "[data-live-badge=leader]")
+                    grid = p.locator("[data-f=grid] .st")
+                    gl = [(grid.nth(i).locator("span").first.inner_text().strip(), grid.nth(i).locator("b").inner_text()) for i in range(grid.count())]
+                    gt = dict(gl)
+                    for k in ("win_rate", "roi"):
+                        want_nd = k in nulls
+                        got = next((v for lb, v in gl if lb.startswith(lab[k])), None)
+                        ok(got is not None, "%s cell kept %s %s" % (k, tagj, gt))
+                        ok((got == nd) if want_nd else (got != nd), "%s %s: %s" % (k, tagj, got))
+                    main = p.inner_text("main")
+                    ok(not FAKE.search(main), "no fake numbers %s: %s" % (tagj, FAKE.search(main)))
+                    md = p.get_attribute('meta[name="description"]', "content")
+                    ld = p.locator('script[type="application/ld+json"]').first.text_content()
+                    for k in nulls:
+                        word = {"win_rate": "胜率" if Z else "win rate", "roi": "收益率" if Z else "ROI"}[k]
+                        ok(word not in md, "meta desc no %s %s: %s" % (k, tagj, md))
+                        ok(word not in p.inner_text("[data-f=desc]"), "desc no %s %s" % (k, tagj))
+                        ok('"propertyID":"%s"' % k not in ld, "JSON-LD no %s %s" % (k, tagj))
+                    ok(not FAKE.search(md) and not re.search(r"NaN|undefined|null", ld), "meta/LD clean " + tagj)
+                    ok(("66.0" if c == "b" else "61.3" if c == "c" else "73.9" if c == "d" else None) in (p.inner_text("[data-f=checks]") or "") if c != "e"
+                       else p.locator("[data-f=checks] .sc").count() == 0, "score %s" % tagj)
+                    fig = p.locator("[data-f=spark] figure")
+                    if not js:
+                        ok(fig.count() == 0, "SSR spark empty " + tagj)
+                    elif c == "b":
+                        ok(p.locator("[data-f=spark] svg path").count() == 1, "curve drawn " + tagj)
+                    else:
+                        # 曲线 null / []：整块隐藏，不留空卡片、不画坐标轴；下一块（facts / CTA）紧接网格
+                        ok(fig.count() == 0 and p.locator("[data-f=spark] *").count() == 0, "curve area hidden " + tagj)
+                        ok(p.locator("[data-f=spark]").bounding_box() is None or p.locator("[data-f=spark]").bounding_box()["height"] == 0, "curve host zero height " + tagj)
+                        ok(nd not in p.inner_text("[data-f=spark]"), "no curve ND card " + tagj)
+                    hs = p.evaluate("()=>document.documentElement.scrollWidth-innerWidth")
+                    ok(hs <= 0, "no hscroll %s %s" % (tagj, hs))
+                    ok(not errs, "no page errors %s %s" % (tagj, errs))
+                    ctx.close()
 
     # 手机 390：标签挂到地址下，评分列不被挤出可视区
     for L in ("zh", "en"):

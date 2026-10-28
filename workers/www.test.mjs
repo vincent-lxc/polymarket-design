@@ -264,7 +264,13 @@ assert.equal(falseRes.headers.get("x-wakeloom-indexable"), "false");
 const falseHtml = await falseRes.text();
 assert.match(falseHtml, /<meta name="robots" content="noindex,follow">/);
 assert.match(falseHtml, /0xabab…abab: score 65\.7, max drawdown 5\.1%/);
-assert.doesNotMatch(falseHtml, /90-day win rate|ROI /);
+// copy-engine #90：胜率、收益率为 null 时摘要句不写假数字；格子保留写 No data（不再整格省略）
+assert.doesNotMatch(falseHtml.match(/<meta name="description" content="([^"]*)">/)[1], /win rate|ROI/);
+assert.doesNotMatch(falseHtml.match(/data-f="desc">([^<]*)</)[1], /win rate|ROI/);
+assert.match(falseHtml, /<div class="st" data-f="win_rate"><span>Win rate \(90d\)<\/span><b class="nd">No data<\/b><\/div>/);
+assert.match(falseHtml, /<div class="st" data-f="roi"><span>ROI \(90d\)<\/span><b class="nd">No data<\/b><\/div>/);
+assert.doesNotMatch(falseHtml, /"propertyID":"(win_rate|roi)"/);
+assert.doesNotMatch(falseHtml, /0\.0%/);
 assert.doesNotMatch(falseHtml, /null|NaN/);
 assert.doesNotMatch(falseHtml, /_shell/);
 

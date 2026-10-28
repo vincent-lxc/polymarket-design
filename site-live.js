@@ -127,6 +127,11 @@
     var body = v != null ? '<span class="num ' + (cls || "") + '">' + esc(v) + "</span>" : '<span class="nd">' + ND + "</span>";
     return '<td class="r">' + body + t + "</td>";
   }
+  /* 排行榜分数列：没有综合评分（smart_score 为 null）时写「—」，不写「无数据」或 0。「—」只用在这一列。 */
+  function scoreCell(v, t) {
+    if (v != null) return tagCell(v, "", t);
+    return '<td class="r"><span class="num mu" data-nd="score">—</span>' + (t || "") + "</td>";
+  }
   function cellHm(v, cls) {
     return v != null ? '<td class="r num hm ' + (cls || "") + '">' + esc(v) + "</td>" : '<td class="r hm"><span class="nd">' + ND + "</span></td>";
   }
@@ -275,7 +280,7 @@
       "</div>" +
       mobileTags(f) +
       "</td>" +
-      tagCell(scoreText(l), "", f.checks ? tag(TXT.checks, f.third ? TXT.checksNote : null) : "") +
+      scoreCell(scoreText(l), f.checks ? tag(TXT.checks, f.third ? TXT.checksNote : null) : "") +
       cell(pct(m.win_rate, false, 0)) +
       tagCell(roiMissing(f, m) ? null : pct(m.roi, true), tone(m.roi), f.third ? tag(TXT.third, f.checks ? null : TXT.checksNote) : "") +
       cellHm(pct(m.max_drawdown)) +
@@ -303,7 +308,7 @@
       "</div>" +
       mobileTags(f) +
       "</td>" +
-      tagCell(scoreText(l), "", f.checks ? tag(TXT.checks, f.third ? TXT.checksNote : null) : "") +
+      scoreCell(scoreText(l), f.checks ? tag(TXT.checks, f.third ? TXT.checksNote : null) : "") +
       cell(pct(m.win_rate, false, 0)) +
       tagCell(roiMissing(f, m) ? null : pct(m.roi, true), tone(m.roi), f.third ? tag(TXT.third, f.checks ? null : TXT.checksNote) : "") +
       "</tr>"
@@ -352,8 +357,9 @@
   }
 
   /* t：标签旁的小标签。带标签的格即使没值也保留，显示「无数据」 */
-  function stat(label, val, cls, t) {
-    if (val == null && !t) return "";
+  /* keep：胜率、收益率这类格子为 null 时也保留，显示「无数据」（copy-engine #90 会置 null），不写 0 */
+  function stat(label, val, cls, t, keep) {
+    if (val == null && !t && !keep) return "";
     var b = val == null ? '<b class="nd">' + ND + "</b>" : '<b class="num ' + (cls || "") + '">' + esc(val) + "</b>";
     return '<div class="st"><span>' + esc(label) + (t ? " " + t : "") + "</span>" + b + "</div>";
   }
@@ -522,8 +528,8 @@
         return lang === "zh" ? z : e;
       };
       var stats = [
-        [L("胜率（近90天）", "Win rate (90d)"), wr, ""],
-        [L("收益率（近90天）", "ROI (90d)"), roi, tone(m.roi), f.third ? tag(TXT.third) : ""],
+        [L("胜率（近90天）", "Win rate (90d)"), wr, "", "", true],
+        [L("收益率（近90天）", "ROI (90d)"), roi, tone(m.roi), f.third ? tag(TXT.third) : "", true],
         [L("最大回撤", "Max drawdown"), dd, ""],
         [L("已结算市场", "Resolved markets"), rm, ""],
         [L("已实现盈亏", "Realized P&L"), usd(m.realized_pnl, true), tone(m.realized_pnl)],
@@ -541,7 +547,7 @@
       ];
       var grid = root.querySelector("[data-f=grid]");
       if (grid) grid.innerHTML = stats.map(function (s) {
-        return stat(s[0], s[1], s[2], s[3]);
+        return stat(s[0], s[1], s[2], s[3], s[4]);
       }).join("");
 
       var ckEl = root.querySelector("[data-f=checks]");
@@ -566,6 +572,7 @@
       }
 
       var sparkHost = root.querySelector("[data-f=spark]");
+      /* 曲线 null / [] / 0–1 个点 / 全部相等：整块不画（Casey 2026-10-28 定稿，copy-engine #90 约 45% 本地地址曲线为 null） */
       if (sparkHost) sparkHost.innerHTML = spark(curve);
 
       var facts = [];
