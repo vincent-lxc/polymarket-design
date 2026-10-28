@@ -611,7 +611,7 @@ def write_llms():
         (f"{SITE}/zh/", "首页（中文）", "用于 Polymarket 的钱包分析与模拟盘跟单。"),
         (f"{SITE}/en/", "Home (English)", "Wallet analytics and paper copy trading for Polymarket."),
         (f"{SITE}/zh/leaderboard/", "排行榜", "按综合评分排序。目前多数地址的数据来自第三方，还没做收益集中度等检查。"),
-        (f"{SITE}/en/leaderboard/", "Leaderboard", "Consistent traders, not one-off whales."),
+        (f"{SITE}/en/leaderboard/", "Leaderboard", "Ranked by composite score. Most addresses currently use third-party data and haven't been through concentration checks yet."),
         (f"{SITE}/zh/how-it-works/", "选人方法", "近 90 天窗口、回撤和选人规则。"),
         (f"{SITE}/en/how-it-works/", "How it works", "How wallets are selected and which stats are shown."),
         (f"{SITE}/zh/copy-trading/", "模拟盘跟单", "第一期只有模拟盘。实盘跟单即将推出。"),
