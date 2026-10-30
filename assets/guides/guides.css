@@ -14,3 +14,5 @@
 .g-card h2{font-size:var(--f2)}.g-card p{color:var(--mu);margin-top:8px}.g-go{display:inline-block;margin-top:10px;color:var(--or);font-size:14px}
 @media (max-width:420px){.g-art h2{font-size:20px}}
 .g-cta{max-width:760px}.g-cta>p{color:var(--tx)}.g-cta .wl-form{margin-top:14px}
+
+.g-see{max-width:760px}.g-see a{color:var(--or)}

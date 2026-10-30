@@ -1,7 +1,7 @@
 """/guides/ 页面测试。先起本地预览：BFF_ORIGIN=http://127.0.0.1:8948 PORT=8947 node tools/preview-www.mjs
 再跑：python3 tools/test_guides.py [http://127.0.0.1:8947]
 覆盖：路由 200、JSON-LD 可解析且类型齐全、无价格/评分字段、canonical + hreflang、sitemap STATIC_PAGES、
-llms.txt（源和成品）、站内链接和 FAQ 锚点不死链、禁用词、中英配图属性（1200×750）和对应语言图注、每篇的上线通知表单（source=guide-0N）、
+llms.txt（源和成品）、站内链接和 FAQ 锚点不死链、禁用词、中英配图属性（1200×750）和对应语言图注、每篇的上线通知表单（source=guide-pick-traders|guide-data-checklist|guide-copy-pitfalls）、文末链排行榜、
 en FAQ 链接带锚点、稿件内部用语不上页面、白名单外的 leader 地址不出现、导航/页脚入口。
 """
 import json, os, re, subprocess, sys, urllib.request
@@ -78,9 +78,13 @@ for p in PATHS:
         ok(f"<figcaption>{CAP[L]}</figcaption>" in main, f"{p} caption")
         ok(CAP["en" if L == "zh" else "zh"] not in h, f"{p} no other-language caption")
         ok('width="1200" height="750"' in im, f"{p} img 1200x750")
-        num = SLUGS.index(p.split("/")[3]) + 1
+        SRC = {"how-to-pick-polymarket-traders": "guide-pick-traders", "polymarket-trader-data-checklist": "guide-data-checklist", "polymarket-leaderboard-copy-pitfalls": "guide-copy-pitfalls"}
+        slug = p.split("/")[3]
         forms = re.findall(r'<form class="wl-form[^"]*"[^>]*>', main)
-        ok(len(forms) == 1 and f'data-source="guide-0{num}"' in forms[0] and f'data-lang="{L}"' in forms[0], f"{p} CTA form {forms}")
+        ok(len(forms) == 1 and f'data-source="{SRC[slug]}"' in forms[0] and f'data-lang="{L}"' in forms[0], f"{p} CTA form {forms}")
+        see = "去排行榜看看真实地址" if L == "zh" else "See real addresses on the leaderboard"
+        ok(f'<a href="/{L}/leaderboard/">{see}</a>' in main, f"{p} see-leaders link")
+        ok(not re.search(r'href="/[a-z]{2}/leader/0x', main), f"{p} no individual leader href")
         ok('data-endpoint="https://api.wakeloom.com/v1/waitlist"' in forms[0], f"{p} CTA endpoint")
         ok(re.search(r'<input id="(wl-g0\d)" name="email" type="email"[^>]*required', main) and 'name="website"' in main, f"{p} CTA inputs")
         ok(("可随时退订" if L == "zh" else "Unsubscribe anytime") in main, f"{p} CTA small print")
