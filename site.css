@@ -128,4 +128,4 @@ td.r .ck{display:table;margin:3px 0 0 auto}
 .wl-lead h2{font-size:20px;line-height:1.4}.app-link{margin:12px 2px 0}.app-link a{color:var(--mu,#9a9aa3);text-decoration:underline;text-underline-offset:3px}.app-link a:hover{color:var(--or)}
 .more-read{margin-top:24px}.more-read ul{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}.more-read a{color:inherit}.more-read a:hover{color:var(--or)}
 @media (max-width:640px){.more-read ul{grid-template-columns:1fr}}
-.answer{font-size:17px;color:inherit;margin-top:10px}.brand-line{margin-top:10px}
+.answer{font-size:17px;color:inherit;margin-top:10px}.brand-line{margin:10px 0 18px}
