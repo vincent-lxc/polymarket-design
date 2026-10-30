@@ -120,18 +120,21 @@ def iso(s):
     try: return dt.datetime.fromisoformat(str(s).replace("Z", "+00:00")).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     except Exception: return None
 
+# FAQ 题目锚点（按题目顺序，中英同序），/guides/ 里的链接引用这些 id
+FAQ_IDS = {2: "faq-leaderboard-first", 3: "faq-delay-slippage", 5: "faq-win-rate-vs-roi", 6: "faq-follow-close"}
+
 # ---------------- 文案 ----------------
 T = {
  "zh": dict(html="zh-CN", og="zh_CN", name="Wakeloom 织迹", tag="钱包分析 · 模拟盘",
-   nav=[("leaderboard/","排行榜"),("how-it-works/","选人方法"),("copy-trading/","模拟盘跟单"),("faq/","常见问题")],
+   nav=[("leaderboard/","排行榜"),("how-it-works/","选人方法"),("copy-trading/","模拟盘跟单"),("faq/","常见问题"),("guides/","指南")],
    cta="进入应用", cta2="看排行榜", other="English", home="首页", nd="无数据",
    indep="Wakeloom 是独立工具，用于 Polymarket，与 Polymarket 无隶属或合作关系。所有内容仅供研究，不构成投资建议。",
-   foot=[("risk/","风险提示"),("privacy/","隐私"),("terms/","条款"),("about/","关于")]),
+   foot=[("risk/","风险提示"),("privacy/","隐私"),("terms/","条款"),("about/","关于"),("guides/","指南")]),
  "en": dict(html="en", og="en_US", name="Wakeloom", tag="Wallet analytics · Paper trading",
-   nav=[("leaderboard/","Leaderboard"),("how-it-works/","How it works"),("copy-trading/","Paper copy trading"),("faq/","FAQ")],
+   nav=[("leaderboard/","Leaderboard"),("how-it-works/","How it works"),("copy-trading/","Paper copy trading"),("faq/","FAQ"),("guides/","Guides")],
    cta="Open the app", cta2="See the leaderboard", other="中文", home="Home", nd="No data",
    indep="Wakeloom is an independent tool for Polymarket. It is not affiliated with or endorsed by Polymarket. Nothing here is investment advice.",
-   foot=[("risk/","Risk notice"),("privacy/","Privacy"),("terms/","Terms"),("about/","About")]),
+   foot=[("risk/","Risk notice"),("privacy/","Privacy"),("terms/","Terms"),("about/","About"),("guides/","Guides")]),
 }
 
 ORG = {"@type": "Organization", "@id": SITE + "/#org", "name": "Wakeloom", "alternateName": ["织迹", "Wakeloom 织迹"],
@@ -534,7 +537,7 @@ def content(lang):
         write(f"{lang}/{k}/index.html", page(lang, f"{k}/", k, body, [crumbs(lang, [(h, f"{k}/")])]))
     # FAQ
     qs = FAQ[lang]
-    items = "".join(f'<details class="card qa"{" open" if i == 0 else ""}><summary><h2>{E(q)}</h2><i>+</i></summary><p>{E(a)}</p></details>' for i, (q, a) in enumerate(qs))
+    items = "".join(f'<details class="card qa"{f' id="{FAQ_IDS[i]}"' if i in FAQ_IDS else ""}{" open" if i == 0 else ""}><summary><h2>{E(q)}</h2><i>+</i></summary><p>{E(a)}</p></details>' for i, (q, a) in enumerate(qs))
     body = f'<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {L("常见问题", "FAQ")}</p><h1>{L("Polymarket 跟单常见问题", "Polymarket copy trading FAQ")}</h1></section><section class="faq">{items}</section>'
     fp = {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in qs]}
     write(f"{lang}/faq/index.html", page(lang, "faq/", "faq", body, [fp, crumbs(lang, [(L("常见问题", "FAQ"), "faq/")])]))
@@ -700,6 +703,14 @@ def write_llms():
         (f"{SITE}/en/privacy/", "Privacy", "What data is collected and how it is used."),
         (f"{SITE}/zh/terms/", "条款", "使用 Wakeloom 的条款。"),
         (f"{SITE}/en/terms/", "Terms", "The terms for using Wakeloom."),
+        (f"{SITE}/zh/guides/", "指南", "方法文：怎么挑交易者、跟单前看哪些数据、照抄排行榜的坑。"),
+        (f"{SITE}/en/guides/", "Guides", "Method guides: picking traders, what to check before copying, leaderboard pitfalls."),
+        (f"{SITE}/zh/guides/how-to-pick-polymarket-traders/", "怎么判断一个 Polymarket 交易者", "先排除单次重仓、刷量和做市地址，再看已结算市场数、回撤和买入价。"),
+        (f"{SITE}/en/guides/how-to-pick-polymarket-traders/", "How to judge a Polymarket trader", "Rule out one-big-bet, wash-traded and market-maker wallets, then check resolved markets, drawdown and entry level."),
+        (f"{SITE}/zh/guides/polymarket-trader-data-checklist/", "跟单前该看哪些数据", "已结算市场数、最大回撤、收益集中度等 7 项怎么读。"),
+        (f"{SITE}/en/guides/polymarket-trader-data-checklist/", "What to check before copying", "How to read resolved markets, max drawdown, profit concentration and four more."),
+        (f"{SITE}/zh/guides/polymarket-leaderboard-copy-pitfalls/", "照抄 Polymarket 排行榜的常见坑", "重仓、浮盈、做市、刷量、延迟和价差等 9 个坑，每个配识别办法。"),
+        (f"{SITE}/en/guides/polymarket-leaderboard-copy-pitfalls/", "Pitfalls of copying the leaderboard", "Nine traps such as big bets, unrealized gains, market makers, delay and slippage, and how to spot each."),
     ]
     lines = [
         "# Wakeloom 织迹",

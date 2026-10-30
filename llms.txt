@@ -25,6 +25,14 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 - [Privacy](https://www.wakeloom.com/en/privacy/): What data is collected and how it is used.
 - [条款](https://www.wakeloom.com/zh/terms/): 使用 Wakeloom 的条款。
 - [Terms](https://www.wakeloom.com/en/terms/): The terms for using Wakeloom.
+- [指南](https://www.wakeloom.com/zh/guides/): 方法文：怎么挑交易者、跟单前看哪些数据、照抄排行榜的坑。
+- [Guides](https://www.wakeloom.com/en/guides/): Method guides: picking traders, what to check before copying, leaderboard pitfalls.
+- [怎么判断一个 Polymarket 交易者](https://www.wakeloom.com/zh/guides/how-to-pick-polymarket-traders/): 先排除单次重仓、刷量和做市地址，再看已结算市场数、回撤和买入价。
+- [How to judge a Polymarket trader](https://www.wakeloom.com/en/guides/how-to-pick-polymarket-traders/): Rule out one-big-bet, wash-traded and market-maker wallets, then check resolved markets, drawdown and entry level.
+- [跟单前该看哪些数据](https://www.wakeloom.com/zh/guides/polymarket-trader-data-checklist/): 已结算市场数、最大回撤、收益集中度等 7 项怎么读。
+- [What to check before copying](https://www.wakeloom.com/en/guides/polymarket-trader-data-checklist/): How to read resolved markets, max drawdown, profit concentration and four more.
+- [照抄 Polymarket 排行榜的常见坑](https://www.wakeloom.com/zh/guides/polymarket-leaderboard-copy-pitfalls/): 重仓、浮盈、做市、刷量、延迟和价差等 9 个坑，每个配识别办法。
+- [Pitfalls of copying the leaderboard](https://www.wakeloom.com/en/guides/polymarket-leaderboard-copy-pitfalls/): Nine traps such as big bets, unrealized gains, market makers, delay and slippage, and how to spot each.
 
 ## FAQ 结论摘要 / FAQ conclusions
 

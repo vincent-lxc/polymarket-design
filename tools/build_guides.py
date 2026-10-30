@@ -1,0 +1,189 @@
+"""生成 /zh/guides/、/en/guides/ 索引页和 3 篇指南（只写这 8 个页面和配图，不跑全站构建）。
+
+正文取自 市场/guides/ 的稿件（中文 *.md、英文 en/*-en.md），不改字：
+- 「## 正文 / ## Body」到下一个「---」是正文；「## 常见问题 / ## FAQ」是 FAQPage。
+- 配图只放中文页（Morgan / Casey 10-30：英文页等英文界面原型，之后单独补）。英文稿里的图片和图注直接省略。
+- 文末「延伸阅读」取稿件内链表里「文末「延伸阅读」」几行。
+- leader 链接占位符 {leader_link_*} 和上线通知 CTA 本次不上（可索引白名单在 PR #49；表单联调未走通）。
+用法：python3 tools/build_guides.py [稿件目录]
+"""
+import html, json, os, re, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import build_site as bs  # noqa: E402
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = sys.argv[1] if len(sys.argv) > 1 else "/workspace/projects/wakeloom/市场/guides"
+E = html.escape
+PUBLISHED = "2026-10-30"
+SLUGS = [("how-to-pick-polymarket-traders", "01"), ("polymarket-trader-data-checklist", "02"), ("polymarket-leaderboard-copy-pitfalls", "03")]
+IMG = {"01": "01-leaderboard", "02": "02-leader-detail", "03": "03-leader-ledger"}
+CAPTION = {"zh": "产品原型，上线后界面可能不同"}
+G = {"zh": dict(name="指南", h1="Polymarket 跟单指南", lead="怎么挑交易者、跟单前看哪些数据、照抄排行榜会踩哪些坑。只讲方法和怎么看数据。",
+                title="Polymarket 跟单指南 | Wakeloom 织迹", desc="怎么判断 Polymarket 交易者、跟单前该看哪些数据、照抄排行榜的常见坑。",
+                more="延伸阅读", faq="常见问题", read="阅读"),
+     "en": dict(name="Guides", h1="Polymarket copy trading guides", lead="How to pick traders, what to check before copying, and the traps in copying a leaderboard. Methods and how to read the data.",
+                title="Polymarket Copy Trading Guides | Wakeloom", desc="How to judge a Polymarket trader, what data to check before copying, and common pitfalls of copying the leaderboard.",
+                more="Further reading", faq="FAQ", read="Read")}
+OTHER = {L: dict(bs.T[L]["nav"] + bs.T[L]["foot"]) for L in ("zh", "en")}
+
+
+def src_path(lang, num, slug):
+    return os.path.join(SRC, f"{num}-{slug}.md") if lang == "zh" else os.path.join(SRC, "en", f"{num}-{slug}-en.md")
+
+
+def field(md, key):
+    m = re.search(r"^\| *" + re.escape(key) + r" *\| *(.*?) *\|$", md, re.M)
+    return m.group(1).replace("\\|", "|").strip() if m else None
+
+
+def inline(t):
+    out, pos = [], 0
+    for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|`([^`]+)`", t):
+        out.append(E(t[pos:m.start()]))
+        if m.group(1): out.append(f'<a href="{E(m.group(2))}">{E(m.group(1))}</a>')
+        elif m.group(3): out.append(f"<strong>{inline(m.group(3))}</strong>")
+        else: out.append(f"<code>{E(m.group(4))}</code>")
+        pos = m.end()
+    out.append(E(t[pos:]))
+    return "".join(out)
+
+
+def figure(lang, num, alt):
+    from PIL import Image
+    name = f"{IMG[num]}.webp"
+    dst = os.path.join(ROOT, "assets", "guides", name)
+    im = Image.open(os.path.join(SRC, "img", "zh", f"{IMG[num]}.png")).convert("RGB")
+    if im.width > 1200: im = im.resize((1200, round(im.height * 1200 / im.width)), Image.LANCZOS)
+    im.save(dst, "WEBP", quality=82, method=6)
+    return (f'<figure class="g-fig"><img src="/assets/guides/{name}" width="{im.width}" height="{im.height}" alt="{E(alt)}" loading="lazy" decoding="async">'
+            f'<figcaption>{E(CAPTION[lang])}</figcaption></figure>')
+
+
+def body_html(lang, num, block):
+    parts, para = [], []
+    lines = block.split("\n"); i = 0
+    def flush():
+        if para: parts.append(f"<p>{inline(' '.join(para))}</p>"); para.clear()
+    while i < len(lines):
+        ln = lines[i].strip()
+        m = re.match(r"!\[([^\]]*)\]\(([^)]+)\)", ln)
+        if not ln: flush()
+        elif ln.startswith("### "): flush(); parts.append(f"<h2>{inline(ln[4:])}</h2>")
+        elif m:
+            flush()
+            if lang == "zh": parts.append(figure(lang, num, m.group(1)))
+            if i + 1 < len(lines) and re.match(r"^\*[^*].*\*$", lines[i + 1].strip()): i += 1  # 图注：英文页随图一起省略
+        elif ln.startswith("- "): flush(); parts.append(f"<ul><li>{inline(ln[2:])}</li></ul>")
+        else: para.append(ln)
+        i += 1
+    flush()
+    return "".join(parts).replace("</ul><ul>", "")
+
+
+def faq_items(block):
+    qs, q, a = [], None, []
+    for ln in block.split("\n"):
+        ln = ln.strip()
+        m = re.match(r"^\*\*(.+)\*\*$", ln)
+        if m:
+            if q: qs.append((q, " ".join(a)))
+            q, a = m.group(1), []
+        elif ln and q and not ln.startswith("---"): a.append(ln)
+    if q: qs.append((q, " ".join(a)))
+    return qs
+
+
+def section(md, starts):
+    m = re.search(r"^## (?:" + starts + r").*$", md, re.M)
+    rest = md[m.end():]
+    end = re.search(r"^(?:---|## )", rest, re.M)
+    return rest[:end.start()] if end else rest
+
+
+def strip_md(t):
+    return re.sub(r"\*\*(.+?)\*\*", r"\1", re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t))
+
+
+def further(lang, md, titles):
+    zh = open(src_path("zh", *[(n, s) for s, n in SLUGS if s in md_slug(md)][0]), encoding="utf-8").read() if lang == "en" else md
+    rows = re.findall(r"^\| 文末「延伸阅读」 \| .*? \| (.*?) \|$", zh, re.M)
+    links = []
+    for cell in rows:
+        for p in re.findall(r"`/zh/([^`]+)`", cell):
+            slug = p.split("guides/")[-1].strip("/") if p.startswith("guides/") else None
+            name = titles[lang][slug][0] if slug else OTHER[lang][p]
+            links.append(f'<li><a href="/{lang}/{p}">{E(name)}</a></li>')
+    return f'<section class="card prose g-more"><h2>{G[lang]["more"]}</h2><ul>{"".join(links)}</ul></section>'
+
+
+def md_slug(md):
+    return field(md, "URL") or ""
+
+
+def shell_lines(lang, path):
+    """沿用现网已发布页面的提示条、页头和页脚（build_site.page() 的页头 CTA 链接已落后于线上手改版本）。"""
+    ref = open(os.path.join(ROOT, lang, "faq", "index.html"), encoding="utf-8").read().split("\n")
+    banner = next(l for l in ref if l.startswith('<div class="pv"'))
+    header = next(l for l in ref if l.startswith('<header class="top">'))
+    nav = next(l for l in ref if l.startswith('<nav class="nv">'))
+    foot = next(l for l in ref if l.startswith('<footer class="ft">'))
+    other = "en" if lang == "zh" else "zh"
+    nav = nav.replace(' class=on', '').replace(f'href="/{lang}/guides/"', f'href="/{lang}/guides/" class=on')
+    nav = nav.replace(f'href="/{other}/faq/"', f'href="/{other}/{path}"')
+    return banner, header, nav, foot
+
+
+def finish(lang, path, s):
+    banner, header, nav, foot = shell_lines(lang, path)
+    L = s.split("\n")
+    for i, l in enumerate(L):
+        if l.startswith('<div class="pv"'): L[i] = banner
+        elif l.startswith('<header class="top">'): L[i] = header
+        elif l.startswith('<nav class="nv">'): L[i] = nav
+        elif l.startswith('<footer class="ft">'): L[i] = foot
+        elif l.startswith('<link rel="stylesheet" href="/site.css'): L[i] = l + '<link rel="stylesheet" href="/assets/guides/guides.css?v=1">'
+    return "\n".join(L)
+
+
+def main():
+    titles = {"zh": {}, "en": {}}
+    docs = {}
+    for lang in ("zh", "en"):
+        for slug, num in SLUGS:
+            md = open(src_path(lang, num, slug), encoding="utf-8").read()
+            assert md_slug(md).strip("`") == f"/{lang}/guides/{slug}/", (lang, slug)
+            titles[lang][slug] = (field(md, "H1"), field(md, "meta description"), field(md, "title"))
+            docs[(lang, slug)] = (num, md)
+    for lang in ("zh", "en"):
+        g = G[lang]; home = bs.T[lang]["home"]
+        for slug, num in SLUGS:
+            n, md = docs[(lang, slug)]
+            h1, desc, title = titles[lang][slug]
+            path = f"guides/{slug}/"
+            body = body_html(lang, num, section(md, "正文|Body"))
+            qs = faq_items(section(md, "常见问题|FAQ"))
+            qa = "".join(f'<details class="card qa"><summary><h2>{inline(q)}</h2><i>+</i></summary><p>{inline(a)}</p></details>' for q, a in qs)
+            html_body = (f'<section class="ph"><p class="crumb"><a href="/{lang}/">{home}</a> / <a href="/{lang}/guides/">{g["name"]}</a> / {E(h1)}</p><h1>{E(h1)}</h1></section>'
+                         f'<article class="card prose g-art">{body}</article>'
+                         f'<section class="faq g-faq"><h2 class="g-h">{g["faq"]}</h2>{qa}</section>' + further(lang, md, titles))
+            art = {"@type": "Article", "headline": h1, "description": desc, "inLanguage": bs.T[lang]["html"],
+                   "datePublished": PUBLISHED, "dateModified": PUBLISHED, "url": f"{bs.SITE}/{lang}/{path}",
+                   "mainEntityOfPage": f"{bs.SITE}/{lang}/{path}",
+                   "author": {"@id": bs.SITE + "/#org"}, "publisher": {"@id": bs.SITE + "/#org"}}
+            if lang == "zh": art["image"] = f"{bs.SITE}/assets/guides/{IMG[num]}.webp"
+            fp = {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": strip_md(q), "acceptedAnswer": {"@type": "Answer", "text": strip_md(a)}} for q, a in qs]}
+            cr = bs.crumbs(lang, [(g["name"], "guides/"), (h1, path)])
+            s = bs.page(lang, path, "guide", html_body, [art, fp, cr], title=title, desc=desc)
+            bs.write(f"{lang}/{path}index.html", finish(lang, path, s))
+        cards = "".join(f'<li><a class="card g-card" href="/{lang}/guides/{slug}/"><h2>{E(titles[lang][slug][0])}</h2><p>{E(titles[lang][slug][1])}</p><span class="g-go">{g["read"]} →</span></a></li>' for slug, _ in SLUGS)
+        body = (f'<section class="ph"><p class="crumb"><a href="/{lang}/">{home}</a> / {g["name"]}</p><h1>{g["h1"]}</h1><p class="lead">{g["lead"]}</p></section>'
+                f'<ul class="g-list">{cards}</ul>')
+        col = {"@type": "CollectionPage", "name": g["h1"], "description": g["desc"], "url": f"{bs.SITE}/{lang}/guides/", "inLanguage": bs.T[lang]["html"],
+               "isPartOf": {"@id": bs.SITE + "/#website"},
+               "mainEntity": {"@type": "ItemList", "itemListElement": [{"@type": "ListItem", "position": i, "name": titles[lang][slug][0], "url": f"{bs.SITE}/{lang}/guides/{slug}/"} for i, (slug, _) in enumerate(SLUGS, 1)]}}
+        s = bs.page(lang, "guides/", "guides", body, [col, bs.crumbs(lang, [(g["name"], "guides/")])], title=g["title"], desc=g["desc"])
+        bs.write(f"{lang}/guides/index.html", finish(lang, "guides/", s))
+
+
+if __name__ == "__main__":
+    main()

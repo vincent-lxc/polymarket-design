@@ -1,0 +1,15 @@
+/* /guides/ 专用。只在指南页加载，不改 site.css。动效只动 transform/opacity。 */
+.g-art{max-width:760px}
+.g-art h2{font-size:var(--f2);margin:28px 0 10px}.g-art h2:first-child{margin-top:0}
+.g-art p{line-height:1.8}.g-art strong{color:var(--tx)}
+.g-art a,.g-faq p a{color:var(--or);text-decoration:underline;text-underline-offset:3px}
+.g-art code{font-size:.92em;color:var(--tx)}
+.g-art ul{margin:10px 0 0 1.2em;color:var(--mu)}
+.g-fig{margin:22px 0 6px}.g-fig img{display:block;width:100%;height:auto;border-radius:12px;border:1px solid var(--line)}
+.g-fig figcaption{margin-top:8px;font-size:13px;color:var(--dim)}
+.g-faq,.g-more{max-width:760px;margin-top:22px}.g-h{font-size:var(--f2);margin-bottom:10px}
+.g-more ul{list-style:none;display:grid;gap:8px;margin-top:6px}.g-more a{color:var(--tx)}.g-more a:hover{color:var(--or)}
+.g-list{list-style:none;display:grid;gap:14px;max-width:760px}
+.g-card{display:block;transition:transform .35s var(--ease),opacity .2s}.g-card:hover{transform:translateY(-2px)}
+.g-card h2{font-size:var(--f2)}.g-card p{color:var(--mu);margin-top:8px}.g-go{display:inline-block;margin-top:10px;color:var(--or);font-size:14px}
+@media (max-width:420px){.g-art h2{font-size:20px}}
