@@ -180,12 +180,19 @@ def md_slug(md):
 
 
 def shell_lines(lang, path):
-    """沿用现网已发布页面的提示条、页头和页脚（build_site.page() 的页头 CTA 链接已落后于线上手改版本）。"""
+    """沿用现网已发布页面的提示条、页头；页脚 nav 统一用 build_site.foot_nav（含研究），避免重建丢链。"""
     ref = open(os.path.join(ROOT, lang, "faq", "index.html"), encoding="utf-8").read().split("\n")
     banner = next(l for l in ref if l.startswith('<div class="pv"'))
     header = next(l for l in ref if l.startswith('<header class="top">'))
     nav = next(l for l in ref if l.startswith('<nav class="nv">'))
     foot = next(l for l in ref if l.startswith('<footer class="ft">'))
+    foot = re.sub(
+        r"(<footer class=\"ft\">.*?<nav>)(.*?)(</nav>)",
+        lambda m: m.group(1) + bs.foot_nav(lang) + m.group(3),
+        foot,
+        count=1,
+        flags=re.S,
+    )
     other = "en" if lang == "zh" else "zh"
     nav = nav.replace(' class=on', '').replace(f'href="/{lang}/guides/"', f'href="/{lang}/guides/" class=on')
     nav = nav.replace(f'href="/{other}/faq/"', f'href="/{other}/{path}"')
