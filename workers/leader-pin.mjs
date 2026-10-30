@@ -5,6 +5,8 @@
  *  用这里的值补上，页面照旧显示「疑似做市，不参与排名」、不显示综合评分；BFF 返回了就以 BFF 为准。
  *  只放开这些地址；其余地址仍然只认 BFF 的 indexable。后端门槛改好后删掉本文件。 */
 
+// mm 字段：www 自己补的做市标记 `mm: true` 只是临时办法。copy-engine #87 合并、BFF 返回
+// suspected_market_maker 后就删掉这份数据（连同 withPinnedFlags 里的兜底），不留两份。
 export const LEADER_INDEX_PINNED = Object.freeze({
   "0xf201a19b43471261a3c1ba9247335d55270e527e": { mm: true },
   "0xc53375ff94e96100f2b30a4b5775db35218d69a9": { mm: true },
