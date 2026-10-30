@@ -134,7 +134,8 @@ T = {
    foot=[("risk/","Risk notice"),("privacy/","Privacy"),("terms/","Terms"),("about/","About")]),
 }
 
-ORG = {"@type": "Organization", "@id": SITE + "/#org", "name": "Wakeloom", "alternateName": "Wakeloom 织迹",
+ORG = {"@type": "Organization", "@id": SITE + "/#org", "name": "Wakeloom", "alternateName": ["织迹", "Wakeloom 织迹"],
+       "description": 'Wakeloom (织迹) is a wallet analytics and paper copy-trading tool for Polymarket. Not yet launched.',
        "url": SITE + "/", "logo": SITE + "/icons/favicon-512.png"}
 def website(lang):
     return {"@type": "WebSite", "@id": SITE + "/#website", "name": "Wakeloom", "alternateName": "Wakeloom 织迹",
@@ -204,9 +205,9 @@ WAITLIST_API = os.environ.get("WAKELOOM_WAITLIST_API", API + "/v1/waitlist")
 # 开关：2026-10-22 探测 POST /v1/waitlist 返回 401「需要登录」，还没按约定（免登录）上线，默认关。
 # 关时表单照常输出但带 hidden，site-waitlist.js 只在 WAKELOOM_WAITLIST=on（写到 <html data-waitlist>）时显示。
 WAITLIST_ON = os.environ.get("WAKELOOM_WAITLIST", "off").lower() in ("1", "on", "true")
-def wl_form(where, lang):
+def wl_form(where, lang, source=None):
     zh = lang == "zh"
-    src = "banner" if where == "bar" else "footer"
+    src = source or ("banner" if where == "bar" else "footer")
     return (f'<form class="wl-form wl-{where}" data-endpoint="{E(WAITLIST_API)}" data-lang="{lang}" data-source="{src}" novalidate>'
             f'<label class="wl-lab" for="wl-{where}">{"上线通知我" if zh else "Notify me at launch"}<span class="wl-sub"> / {"Notify me at launch" if zh else "上线通知我"}</span></label>'
             f'<div class="wl-hp" aria-hidden="true"><label for="wl-{where}-web">Website</label><input id="wl-{where}-web" name="website" type="text" tabindex="-1" autocomplete="off" value=""></div>'
@@ -298,6 +299,7 @@ def home(lang, D):
     hero = (f'''<section class="hero"><div class="hx"><p class="eyebrow">{"用于 Polymarket 的钱包分析 · 模拟盘" if zh else "Wallet analytics & paper trading for Polymarket"}</p>
 <h1>{"Polymarket 跟单前，先看清谁靠实力、谁靠运气" if zh else "Before you copy a Polymarket trader, see if it's skill or luck"}</h1>
 <p class="lead">{"按综合评分排序，看近 90 天胜率、回撤与收益；先用模拟盘跟单，零资金看真实滑点（公测中）" if zh else "Ranked by composite score. See 90-day win rate, drawdown, and returns — then paper-copy with zero capital to feel real slippage (public beta)."}</p>
+<p class="brand-line">{'Wakeloom（织迹）是用于 Polymarket 的钱包分析和模拟盘跟单工具，尚未正式上线。' if zh else 'Wakeloom is a wallet analytics and paper copy-trading tool for Polymarket. It has not launched yet.'}</p>
 <div class="ctas"><a class="btn pri mag" href="https://app.wakeloom.com/board">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
 <p class="mu sm">{"第一期只有模拟盘，不动真钱，不需要私钥。" if zh else "Phase one is paper trading only: no real money, no private key."}</p></div>
 <div class="hv card rise" data-live="home-top"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b><span class="live-badge" data-live-badge="home-top"></span>{f'<span class="mu sm" data-live-meta="home-top">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else '<span class="mu sm" data-live-meta="home-top"></span>'}</div>
@@ -474,10 +476,20 @@ def leader(lang, a, upd, rank, D):
           "license": f"{SITE}/{lang}/terms/", **({"dateModified": mod} if mod else {})}
     write(f"{lang}/leader/{a}/index.html", page(lang, f"leader/{a}/", "x", body, [pp, ds, crumbs(lang, [(L("排行榜", "Leaderboard"), "leaderboard/"), (short(a), f"leader/{a}/")])], title=title, desc=desc))
 
+# copy-trading 首屏直接回答 + 上线通知（source=copy-trading）+「为什么先用模拟盘」。文案待 Casey 定字。
+COPY_FIRST = {
+  "zh": ('Polymarket 本身没有跟单功能。Wakeloom 第一期只做模拟盘（paper trading）跟单，按你的规则模拟跟随一个地址，不下真实订单。产品尚未正式上线。', ('上线时通知你', '留个邮箱，Wakeloom 正式上线时发一封通知。'), ('为什么先用模拟盘', '跟单的结果总比被跟的地址差一些。发现对方成交要时间，价格在这段时间里会动，还要付手续费。先用模拟盘跑一段，看扣掉这些成本后还剩多少，再决定下一步。')),
+  "en": ("Polymarket has no built-in copy trading. Wakeloom's phase one is paper trading only: it simulates following a wallet under your rules and logs the price gap and delay, with no real orders. Wakeloom has not launched yet.", ('Get notified at launch', "Leave your email and we'll send one notice when Wakeloom launches."), ('Why paper trading first', 'Copying always lands a little behind the wallet you follow: spotting their fill takes time, the price moves meanwhile, and fees come out on top. Paper trading for a while shows what is left after those costs before you decide anything else.')),
+}
 def article(lang, path, key, h1, secs, crumb):
     tt, dd = DESC[lang][key]
     inner = "".join(f'<section class="card prose"><h2>{E(h)}</h2>{"".join(f"<p>{E(p)}</p>" for p in ps)}</section>' for h, ps in secs)
     body = f'<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {E(crumb)}</p><h1>{E(h1)}</h1><p class="lead">{E(dd)}</p></section>{inner}'
+    if key == "copy":
+        ans, cta, why = COPY_FIRST[lang]
+        body = (f'<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {E(crumb)}</p><h1>{E(h1)}</h1><p class="lead answer">{E(ans)}</p><p class="mu sm">{E(dd)}</p></section>'
+                f'<section class="card wl-card wl-gate" id="notify" hidden><h2>{E(cta[0])}</h2><p class="mu sm">{E(cta[1])}</p>{wl_form("copy", lang, "copy-trading")}</section>'
+                f'<section class="card prose"><h2>{E(why[0])}</h2><p>{E(why[1])}</p></section>{inner}')
     ld = [{"@type": "Article", "headline": h1, "description": dd, "inLanguage": T[lang]["html"], "url": f"{SITE}/{lang}/{path}",
            "author": {"@id": SITE + "/#org"}, "publisher": {"@id": SITE + "/#org"}, "datePublished": "2026-10-21", "dateModified": "2026-10-21"},
           crumbs(lang, [(crumb, path)])]

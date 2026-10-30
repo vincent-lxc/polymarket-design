@@ -81,6 +81,19 @@ export function leaderDecision(pathname) {
   return { action: "wallet", lang, addr };
 }
 
+/** 不带语言前缀的站内栏目，301 到中文版（根路径 / 的语言选择、/leader/、根目录文件都不在这里）。 */
+const BARE_SECTIONS = ["leaderboard", "how-it-works", "copy-trading", "faq", "risk", "privacy", "terms", "about"];
+const BARE_PATH = new RegExp(`^/(${BARE_SECTIONS.join("|")})(?:/(?:index\\.html)?)?$`);
+
+/**
+ * @param {string} pathname
+ * @returns {string|null} 目标路径
+ */
+export function barePathRedirect(pathname) {
+  const m = pathname.match(BARE_PATH);
+  return m ? `/zh/${m[1]}/` : null;
+}
+
 /** 3xx 且 Location 落在壳目录上：这是旧规则的自跳，不能原样返回给浏览器。 */
 export function isShellRedirect(status, location, base) {
   if (status < 300 || status >= 400 || !location) return false;
@@ -275,6 +288,8 @@ export default {
     if (url.pathname === "/sitemap.xml" || url.pathname === "/sitemap.xml/") {
       return sitemapResponse(request, env);
     }
+    const bare = barePathRedirect(url.pathname);
+    if (bare) return Response.redirect(url.origin + bare + url.search, 301);
     const lead = leaderDecision(url.pathname);
     if (lead && lead.action === "redirect") {
       return Response.redirect(url.origin + lead.to + url.search, lead.status);

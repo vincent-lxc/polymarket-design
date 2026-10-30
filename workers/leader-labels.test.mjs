@@ -25,7 +25,9 @@ function leader(extra = {}, metrics = {}) {
 }
 const page = (lang, l) => applyLeaderShell(shell(lang), lang, addr, l);
 const title = (h) => h.match(/<title>([\s\S]*?)<\/title>/)[1];
-const desc = (h) => h.match(/<meta name="description" content="([^"]*)">/)[1];
+// 页面正文那句（data-f=desc），保留原口径；head 的 description 用 PAGES 模板，见 metaDesc。
+const desc = (h) => h.match(/<p class="lead" data-f="desc">([^<]*)<\/p>/)[1];
+const metaDesc = (h) => h.match(/<meta name="description" content="([^"]*)">/)[1];
 
 // 1. 字段全缺：保持原样，不出现任何标注
 for (const lang of ["zh", "en"]) {
@@ -157,7 +159,9 @@ assert.match(live, /new AbortController\(\)/);
       assert.ok(d === c.description || d === escHtml(c.description), `${lang} meta: ${d}`);
       assert.ok(d.endsWith(escHtml(THIRD[lang])) || d.endsWith(THIRD[lang]), `${lang} meta end: ${d}`);
       const og = h.match(/<meta property="og:description" content="([^"]*)">/)[1];
-      assert.equal(og, d);
+      assert.equal(og, metaDesc(h));
+      assert.ok(og.includes(escHtml(THIRD[lang])) || og.includes(THIRD[lang]), `${lang} meta third: ${og}`);
+      assert.ok(!og.includes(CHAIN[lang]));
       const ld = h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
       assert.ok(ld.includes(lang === "zh" ? THIRD.zh : "hasn"), `${lang} JSON-LD`);
       assert.ok(!ld.includes(CHAIN[lang]), `${lang} JSON-LD still on-chain`);
@@ -204,6 +208,7 @@ assert.match(live, /new AbortController\(\)/);
       const c = leaderCopy(lang, addr, l);
       const d = desc(h);
       const og = h.match(/<meta property="og:description" content="([^"]*)">/)[1];
+      assert.equal(og, metaDesc(h));
       const ld = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
       const ds = ld["@graph"].find((g) => g["@type"] === "Dataset");
       const ids = ds.variableMeasured.map((v) => v.propertyID);

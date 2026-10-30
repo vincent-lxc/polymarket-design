@@ -413,7 +413,7 @@ with sync_playwright() as pw:
             ctx, p = open_page(b, "/%s/leader/%s/" % (L, A(c)))
             badge_done(p, "[data-live-badge=leader]")
             md = p.get_attribute('meta[name="description"]', "content")
-            ok(md.endswith(want) and other not in md, "SSR meta desc %s %s: %s" % (L, c, md))
+            ok(want in md and other not in md and md.endswith("尚未正式上线。" if L == "zh" else "Not yet launched."), "SSR meta desc %s %s: %s" % (L, c, md))
             d = p.inner_text("[data-f=desc]")
             ok(d.endswith(want) and other not in d, "desc %s %s: %s" % (L, c, d))
             ctx.close()
