@@ -101,17 +101,6 @@ body.pick .pv{position:fixed;top:0;left:0;right:0;z-index:5}
 .wl-pv{font-size:12px;color:var(--dim)}
 .wl-card{margin-top:24px}.wl-card h2{margin-bottom:4px}.wl-card .wl-form{margin-top:14px;max-width:520px}
 /* App 功能截图 */
-.shots{margin-top:64px}.shots>h2{font-size:var(--f2);margin-bottom:6px;font-weight:600}.shots>.mu{max-width:52ch}
-.shot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:28px}
-/* Image First：大图做主角，说明叠在图底渐隐区，橙标克制 */
-.shot{position:relative;padding:0;overflow:hidden;display:block;border:0;background:var(--card2);border-radius:18px;isolation:isolate}
-.shot-img{position:relative;aspect-ratio:3/4;background:#121216;border:0}
-.shot-img img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}
-.shot-tag{position:absolute;left:12px;top:12px;z-index:2;font-size:11px;padding:3px 9px;border-radius:999px;color:rgba(255,106,31,.92);background:rgba(13,13,16,.55);border:1px solid rgba(255,106,31,.28);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-.shot figcaption{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:56px 18px 18px;background:linear-gradient(180deg,rgba(13,13,16,0) 0%,rgba(13,13,16,.72) 42%,rgba(13,13,16,.92) 100%);pointer-events:none}
-.shot h3{font-size:15px;font-weight:560;letter-spacing:.01em;margin:0 0 4px;color:var(--tx)}
-.shot p{font-size:12.5px;line-height:1.55;color:rgba(154,154,163,.92);margin:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-@media (max-width:900px){.shot-grid{grid-template-columns:1fr;gap:16px}.shot-img{aspect-ratio:4/5}.shot p{-webkit-line-clamp:3}}
 .wl-hp{position:absolute!important;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
 /* ≤900px 汉堡。桌面 .nv 保持原样，按钮和面板只在窄屏出现。 */
 .nv-btn{display:none;background:transparent;border:1px solid var(--line);color:var(--tx);width:40px;height:36px;border-radius:10px;padding:0;cursor:pointer;align-items:center;justify-content:center;flex-direction:column;gap:4px;flex:none}

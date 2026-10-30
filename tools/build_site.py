@@ -312,26 +312,7 @@ def home(lang, D):
     steps = (["选一个地址：在排行榜里看长期数据", "设规则：比例、单笔上限、单市场上限、偏离阈值", "跑模拟盘：记录每笔的价差、延迟和扣费结果", "再决定：结果说得通再考虑实盘（实盘跟单即将推出）"] if zh else
              ["Pick a wallet from the leaderboard's long-term data", "Set rules: ratio, per-trade cap, per-market cap, deviation limit", "Run paper trading: log price gap, delay and net result per trade", "Then decide: consider live trading only if the numbers hold up (live copy trading is coming soon)"])
     sh = "".join(f'<li><span class="num">{i}</span>{E(s)}</li>' for i, s in enumerate(steps, 1))
-    shots = [
-     ("app-leader", L2(zh, "交易员排行与分析", "Trader leaderboard and analysis"),
-      L2(zh, "排行榜里的每个地址都能点开详情页。页面上有近 90 天胜率、已结算市场数和最大回撤，还有累计盈亏曲线和按品类拆开的输赢。先看清这个人靠什么赚钱，再决定跟不跟。",
-         "Every wallet on the leaderboard opens a detail page with its 90-day win rate, resolved markets, max drawdown, a cumulative P&L curve and results by category. See how a trader makes money before you decide to follow."),
-      L2(zh, "Wakeloom 应用截图：交易员详情页，显示胜率、已结算市场数、最大回撤、累计盈亏曲线和按品类的输赢（演示数据）",
-         "Wakeloom app screenshot: trader detail page with win rate, resolved markets, max drawdown, cumulative P&L curve and results by category (demo data)")),
-     ("app-strategies", L2(zh, "模拟盘跟单设置", "Paper copy-trading setup"),
-      L2(zh, "每个策略实例有自己的选人规则和跟单比例。可以从系统模板起步，再改单笔上限和日亏上限。这些设置只用于模拟盘，实盘跟单即将推出。",
-         "Each strategy instance has its own selection rule and copy ratio. Start from a system template, then adjust the per-trade cap and daily loss limit. These settings apply to paper trading only; live copy trading is coming soon."),
-      L2(zh, "Wakeloom 应用截图：策略管理页，列出模拟盘策略实例的选人规则、跟单比例和状态，以及可选用的系统模板（演示数据）",
-         "Wakeloom app screenshot: strategy page listing paper-trading instances with selection rule, copy ratio and status, plus system templates (demo data)")),
-     ("app-overview", L2(zh, "模拟收益记录", "Simulated results log"),
-      L2(zh, "总览页汇总所有模拟盘实例的净值和扣费后盈亏。每笔镜像单都记下对方成交价、我方模拟价和滑点，没跟的单也写明原因。图中是演示数据。",
-         "The overview totals equity and net P&L after fees across all paper instances. Each mirrored trade records their fill, our simulated price and the slippage, and skipped trades say why. The image shows demo data."),
-      L2(zh, "Wakeloom 应用截图：总览页，显示模拟盘合计净值、扣费净盈亏、净值曲线和当前跟随的交易员（演示数据）",
-         "Wakeloom app screenshot: overview page with total paper-trading equity, net P&L after fees, equity curve and the trader being followed (demo data)")),
-    ]
-    sc = "".join(f'<figure class="shot card shot-imgfirst"><div class="shot-img"><img src="/assets/screens/{f}.webp" width="1200" height="1290" loading="lazy" decoding="async" alt="{E(alt)}"><span class="shot-tag">{"测试版 · 模拟盘" if zh else "Beta · Paper trading"}</span></div><figcaption><h3>{E(h)}</h3><p>{E(t)}</p></figcaption></figure>' for f, h, t, alt in shots)
-    shots_html = f'<section class="shots"><h2>{"应用里能做什么" if zh else "Inside the app"}</h2><p class="mu sm">{"截图来自测试版，使用演示数据，不含真实地址。" if zh else "Screenshots from the beta with demo data; no real wallets shown."}</p><div class="shot-grid">{sc}</div></section>'
-    body = hero + f'<section class="feats">{fh}</section>' + shots_html + app_run_html(lang) + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/board">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
+    body = hero + f'<section class="feats">{fh}</section>' + app_run_html(lang) + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/board">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
     write(f"{lang}/index.html", page(lang, "", "home", body, [softapp(lang), crumbs(lang, []), {"@type": "WebPage", "url": f"{SITE}/{lang}/", "name": DESC[lang]["home"][0], "inLanguage": T[lang]["html"], "isPartOf": {"@id": SITE + "/#website"}}]))
 
 # 排行榜表格：和 site-live.js rowFull / rowShort / fillHead 输出同一套 HTML，爬虫看到的就是浏览器刷新后的样子。
