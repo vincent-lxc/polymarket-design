@@ -129,12 +129,12 @@ T = {
    nav=[("leaderboard/","排行榜"),("how-it-works/","选人方法"),("copy-trading/","模拟盘跟单"),("faq/","常见问题"),("guides/","指南")],
    cta="进入应用", cta2="看排行榜", other="English", home="首页", nd="无数据",
    indep="Wakeloom 是独立工具，用于 Polymarket，与 Polymarket 无隶属或合作关系。所有内容仅供研究，不构成投资建议。",
-   foot=[("risk/","风险提示"),("privacy/","隐私"),("terms/","条款"),("about/","关于"),("guides/","指南")]),
+   foot=[("risk/","风险提示"),("privacy/","隐私"),("terms/","条款"),("about/","关于"),("guides/","指南"),("research/","研究")]),
  "en": dict(html="en", og="en_US", name="Wakeloom", tag="Wallet analytics · Paper trading",
    nav=[("leaderboard/","Leaderboard"),("how-it-works/","How it works"),("copy-trading/","Paper copy trading"),("faq/","FAQ"),("guides/","Guides")],
    cta="Open the app", cta2="See the leaderboard", other="中文", home="Home", nd="No data",
    indep="Wakeloom is an independent tool for Polymarket. It is not affiliated with or endorsed by Polymarket. Nothing here is investment advice.",
-   foot=[("risk/","Risk notice"),("privacy/","Privacy"),("terms/","Terms"),("about/","About"),("guides/","Guides")]),
+   foot=[("risk/","Risk notice"),("privacy/","Privacy"),("terms/","Terms"),("about/","About"),("guides/","Guides"),("research/","Research")]),
 }
 
 ORG = {"@type": "Organization", "@id": SITE + "/#org", "name": "Wakeloom", "alternateName": ["织迹", "Wakeloom 织迹"],
@@ -143,6 +143,10 @@ ORG = {"@type": "Organization", "@id": SITE + "/#org", "name": "Wakeloom", "alte
 def website(lang):
     return {"@type": "WebSite", "@id": SITE + "/#website", "name": "Wakeloom", "alternateName": "Wakeloom 织迹",
             "url": SITE + "/", "inLanguage": ["zh-CN", "en"], "publisher": {"@id": SITE + "/#org"}}
+def foot_nav(lang):
+    """页脚导航链接（含指南、研究）。生成源统一走这里，避免重建丢链。"""
+    return "".join(f'<a href="/{lang}/{p}">{n}</a>' for p, n in T[lang]["foot"])
+
 def crumbs(lang, items):
     li = [{"@type": "ListItem", "position": 1, "name": T[lang]["home"], "item": f"{SITE}/{lang}/"}]
     for i, (n, p) in enumerate(items, 2): li.append({"@type": "ListItem", "position": i, "name": n, "item": f"{SITE}/{lang}/{p}"})
@@ -247,7 +251,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
            f'<link rel="alternate" hreflang="x-default" href="{SITE}/">')
     graph = ld_clean({"@context": "https://schema.org", "@graph": [ORG, website(lang)] + ld})
     nav = "".join(f'<a href="/{lang}/{p}"{" class=on" if path.startswith(p) else ""}>{n}</a>' for p, n in t["nav"])
-    foot = "".join(f'<a href="/{lang}/{p}">{n}</a>' for p, n in t["foot"])
+    foot = foot_nav(lang)
     return f'''<!doctype html><html lang="{t["html"]}" data-waitlist="{"on" if WAITLIST_ON else "off"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{E(tt)}</title><meta name="description" content="{E(dd)}"><link rel="canonical" href="{url}">{hre}
 <meta property="og:type" content="website"><meta property="og:site_name" content="Wakeloom"><meta property="og:title" content="{E(tt)}"><meta property="og:description" content="{E(dd)}"><meta property="og:url" content="{url}"><meta property="og:image" content="{SITE}/icons/favicon-512.png"><meta property="og:locale" content="{t["og"]}"><meta name="twitter:card" content="summary">

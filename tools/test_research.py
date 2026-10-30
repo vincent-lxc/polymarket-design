@@ -1,6 +1,6 @@
 """/research/ 页面测试。先起本地预览再跑：python3 tools/test_research.py [http://127.0.0.1:8947]
 覆盖：路由 200、Article/CollectionPage + BreadcrumbList、无价格/评分、canonical+hreflang、
-sitemap、llms.txt、禁词、数字原文、guides↔research 互链、无 Research 导航项、无 CTA、无个人地址。
+sitemap、llms.txt、禁词、数字原文、guides↔research 互链、无 Research 导航项、页脚研究入口、索引卡对齐 guides、无 CTA、无个人地址。
 """
 import json, os, re, subprocess, sys, urllib.request, urllib.error
 
@@ -94,6 +94,10 @@ for p in PATHS:
     # 不加 Research 导航项；guides 仍在
     ok(not re.search(r">研究<|>Research<", re.search(r'<nav class="nv">.*?</nav>', h).group(0)), f"{p} no Research nav")
     ok(f'href="/{L}/guides/"' in h, f"{p} guides still in nav")
+    ft = re.search(r'<footer class="ft">.*?</footer>', h, re.S).group(0)
+    foot_label = "研究" if L == "zh" else "Research"
+    ok(f'href="/{L}/research/">{foot_label}</a>' in ft, f"{p} footer research")
+    ok(f'href="/{L}/guides/"' in ft, f"{p} footer guides")
     main = re.search(r"<main>(.*)</main>", h, re.S).group(1)
     vis = re.sub(r"<[^>]+>", " ", re.sub(r"<script.*?</script>", " ", h, flags=re.S))
     for w in BANNED:
@@ -114,6 +118,13 @@ for p in PATHS:
         ok("/assets/research/research.css" in h, f"{p} research.css")
     else:
         ok(f'href="/{L}/research/{SLUG}/"' in main, f"{p} index card")
+        # 索引卡结构对齐 guides：ul.g-list > li > a.card.g-card > h2 + p + span.g-go
+        ok(re.search(
+            r'<ul class="g-list"><li><a class="card g-card" href="/[^"]+/research/[^"]+/"><h2>.+?</h2><p>.+?</p><span class="g-go">.+?</span></a></li></ul>',
+            main, re.S,
+        ), f"{p} g-card structure")
+        ok("/assets/guides/guides.css" in h, f"{p} guides.css for cards")
+        ok("/assets/research/research.css" not in h, f"{p} index no research.css")
     for href in set(re.findall(r'href="(/[^"#?]*)', h)):
         st = status(href)
         ok(st == 200, f"{p} link {href} {st}")

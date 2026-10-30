@@ -1,7 +1,7 @@
 """生成 /zh|en/research/ 索引页和 leaderboard-data-quality 中英研究页。
 
 正文取自 市场/research/ 定稿，数字按原文保留不四舍五入。
-不改全站导航（是否加「研究」留给 Casey）；只在 guides 延伸阅读与本页延伸阅读露出。
+顶栏不加「研究」；页脚按 build_site.T['foot'] 补研究入口；索引卡复用 guides 的 g-list/g-card。
 用法：python3 tools/build_research.py [稿件目录]
 """
 import html, json, os, re, sys
@@ -180,13 +180,21 @@ def further(lang):
 
 
 def shell_lines(lang, path):
-    """沿用现网 guides 页头页脚（faq 把头和 nav 合成一行，不适合替换 page() 输出）。
-    不改导航文案、不加「研究」入口；语言切换指到对本页。"""
+    """沿用现网 guides 页头；页脚 nav 统一用 build_site.foot_nav（含研究），避免重建丢链。
+    顶栏不加「研究」；语言切换指到对本页。"""
     ref = open(os.path.join(ROOT, lang, "guides", "index.html"), encoding="utf-8").read().split("\n")
     banner = next(l for l in ref if l.startswith('<div class="pv"'))
     header = next(l for l in ref if l.startswith('<header class="top">'))
     nav = next(l for l in ref if l.startswith('<nav class="nv">'))
     foot = next(l for l in ref if l.startswith('<footer class="ft">'))
+    # 页脚链接以 T['foot'] 为准（含研究）
+    foot = re.sub(
+        r"(<footer class=\"ft\">.*?<nav>)(.*?)(</nav>)",
+        lambda m: m.group(1) + bs.foot_nav(lang) + m.group(3),
+        foot,
+        count=1,
+        flags=re.S,
+    )
     other = "en" if lang == "zh" else "zh"
     nav = nav.replace(" class=on", "")
     # guides 页的语言切换在 nav 行里
@@ -194,7 +202,7 @@ def shell_lines(lang, path):
     return banner, header, nav, foot
 
 
-def finish(lang, path, s):
+def finish(lang, path, s, article=False):
     banner, header, nav, foot = shell_lines(lang, path)
     L = s.split("\n")
     for i, l in enumerate(L):
@@ -207,10 +215,11 @@ def finish(lang, path, s):
         elif l.startswith('<footer class="ft">'):
             L[i] = foot
         elif l.startswith('<link rel="stylesheet" href="/site.css'):
-            # 复用 guides 的列表/延伸阅读卡样式，再叠研究表样式
-            L[i] = (l
-                    + '<link rel="stylesheet" href="/assets/guides/guides.css?v=3">'
-                    + '<link rel="stylesheet" href="/assets/research/research.css?v=2">')
+            # 索引卡与 guides 共用 guides.css；文章页再叠 research.css（宽表）
+            css = l + '<link rel="stylesheet" href="/assets/guides/guides.css?v=3">'
+            if article:
+                css += '<link rel="stylesheet" href="/assets/research/research.css?v=2">'
+            L[i] = css
     return "\n".join(L).replace('data-waitlist="off"', 'data-waitlist="on"', 1)
 
 
@@ -286,10 +295,11 @@ def main():
         }
         cr = bs.crumbs(lang, [(m["name"], "research/"), (m["h1"], path)])
         s = bs.page(lang, path, "research", html_body, [art, cr], title=m["title"], desc=m["desc"])
-        bs.write(f"{lang}/{path}index.html", finish(lang, path, s))
+        bs.write(f"{lang}/{path}index.html", finish(lang, path, s, article=True))
 
         # index
         href, name = RESEARCH_LINK[lang]
+        # 索引卡 HTML 与 guides 索引对齐：ul.g-list > li > a.card.g-card > h2 + p + span.g-go
         cards = (
             f'<li><a class="card g-card" href="{href}"><h2>{E(name)}</h2>'
             f'<p>{E(m["desc"])}</p><span class="g-go">{m["read"]} →</span></a></li>'
