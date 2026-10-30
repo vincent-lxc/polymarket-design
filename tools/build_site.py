@@ -705,12 +705,12 @@ def write_llms():
         (f"{SITE}/en/terms/", "Terms", "The terms for using Wakeloom."),
         (f"{SITE}/zh/guides/", "指南", "方法文：怎么挑交易者、跟单前看哪些数据、照抄排行榜的坑。"),
         (f"{SITE}/en/guides/", "Guides", "Method guides: picking traders, what to check before copying, leaderboard pitfalls."),
-        (f"{SITE}/zh/guides/how-to-pick-polymarket-traders/", "怎么判断一个 Polymarket 交易者", "先排除单次重仓、刷量和做市地址，再看已结算市场数、回撤和买入价。"),
-        (f"{SITE}/en/guides/how-to-pick-polymarket-traders/", "How to judge a Polymarket trader", "Rule out one-big-bet, wash-traded and market-maker wallets, then check resolved markets, drawdown and entry level."),
-        (f"{SITE}/zh/guides/polymarket-trader-data-checklist/", "跟单前该看哪些数据", "已结算市场数、最大回撤、收益集中度等 7 项怎么读。"),
-        (f"{SITE}/en/guides/polymarket-trader-data-checklist/", "What to check before copying", "How to read resolved markets, max drawdown, profit concentration and four more."),
+        (f"{SITE}/zh/guides/how-to-pick-polymarket-traders/", "跟单前，怎么判断一个 Polymarket 交易者", "先排除单次重仓、刷量和做市地址，再看已结算市场数、回撤和买入价。"),
+        (f"{SITE}/en/guides/how-to-pick-polymarket-traders/", "How to evaluate a Polymarket trader before copying", "Rule out one-big-bet, wash-traded and market-maker wallets, then check resolved markets, drawdown and entry level."),
+        (f"{SITE}/zh/guides/polymarket-trader-data-checklist/", "跟单前该看哪些数据：样本量、回撤和收益集中度", "已结算市场数、最大回撤、收益集中度等 7 项怎么读。"),
+        (f"{SITE}/en/guides/polymarket-trader-data-checklist/", "What to check before copying a trader: sample size, drawdown and concentration", "How to read resolved markets, max drawdown, profit concentration and four more."),
         (f"{SITE}/zh/guides/polymarket-leaderboard-copy-pitfalls/", "照抄 Polymarket 排行榜的常见坑", "重仓、浮盈、做市、刷量、延迟和价差等 9 个坑，每个配识别办法。"),
-        (f"{SITE}/en/guides/polymarket-leaderboard-copy-pitfalls/", "Pitfalls of copying the leaderboard", "Nine traps such as big bets, unrealized gains, market makers, delay and slippage, and how to spot each."),
+        (f"{SITE}/en/guides/polymarket-leaderboard-copy-pitfalls/", "Common pitfalls of copying the Polymarket leaderboard", "Nine traps such as big bets, unrealized gains, market makers, delay and slippage, and how to spot each."),
     ]
     lines = [
         "# Wakeloom 织迹",

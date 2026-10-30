@@ -1,7 +1,8 @@
 """/guides/ 页面测试。先起本地预览：BFF_ORIGIN=http://127.0.0.1:8948 PORT=8947 node tools/preview-www.mjs
 再跑：python3 tools/test_guides.py [http://127.0.0.1:8947]
 覆盖：路由 200、JSON-LD 可解析且类型齐全、无价格/评分字段、canonical + hreflang、sitemap STATIC_PAGES、
-llms.txt（源和成品）、站内链接和 FAQ 锚点不死链、禁用词、中文配图属性和图注、英文页无配图和图注、导航/页脚入口。
+llms.txt（源和成品）、站内链接和 FAQ 锚点不死链、禁用词、中英配图属性（1200×750）和对应语言图注、每篇的上线通知表单（source=guide-0N）、
+en FAQ 链接带锚点、稿件内部用语不上页面、白名单外的 leader 地址不出现、导航/页脚入口。
 """
 import json, os, re, subprocess, sys, urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -9,9 +10,10 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8947"
 SITE = "https://www.wakeloom.com"
 SLUGS = ["how-to-pick-polymarket-traders", "polymarket-trader-data-checklist", "polymarket-leaderboard-copy-pitfalls"]
 PATHS = [f"/{L}/guides/{s}" for L in ("zh", "en") for s in [""] + [x + "/" for x in SLUGS]]
-BANNED = ["待建", "校准中", "S0", "未命名", "示意", "PolymarketScan", "接口暂不可用", "推荐"]
-# 稿件原文里的「值得跟」/ "worth copying" 按要求不改，单独计数上报，不算本页面实现的问题。
-DRAFT_KNOWN = ["值得跟", "worth copying"]
+BANNED = ["待建", "校准中", "S0", "未命名", "示意", "PolymarketScan", "接口暂不可用", "推荐",
+          "值得跟", "值不值得", "worth copying", "worth following", "traders to follow", "Worth copying", "Worth following"]
+# 稿件里的状态行、DRAFT 标记、内部备注不能出现在页面上（大小写敏感的词另列）
+INTERNAL = ["DRAFT", "初稿", "口径已过", "上线待", "Emily", "Casey", "Avery", "Morgan", "pending", "原 P0", "联调", "{leader_link", "{as_of}", "构建时取"]
 n = 0
 def ok(c, m):
     global n
@@ -35,7 +37,8 @@ def types(x):
     elif isinstance(x, list):
         for v in x: yield from types(v)
 
-known = {}
+PINNED = set(json.loads(subprocess.check_output(["node", "--input-type=module", "-e",
+    f"import {{LEADER_INDEX_PINNED}} from '{ROOT}/workers/leader-pin.mjs'; console.log(JSON.stringify(Object.keys(LEADER_INDEX_PINNED)))"], text=True)))
 pages = {}
 for p in PATHS:
     st, h = get(p); ok(st == 200, f"{p} {st}"); pages[p] = h
@@ -59,9 +62,9 @@ for p in PATHS:
     vis = re.sub(r"<[^>]+>", " ", re.sub(r'<script.*?</script>', " ", h, flags=re.S))
     for w in BANNED: ok(w not in vis and w not in lds[0], f"{p} banned word {w}")
     ok("尚未正式上线" in h or L == "en", f"{p} 尚未正式上线")
-    for w in DRAFT_KNOWN:
-        c = vis.count(w) + lds[0].count(w)
-        if c: known[(p, w)] = c
+    for w in INTERNAL: ok(w not in vis and w not in lds[0], f"{p} internal wording {w}")
+    ok('data-waitlist="on"' in h, f"{p} waitlist switch on")
+    for a in re.findall(r'href="/[a-z]{2}/leader/(0x[0-9a-fA-F]{40})', h): ok(a.lower() in PINNED, f"{p} leader {a} not pinned")
     imgs = re.findall(r"<img [^>]*>", main)
     CAP = {"zh": "产品原型，上线后界面可能不同", "en": "Product prototype. The live interface may differ."}
     if p.count("/") > 3:
@@ -74,6 +77,16 @@ for p in PATHS:
         ok(status(src) == 200, f"{p} img {src}")
         ok(f"<figcaption>{CAP[L]}</figcaption>" in main, f"{p} caption")
         ok(CAP["en" if L == "zh" else "zh"] not in h, f"{p} no other-language caption")
+        ok('width="1200" height="750"' in im, f"{p} img 1200x750")
+        num = SLUGS.index(p.split("/")[3]) + 1
+        forms = re.findall(r'<form class="wl-form[^"]*"[^>]*>', main)
+        ok(len(forms) == 1 and f'data-source="guide-0{num}"' in forms[0] and f'data-lang="{L}"' in forms[0], f"{p} CTA form {forms}")
+        ok('data-endpoint="https://api.wakeloom.com/v1/waitlist"' in forms[0], f"{p} CTA endpoint")
+        ok(re.search(r'<input id="(wl-g0\d)" name="email" type="email"[^>]*required', main) and 'name="website"' in main, f"{p} CTA inputs")
+        ok(("可随时退订" if L == "zh" else "Unsubscribe anytime") in main, f"{p} CTA small print")
+        ok(not re.search(r'href="/en/faq/"', re.search(r'<article.*?</article>', main, re.S).group(0)), f"{p} body FAQ link without anchor")
+    else:
+        ok(not re.findall(r'<form class="wl-form[^"]*"', main), f"{p} index no CTA form")
     for href in set(re.findall(r'href="(/[^"]*)"', h)):
         path, _, frag = href.partition("#")
         st = status(path); ok(st == 200, f"{p} link {href} {st}")
@@ -98,5 +111,4 @@ for p in PATHS:
     ok(f'(f"{{SITE}}{p}"' in src, f"llms source {p}")
     ok(f"]({SITE}{p})" in built and f"]({SITE}{p})" in served, f"llms.txt {p}")
 
-for (p, w), c in sorted(known.items()): print(f"DRAFT-KNOWN {p} 「{w}」 x{c}")
 print(f"guides tests ok ({n} checks)")

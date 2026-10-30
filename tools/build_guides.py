@@ -2,9 +2,12 @@
 
 正文取自 市场/guides/ 的稿件（中文 *.md、英文 en/*-en.md），不改字：
 - 「## 正文 / ## Body」到下一个「---」是正文；「## 常见问题 / ## FAQ」是 FAQPage。
-- 配图中英各 3 张（img/zh、img/en，1440×944 含底部水印白带，未裁），缩到 1200 宽 webp；图注按语言统一输出。
+- 配图中英各 3 张（img/zh、img/en，1440×900），缩到 1200 宽 webp；图注按语言统一输出。
 - 文末「延伸阅读」取稿件内链表里「文末「延伸阅读」」几行。
-- leader 链接占位符 {leader_link_*} 和上线通知 CTA 本次不上（可索引白名单在 PR #49；表单联调未走通）。
+- 英文稿的 /en/faq/ 链接按中文稿同一位置的锚点补上（中英 FAQ 题目同序、同 id）。
+- 上线通知 CTA：文案取稿件「上线通知 CTA」一节（en 02/03 写的是 same as zh，用 en 01 的文案），
+  表单沿用 main 上首页 #notify 的 waitlist 表单结构，source 为 guide-01/02/03。
+- leader 链接占位符 {leader_link_*} 不上：稿件要求 smart_score 靠前、可索引，#49 白名单里没有同时满足的地址。
 用法：python3 tools/build_guides.py [稿件目录]
 """
 import html, json, os, re, sys
@@ -57,6 +60,42 @@ def figure(lang, num, alt):
     im.save(dst, "WEBP", quality=82, method=6)
     return (f'<figure class="g-fig"><img src="/assets/guides/{name}" width="{im.width}" height="{im.height}" alt="{E(alt)}" loading="lazy" decoding="async">'
             f'<figcaption>{E(CAPTION[lang])}</figcaption></figure>')
+
+
+def faq_anchors(lang, num, slug, block):
+    """英文稿里不带锚点的 /en/faq/ 按中文稿正文里 FAQ 链接的顺序补锚点。"""
+    if lang != "en": return block
+    zh = section(open(src_path("zh", num, slug), encoding="utf-8").read(), "正文")
+    ids = re.findall(r"\]\(/zh/faq/#([a-z0-9-]+)\)", zh)
+    n = len(re.findall(r"\]\(/en/faq/\)", block))
+    assert n == len(ids), (slug, n, ids)
+    it = iter(ids)
+    return re.sub(r"\]\(/en/faq/\)", lambda m: f"](/en/faq/#{next(it)})", block)
+
+
+CTA_SRC = {"01": "guide-01", "02": "guide-02", "03": "guide-03"}
+CTA_UI = {"zh": dict(lab="上线通知我", btn="通知我"), "en": dict(lab="Notify me at launch", btn="Notify me")}
+
+
+def cta_copy(lang, md):
+    if lang == "zh":
+        sec = section(md, "上线通知 CTA")
+        q = re.findall(r"「([^」]+)」", "\n".join(l for l in sec.split("\n") if not l.startswith(">")))
+        return q[0], q[1]
+    m = re.search(r'^CTA: "([^"]+)".*?small print "([^"]+)"', md, re.M)
+    if not m:  # en 02/03：Same as the Chinese draft，文案同 en 01
+        m = re.search(r'^CTA: "([^"]+)".*?small print "([^"]+)"', open(src_path("en", "01", SLUGS[0][0]), encoding="utf-8").read(), re.M)
+    return m.group(1), m.group(2)
+
+
+def cta(lang, num, md):
+    text, small = cta_copy(lang, md); u = CTA_UI[lang]; fid = f"wl-g{num}"
+    return (f'<section class="card wl-card wl-gate g-cta" id="notify" hidden><p>{E(text)}</p>'
+            f'<form class="wl-form wl-guide" data-endpoint="https://api.wakeloom.com/v1/waitlist" data-lang="{lang}" data-source="{CTA_SRC[num]}" novalidate>'
+            f'<label class="wl-lab" for="{fid}">{u["lab"]}</label>'
+            f'<div class="wl-hp" aria-hidden="true"><label for="{fid}-web">Website</label><input id="{fid}-web" name="website" type="text" tabindex="-1" autocomplete="off" value=""></div>'
+            f'<div class="wl-row"><input id="{fid}" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"><button class="btn pri" type="submit">{u["btn"]}</button></div>'
+            f'<p class="wl-msg" role="status" aria-live="polite"></p><p class="wl-pv">{E(small)}</p></form></section>')
 
 
 def body_html(lang, num, block):
@@ -141,8 +180,8 @@ def finish(lang, path, s):
         elif l.startswith('<header class="top">'): L[i] = header
         elif l.startswith('<nav class="nv">'): L[i] = nav
         elif l.startswith('<footer class="ft">'): L[i] = foot
-        elif l.startswith('<link rel="stylesheet" href="/site.css'): L[i] = l + '<link rel="stylesheet" href="/assets/guides/guides.css?v=1">'
-    return "\n".join(L)
+        elif l.startswith('<link rel="stylesheet" href="/site.css'): L[i] = l + '<link rel="stylesheet" href="/assets/guides/guides.css?v=2">'
+    return "\n".join(L).replace('data-waitlist="off"', 'data-waitlist="on"', 1)
 
 
 def main():
@@ -160,12 +199,12 @@ def main():
             n, md = docs[(lang, slug)]
             h1, desc, title = titles[lang][slug]
             path = f"guides/{slug}/"
-            body = body_html(lang, num, section(md, "正文|Body"))
+            body = body_html(lang, num, faq_anchors(lang, num, slug, section(md, "正文|Body")))
             qs = faq_items(section(md, "常见问题|FAQ"))
             qa = "".join(f'<details class="card qa"><summary><h2>{inline(q)}</h2><i>+</i></summary><p>{inline(a)}</p></details>' for q, a in qs)
             html_body = (f'<section class="ph"><p class="crumb"><a href="/{lang}/">{home}</a> / <a href="/{lang}/guides/">{g["name"]}</a> / {E(h1)}</p><h1>{E(h1)}</h1></section>'
                          f'<article class="card prose g-art">{body}</article>'
-                         f'<section class="faq g-faq"><h2 class="g-h">{g["faq"]}</h2>{qa}</section>' + further(lang, md, titles))
+                         f'<section class="faq g-faq"><h2 class="g-h">{g["faq"]}</h2>{qa}</section>' + further(lang, md, titles) + cta(lang, num, md))
             art = {"@type": "Article", "headline": h1, "description": desc, "inLanguage": bs.T[lang]["html"],
                    "datePublished": PUBLISHED, "dateModified": PUBLISHED, "url": f"{bs.SITE}/{lang}/{path}",
                    "mainEntityOfPage": f"{bs.SITE}/{lang}/{path}",
