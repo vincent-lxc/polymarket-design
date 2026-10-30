@@ -124,12 +124,17 @@ for (const lang of ["zh", "en"]) for (const source of ["local", "third_party"]) 
   assert.doesNotMatch(h, /data-f="roi"/);
   assert.match(h, /data-live="leader"[^>]*data-mm="1"/);
   assert.match(desc(h), lang === "zh" ? /胜率 61\.0%/ : /win rate 61\.0%/);
+  const dsv = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])["@graph"].find((g) => g["@type"] === "Dataset").variableMeasured;
+  assert.ok(!dsv.some((r) => r.propertyID === "roi" || /收益率|ROI/.test(r.name)), "做市页 Dataset 不含收益率");
+  assert.ok(dsv.some((r) => r.propertyID === "win_rate"));
 }
 {
   const h = page("zh", leader({ source: "third_party" }));
   assert.match(desc(h), /收益率 \+20\.0%（第三方口径）/);
   assert.match(h, /data-f="roi"/);
   assert.doesNotMatch(h, /data-mm=/);
+  const dsv = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])["@graph"].find((g) => g["@type"] === "Dataset").variableMeasured;
+  assert.ok(dsv.some((r) => r.propertyID === "roi"), "非做市页 Dataset 保留收益率");
 }
 for (const v of [false, null, undefined, "true", 1]) {
   const h = page("zh", leader({ suspected_market_maker: v }));

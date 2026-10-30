@@ -9,12 +9,12 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 - [首页（语言选择，中英）](https://www.wakeloom.com/): 双语入口。公测前预览，尚未正式上线。
 - [首页（中文）](https://www.wakeloom.com/zh/): 用于 Polymarket 的钱包分析与模拟盘跟单。
 - [Home (English)](https://www.wakeloom.com/en/): Wallet analytics and paper copy trading for Polymarket.
-- [排行榜](https://www.wakeloom.com/zh/leaderboard/): 按综合评分排序。目前多数地址的数据来自第三方，还没做收益集中度等检查。
-- [Leaderboard](https://www.wakeloom.com/en/leaderboard/): Ranked by composite score. Most addresses currently use third-party data and haven't been through concentration checks yet.
+- [排行榜](https://www.wakeloom.com/zh/leaderboard/): 按综合评分排序。部分地址的数据来自第三方，页面会标出来源。
+- [Leaderboard](https://www.wakeloom.com/en/leaderboard/): Ranked by composite score. Some addresses use third-party data, and the page shows the source.
 - [选人方法](https://www.wakeloom.com/zh/how-it-works/): 近 90 天窗口、回撤和选人规则。
 - [How it works](https://www.wakeloom.com/en/how-it-works/): How wallets are selected and which stats are shown.
-- [模拟盘跟单](https://www.wakeloom.com/zh/copy-trading/): 第一期只有模拟盘。实盘跟单即将推出。
-- [Paper copy trading](https://www.wakeloom.com/en/copy-trading/): Paper trading only in phase one. Live copy trading is coming soon (即将推出).
+- [模拟盘跟单](https://www.wakeloom.com/zh/copy-trading/): 目前只有模拟盘。实盘跟单即将推出。
+- [Paper copy trading](https://www.wakeloom.com/en/copy-trading/): Currently paper trading only. Live copy trading is coming soon (即将推出).
 - [常见问题](https://www.wakeloom.com/zh/faq/): 每题先给结论。
 - [FAQ](https://www.wakeloom.com/en/faq/): Each answer leads with the conclusion.
 - [风险提示](https://www.wakeloom.com/zh/risk/): 跟单会亏钱；目前只有模拟盘。
@@ -30,15 +30,15 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 
 ### 中文
 
-- **Polymarket 能跟单吗？怎么跟？** 能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例跟随。Wakeloom 第一期只做模拟盘，实盘跟单即将推出。
+- **Polymarket 能跟单吗？怎么跟？** 能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例跟随。Wakeloom 目前只做模拟盘，实盘跟单即将推出。
 - **怎么判断一个 Polymarket 交易者是不是长期表现稳定？** 看足够长的窗口和足够多的已结算市场，而不是单笔大赚。近 90 天同时看胜率、收益率、最大回撤，以及收益是否集中在一个事件上。
 - **Polymarket 排行榜第一名可以直接参考吗？** 不一定。按金额排的榜首常常是一次重仓押中，或成交里有刷量和做市对冲，这类表现很难复制。上榜也不代表以后还会这样。
 - **跟单 Polymarket 会不会因为延迟和滑点亏钱？** 会。发现对方成交到自己下单之间有延迟，薄盘口还会更差。偏离过大就放弃，先在模拟盘里看扣掉成本后的结果。
-- **Wakeloom 会托管我的私钥吗？** 第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。登录时的签名不能用来转账，也不能授权交易。
+- **Wakeloom 会托管我的私钥吗？** 目前只有模拟盘。Wakeloom 不接收、不托管用户私钥。登录时的签名不能用来转账，也不能授权交易。
 - **胜率和收益率哪个更重要？** 单看哪个都不够，要和回撤一起看。高胜率也可能一次失手就抹掉多次结果。
 - **对方平仓了我怎么办？** 跟着平。对方减仓或平仓时，按同样比例减仓或平仓。一键暂停所有跟随的全局停止即将推出。
 - **数据从哪来？多久更新？** 来自 Polygon 链上成交记录和 Polymarket 的公开接口。拿不到的数据显示「无数据」，不会用 0 填充，页面会写明数据截至时间。
-- **跟单有风险吗？会亏钱吗？** 有风险，也会亏钱。过去的表现不代表以后。第一期只开放模拟盘。
+- **跟单有风险吗？会亏钱吗？** 有风险，也会亏钱。过去的表现不代表以后。目前只开放模拟盘。
 - **Wakeloom 和 Polymarket 是什么关系？** 没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。
 
 ### English
@@ -47,9 +47,9 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 - **How can I tell whether a Polymarket trader has steady long-term results?** Look at a long enough window and enough resolved markets, not one big win. We use 90 days and check win rate, ROI, max drawdown, and whether results come from a single event.
 - **Can you rely on the #1 trader on a Polymarket leaderboard?** Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future.
 - **Will latency and slippage make copy trading on Polymarket lose money?** They can. The market can move before the next order, and thin books are worse. Trades that deviate too far are skipped. Net results are measured in paper trading first.
-- **Does Wakeloom hold my private key?** Phase one is paper trading only. Wakeloom never receives or holds your private key. The login signature cannot transfer funds or approve trades.
+- **Does Wakeloom hold my private key?** Currently paper trading only. Wakeloom never receives or holds your private key. The login signature cannot transfer funds or approve trades.
 - **Which matters more, win rate or ROI?** Neither alone. Read them together with drawdown. A high win rate can still be wiped out by one loss.
 - **What happens when the trader I follow closes a position?** We close too, by the same proportion. A global stop that pauses all copying at once is coming soon (即将推出).
 - **Where does the data come from, and how often is it updated?** From Polygon on-chain fills and Polymarket's public APIs. Missing values are shown as "No data", never filled with 0, and each page states its data time.
-- **Is copy trading risky? Can I lose money?** Yes. It is risky and you can lose money. Past results do not predict future ones. Phase one is paper trading only.
+- **Is copy trading risky? Can I lose money?** Yes. It is risky and you can lose money. Past results do not predict future ones. Currently paper trading only.
 - **How is Wakeloom related to Polymarket?** It is not affiliated. Wakeloom is an independent analytics tool for Polymarket and only reads public on-chain and API data.

@@ -510,7 +510,7 @@ function measured(lang, copy) {
   const m = copy.metrics;
   const rows = [
     [zh ? "胜率（近90天）" : "Win rate (90d)", "win_rate", pct(m.win_rate, false, 1)],
-    [(zh ? "收益率（近90天）" : "ROI (90d)") + (copy.flags && copy.flags.thirdParty ? (zh ? "（第三方口径）" : " (third-party basis)") : ""), "roi", copy.roiNd ? null : pct(m.roi, true)],
+    [(zh ? "收益率（近90天）" : "ROI (90d)") + (copy.flags && copy.flags.thirdParty ? (zh ? "（第三方口径）" : " (third-party basis)") : ""), "roi", copy.roiNd || (copy.flags && copy.flags.marketMaker) ? null : pct(m.roi, true)],
     [zh ? "最大回撤" : "Max drawdown", "max_drawdown", pct(m.max_drawdown)],
     ...(copy.ib
       ? [

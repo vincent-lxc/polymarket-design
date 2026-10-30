@@ -155,7 +155,7 @@ DESC = {
   "home": ("Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘跟单工具", "从链上历史筛出长期表现稳定的 Polymarket 交易者，看胜率、收益率和回撤，先用模拟盘跟单再决定。"),
   "leaderboard": ("Polymarket 交易者排行榜：按综合评分排序 | Wakeloom 织迹", "按综合评分排序。胜率和收益率只作展示。"),
   "how": ("我们怎么给 Polymarket 交易者打分 | Wakeloom 织迹", "Wakeloom 的选人规则与统计口径：近 90 天窗口、已结算市场、回撤、集中度，按综合评分排序。"),
-  "copy": ("用于 Polymarket 的模拟盘跟单 | Wakeloom 织迹", "按比例跟随目标钱包，设单笔和单市场上限、价格偏离阈值、跟随平仓；全局停止即将推出。第一期只有模拟盘，不动真钱。"),
+  "copy": ("用于 Polymarket 的模拟盘跟单 | Wakeloom 织迹", "按比例跟随目标钱包，设单笔和单市场上限、价格偏离阈值、跟随平仓；全局停止即将推出。目前只有模拟盘，不动真钱。"),
   "faq": ("Polymarket 跟单常见问题 | Wakeloom 织迹", "关于 Polymarket 跟单、排行榜、延迟和滑点、私钥与数据来源的常见问题，每题第一句先给结论。"),
   "risk": ("风险提示 | Wakeloom 织迹", "预测市场交易与跟单的主要风险说明。"),
   "privacy": ("隐私说明 | Wakeloom 织迹", "Wakeloom 收集哪些数据、怎么使用。"),
@@ -166,7 +166,7 @@ DESC = {
   "home": ("Wakeloom – Wallet Analytics & Paper Copy Trading for Polymarket", "Find Polymarket traders with steady long-term results, see their win rate, ROI and drawdown, and paper-trade copying them before risking money."),
   "leaderboard": ("Polymarket Trader Leaderboard: Ranked by Composite Score | Wakeloom", "Ranked by composite score. Win rate and ROI are display columns."),
   "how": ("How We Score Polymarket Traders | Wakeloom", "Wakeloom's selection rules and stats: a 90-day window, resolved markets, drawdown and concentration, with wallets ranked by composite score."),
-  "copy": ("Paper-Trade Copy Trading for Polymarket | Wakeloom", "Mirror a wallet proportionally with per-trade and per-market caps, a price-deviation limit, and follow-the-close; a global stop is coming soon. Phase one is paper trading only."),
+  "copy": ("Paper-Trade Copy Trading for Polymarket | Wakeloom", "Mirror a wallet proportionally with per-trade and per-market caps, a price-deviation limit, and follow-the-close; a global stop is coming soon. Currently paper trading only."),
   "faq": ("Polymarket Copy Trading FAQ | Wakeloom", "Answers about copy trading on Polymarket, leaderboards, latency and slippage, private keys and data sources. Each answer leads with the conclusion."),
   "risk": ("Risk Notice | Wakeloom", "The main risks of prediction-market trading and copy trading."),
   "privacy": ("Privacy | Wakeloom", "What data Wakeloom collects and how it is used."),
@@ -176,27 +176,27 @@ DESC = {
 
 FAQ = {
  "zh": [
-  ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例下单。Wakeloom 第一期只做模拟盘：选定钱包、设好比例和上限，它成交时我们按当时盘口模拟成交，并记录价差。"),
+  ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例下单。Wakeloom 目前只做模拟盘：选定钱包、设好比例和上限，它成交时我们按当时盘口模拟成交，并记录价差。"),
   ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。我们用近 90 天数据，同时看胜率、收益率、最大回撤和收益是否集中在一个事件上。被识别为疑似做市的地址不参与排名。部分地址的数据来自第三方，页面会标出来源。"),
   ("Polymarket 排行榜第一名可以直接参考吗？", "不一定。按金额排的榜首常常是一次重仓押中，或者成交量里有大量刷量和做市对冲，这类表现很难复制。Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。部分地址的数据来自第三方，页面会标出来源，请自己再看一下。上榜也不代表以后还会这样。"),
   ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。我们发现对方成交到自己下单之间有延迟，价格可能已经变了，薄盘口还会吃到更差的价。所以每一笔都记录和对方的成交价差，偏离超过阈值就放弃，先在模拟盘里算清楚扣掉成本后的结果。"),
-  ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。钱包登录只签署登录接口返回的那段文案（例如 Sign in to Wakeloom.），该签名不能用来转账，也不能授权交易。"),
+  ("Wakeloom 会托管我的私钥吗？", "目前只有模拟盘。Wakeloom 不接收、不托管用户私钥。钱包登录只签署登录接口返回的那段文案（例如 Sign in to Wakeloom.），该签名不能用来转账，也不能授权交易。"),
   ("胜率和收益率哪个更重要？", "单看哪个都不够，要结合买入价格和回撤一起看。在 90¢ 买入的高胜率可能一次失手就抹掉多次收益，低胜率但买得便宜的人也可能长期为正，所以我们同时展示胜率、收益率、最大回撤和平均买入价。"),
   ("对方平仓了我怎么办？", "跟着平。跟单规则里对方减仓或平仓时，我们按同样比例减仓或平仓。一键暂停所有跟随的全局停止即将推出。"),
   ("数据从哪来？多久更新？", "来自 Polygon 链上成交记录和 Polymarket 的公开接口。排行榜和详情页打开时会向公开接口拉取最新数字；构建进仓库的是 SEO 用的快照。拿不到的数据显示「无数据」，不会用 0 填充；页面会写明数据截至时间（按你浏览器的本地时区显示）。"),
-  ("跟单有风险吗？会亏钱吗？", "有风险，也会亏钱。过去的表现不代表以后，对方可能改变风格或判断失误，延迟和手续费也会吃掉一部分结果。所以第一期只开放模拟盘，详见风险提示。"),
+  ("跟单有风险吗？会亏钱吗？", "有风险，也会亏钱。过去的表现不代表以后，对方可能改变风格或判断失误，延迟和手续费也会吃掉一部分结果。所以目前只开放模拟盘，详见风险提示。"),
   ("Wakeloom 和 Polymarket 是什么关系？", "没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。"),
  ],
  "en": [
   ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet's fills and place proportional orders. Wakeloom's first phase is paper trading only: pick a wallet, set a ratio and caps, and each time it fills we simulate a fill at the live order book and record the price gap."),
-  ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event. Addresses flagged as likely market makers are not ranked. Most addresses currently use third-party data and haven't been through these checks yet."),
+  ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event. Addresses flagged as likely market makers are not ranked. Some addresses use third-party data, and the page shows the source."),
   ("Can you rely on the #1 trader on a Polymarket leaderboard?", "Not necessarily. The top spot by dollars is often one large bet that paid off, or volume inflated by wash trades and market-making hedges, which you can't replicate. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Some addresses use third-party data, and the page shows the source, so please review them yourself. A ranking doesn't predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. By the time we see a fill and place our own order the price may have moved, and thin books give worse prices. We log the price gap on every trade, skip trades that deviate past a threshold, and measure net results after costs in paper trading first."),
-  ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or custodied your private key. Wallet login only signs the nonce text returned by the API (e.g. Sign in to Wakeloom.); that signature cannot transfer funds or approve trades."),
+  ("Does Wakeloom hold my private key?", "Currently paper trading only. Wakeloom never receives or custodied your private key. Wallet login only signs the nonce text returned by the API (e.g. Sign in to Wakeloom.); that signature cannot transfer funds or approve trades."),
   ("Which matters more, win rate or ROI?", "Neither alone; read them with entry price and drawdown. A high win rate bought at 90¢ can be wiped out by one loss, while a lower win rate bought cheaply can still come out ahead, so we show win rate, ROI, max drawdown and average entry price together."),
   ("What happens when the trader I follow closes a position?", "We close too. When the followed wallet reduces or exits, we reduce or exit by the same proportion. A global stop that pauses all copying at once is coming soon."),
   ("Where does the data come from, and how often is it updated?", "From Polygon on-chain fills and Polymarket's public APIs; the website pages are rebuilt daily. Missing data is shown as \"No data\", never filled with 0, and every page states its data time in your local timezone."),
-  ("Is copy trading risky? Can I lose money?", "Yes, it is risky and you can lose money. Past results don't predict future ones, traders change style or make mistakes, and latency and fees eat into results. That's why phase one is paper trading only; see the risk notice."),
+  ("Is copy trading risky? Can I lose money?", "Yes, it is risky and you can lose money. Past results don't predict future ones, traders change style or make mistakes, and latency and fees eat into results. That's why it's currently paper trading only; see the risk notice."),
   ("How is Wakeloom related to Polymarket?", "It isn't affiliated. Wakeloom is an independent analytics tool for Polymarket that only reads public on-chain and API data."),
  ]}
 
@@ -301,7 +301,7 @@ def home(lang, D):
 <p class="lead">{"按综合评分排序，看近 90 天胜率、回撤与收益；先用模拟盘跟单，零资金看真实滑点（公测中）" if zh else "Ranked by composite score. See 90-day win rate, drawdown, and returns — then paper-copy with zero capital to feel real slippage (public beta)."}</p>
 <p class="brand-line">{'Wakeloom（织迹）是用于 Polymarket 的钱包分析和模拟盘跟单工具，尚未正式上线。' if zh else 'Wakeloom is a wallet analytics and paper copy-trading tool for Polymarket. It has not launched yet.'}</p>
 <div class="ctas"><a class="btn pri mag" href="https://app.wakeloom.com/board">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
-<p class="mu sm">{"第一期只有模拟盘，不动真钱，不需要私钥。" if zh else "Phase one is paper trading only: no real money, no private key."}</p></div>
+<p class="mu sm">{"目前只有模拟盘，不动真钱，不需要私钥。" if zh else "Currently paper trading only: no real money, no private key."}</p></div>
 <div class="hv card rise" data-live="home-top"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b><span class="live-badge" data-live-badge="home-top"></span>{f'<span class="mu sm" data-live-meta="home-top">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else '<span class="mu sm" data-live-meta="home-top"></span>'}</div>
 {f'<table class="lt"><thead>{lhead(lang, short=True)}</thead><tbody>{rows}</tbody></table>' if rows else f'<p class="nd pad">{T[lang]["nd"]}</p>'}
 <a class="more" data-live-more="home-top" href="/{lang}/leaderboard/">{"看全部" if zh else "View all"}{f" {n} " if n else " "}{"位 →" if zh else "traders →"}</a></div></section>''')
@@ -500,7 +500,7 @@ def content(lang):
     zh = lang == "zh"; L = (lambda z, e: z if zh else e)
     article(lang, "how-it-works/", "how", L("我们怎么给 Polymarket 交易者打分", "How we score Polymarket traders"), [
       (L("统计口径", "What we measure"), [L("统计窗口是近 90 天，只算已经结算的市场。每个地址展示胜率、收益率、最大回撤、已结算市场数、平均买入价、单笔中位金额和持仓中位时长。", "The window is the last 90 days and only resolved markets count. For each wallet we show win rate, ROI, max drawdown, resolved markets, average entry price, median trade size and median holding time."),
-        L("收益率 = 已实现盈亏 ÷ 投入，不含未结算持仓的浮动盈亏。目前多数地址的数据来自第三方，收益率用对方给的数字，口径可能不同。", "ROI = realized P&L ÷ capital invested, excluding unrealized P&L on open positions. For most addresses, which currently use third-party data, ROI is the provider's figure and may be calculated differently."),
+        L("收益率 = 已实现盈亏 ÷ 投入，不含未结算持仓的浮动盈亏。部分地址的数据来自第三方，页面会标出来源。这些地址的收益率用对方给的数字，口径可能不同。", "ROI = realized P&L ÷ capital invested, excluding unrealized P&L on open positions. Some addresses use third-party data, and the page shows the source. For those, ROI is the provider's figure and may be calculated differently."),
         L("成交笔数太少的地址样本太小，不生成详情页。", "Wallets with too few trades are too small a sample and get no detail page.")]),
       (L("先打分，再排序", "Score first, then rank"), [L("Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。部分地址的数据来自第三方，页面会标出来源，请自己再看一下。", "Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Some addresses use third-party data, and the page shows the source, so please review them yourself."),
         L("通过筛选的地址再按长期表现综合排序。排序用的综合分是内部指标，不对外公布。", "Wallets that pass are ranked by long-term results. The composite used for ranking is internal and not published.")]),
@@ -515,11 +515,11 @@ def content(lang):
         L("跟随平仓：对方减仓或平仓，我们按比例跟着做。", "Follow the close: when they reduce or exit, we do the same proportionally."),
         L("全局停止（即将推出）：一键暂停所有跟随。", "Global stop (coming soon): pause all copying at once.")]),
       (L("流程", "How it runs"), [L("发现对方成交后，按当时的盘口模拟成交，记录我们和对方的价差、延迟和手续费。跑 1–2 周后看扣掉成本后的结果，再决定要不要考虑实盘。实盘跟单即将推出。", "When we see their fill, we simulate ours against the live order book and log the price gap, delay and fees. After one to two weeks we look at the net result after costs before considering live trading. Live copy trading is coming soon.")]),
-      (L("限制", "Limitations"), [L("第一期只有模拟盘，不下真实订单。模拟成交按盘口估算，实盘的成交价可能更差。", "Phase one is paper trading only; no real orders are placed. Simulated fills are estimated from the book and live fills may be worse.")]),
+      (L("限制", "Limitations"), [L("目前只有模拟盘，不下真实订单。模拟成交按盘口估算，实盘的成交价可能更差。", "Currently paper trading only; no real orders are placed. Simulated fills are estimated from the book and live fills may be worse.")]),
     ], L("模拟盘跟单", "Paper copy trading"))
     simple = {
      "risk": (L("风险提示", "Risk notice"), [L("预测市场交易可能损失全部本金。跟单不能消除风险：过去的表现不代表以后，延迟、滑点和手续费会让你的结果比被跟随的地址更差。", "Prediction-market trading can lose all of your stake. Copying doesn't remove risk: past results don't predict future ones, and latency, slippage and fees can make your results worse than the wallet you follow."),
-        L("Wakeloom 第一期只提供模拟盘，展示的跟单结果都是模拟结果，不是真实成交。请遵守你所在地区关于预测市场的法律。", "Wakeloom's phase one offers paper trading only; any copy results shown are simulated, not real fills. Follow the laws on prediction markets where you live."),
+        L("Wakeloom 目前只提供模拟盘，展示的跟单结果都是模拟结果，不是真实成交。请遵守你所在地区关于预测市场的法律。", "Wakeloom currently offers paper trading only; any copy results shown are simulated, not real fills. Follow the laws on prediction markets where you live."),
         L("本站内容仅供研究，不构成投资建议。", "Nothing on this site is investment advice.")]),
      "privacy": (L("隐私说明", "Privacy"), [L("官网页面只展示公开的链上地址数据。使用应用时，我们保存你的钱包地址、登录会话和你设置的模拟盘规则，用来提供服务。", "Website pages show only public on-chain wallet data. When you use the app we store your wallet address, sign-in session and the paper-trading rules you set, to provide the service."),
         L("用 Google 或邮箱登录时，我们会收集你的邮箱。登录信息由 Privy 托管。", "When you sign in with Google or email, we collect your email address. Sign-in information is hosted by Privy."),
@@ -527,7 +527,7 @@ def content(lang):
      "terms": (L("使用条款", "Terms of use"), [L("Wakeloom 按现状提供，数据可能延迟、缺失或有误。你对自己的交易决定负责。", "Wakeloom is provided as is; data may be delayed, missing or wrong. You are responsible for your own trading decisions."),
         L("Wakeloom 是独立工具，与 Polymarket 无隶属或合作关系。页面上的地址统计来自公开数据，可在注明来源的前提下引用。", "Wakeloom is independent and not affiliated with Polymarket. Wallet stats come from public data and may be cited with attribution.")]),
      "about": (L("关于 Wakeloom 织迹", "About Wakeloom"), [L("Wakeloom 织迹是一个用于 Polymarket 的钱包分析和模拟盘工具。名字来自船行留下的尾迹：交易者在链上留下的痕迹，被我们织成可以读懂的数据。", "Wakeloom is a wallet analytics and paper-trading tool for Polymarket. The name comes from a ship's wake: the traces traders leave on-chain, woven into data you can read."),
-        L("第一期做钱包分析和模拟盘跟单，以后会加入更多策略类型。", "Phase one covers wallet analytics and paper copy trading; more strategy types will follow.")]),
+        L("目前做钱包分析和模拟盘跟单，以后会加入更多策略类型。", "Wakeloom currently covers wallet analytics and paper copy trading; more strategy types will follow.")]),
     }
     for k, (h, ps) in simple.items():
         body = f'<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {E(h)}</p><h1>{E(h)}</h1></section><section class="card prose">{"".join(f"<p>{E(p)}</p>" for p in ps)}</section>'
@@ -650,15 +650,15 @@ def write_redirects():
 # llms.txt 的结论摘要。问题原文必须和 FAQ 一致；这里不写收费、价格、评分，也不链到 app 子域。
 LLMS_SUMMARY = {
  "zh": [
-  ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例跟随。Wakeloom 第一期只做模拟盘，实盘跟单即将推出。"),
+  ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例跟随。Wakeloom 目前只做模拟盘，实盘跟单即将推出。"),
   ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。近 90 天同时看胜率、收益率、最大回撤，以及收益是否集中在一个事件上。"),
   ("Polymarket 排行榜第一名可以直接参考吗？", "不一定。按金额排的榜首常常是一次重仓押中，或成交里有刷量和做市对冲，这类表现很难复制。上榜也不代表以后还会这样。"),
   ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。发现对方成交到自己下单之间有延迟，薄盘口还会更差。偏离过大就放弃，先在模拟盘里看扣掉成本后的结果。"),
-  ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。登录时的签名不能用来转账，也不能授权交易。"),
+  ("Wakeloom 会托管我的私钥吗？", "目前只有模拟盘。Wakeloom 不接收、不托管用户私钥。登录时的签名不能用来转账，也不能授权交易。"),
   ("胜率和收益率哪个更重要？", "单看哪个都不够，要和回撤一起看。高胜率也可能一次失手就抹掉多次结果。"),
   ("对方平仓了我怎么办？", "跟着平。对方减仓或平仓时，按同样比例减仓或平仓。一键暂停所有跟随的全局停止即将推出。"),
   ("数据从哪来？多久更新？", "来自 Polygon 链上成交记录和 Polymarket 的公开接口。拿不到的数据显示「无数据」，不会用 0 填充，页面会写明数据截至时间。"),
-  ("跟单有风险吗？会亏钱吗？", "有风险，也会亏钱。过去的表现不代表以后。第一期只开放模拟盘。"),
+  ("跟单有风险吗？会亏钱吗？", "有风险，也会亏钱。过去的表现不代表以后。目前只开放模拟盘。"),
   ("Wakeloom 和 Polymarket 是什么关系？", "没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。"),
  ],
  "en": [
@@ -666,11 +666,11 @@ LLMS_SUMMARY = {
   ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days and check win rate, ROI, max drawdown, and whether results come from a single event."),
   ("Can you rely on the #1 trader on a Polymarket leaderboard?", "Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. The market can move before the next order, and thin books are worse. Trades that deviate too far are skipped. Net results are measured in paper trading first."),
-  ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or holds your private key. The login signature cannot transfer funds or approve trades."),
+  ("Does Wakeloom hold my private key?", "Currently paper trading only. Wakeloom never receives or holds your private key. The login signature cannot transfer funds or approve trades."),
   ("Which matters more, win rate or ROI?", "Neither alone. Read them together with drawdown. A high win rate can still be wiped out by one loss."),
   ("What happens when the trader I follow closes a position?", "We close too, by the same proportion. A global stop that pauses all copying at once is coming soon (即将推出)."),
   ("Where does the data come from, and how often is it updated?", 'From Polygon on-chain fills and Polymarket\'s public APIs. Missing values are shown as "No data", never filled with 0, and each page states its data time.'),
-  ("Is copy trading risky? Can I lose money?", "Yes. It is risky and you can lose money. Past results do not predict future ones. Phase one is paper trading only."),
+  ("Is copy trading risky? Can I lose money?", "Yes. It is risky and you can lose money. Past results do not predict future ones. Currently paper trading only."),
   ("How is Wakeloom related to Polymarket?", "It is not affiliated. Wakeloom is an independent analytics tool for Polymarket and only reads public on-chain and API data."),
  ],
 }
@@ -684,12 +684,12 @@ def write_llms():
         (f"{SITE}/", "首页（语言选择，中英）", "双语入口。公测前预览，尚未正式上线。"),
         (f"{SITE}/zh/", "首页（中文）", "用于 Polymarket 的钱包分析与模拟盘跟单。"),
         (f"{SITE}/en/", "Home (English)", "Wallet analytics and paper copy trading for Polymarket."),
-        (f"{SITE}/zh/leaderboard/", "排行榜", "按综合评分排序。目前多数地址的数据来自第三方，还没做收益集中度等检查。"),
-        (f"{SITE}/en/leaderboard/", "Leaderboard", "Ranked by composite score. Most addresses currently use third-party data and haven't been through concentration checks yet."),
+        (f"{SITE}/zh/leaderboard/", "排行榜", "按综合评分排序。部分地址的数据来自第三方，页面会标出来源。"),
+        (f"{SITE}/en/leaderboard/", "Leaderboard", "Ranked by composite score. Some addresses use third-party data, and the page shows the source."),
         (f"{SITE}/zh/how-it-works/", "选人方法", "近 90 天窗口、回撤和选人规则。"),
         (f"{SITE}/en/how-it-works/", "How it works", "How wallets are selected and which stats are shown."),
-        (f"{SITE}/zh/copy-trading/", "模拟盘跟单", "第一期只有模拟盘。实盘跟单即将推出。"),
-        (f"{SITE}/en/copy-trading/", "Paper copy trading", "Paper trading only in phase one. Live copy trading is coming soon (即将推出)."),
+        (f"{SITE}/zh/copy-trading/", "模拟盘跟单", "目前只有模拟盘。实盘跟单即将推出。"),
+        (f"{SITE}/en/copy-trading/", "Paper copy trading", "Currently paper trading only. Live copy trading is coming soon (即将推出)."),
         (f"{SITE}/zh/faq/", "常见问题", "每题先给结论。"),
         (f"{SITE}/en/faq/", "FAQ", "Each answer leads with the conclusion."),
         (f"{SITE}/zh/risk/", "风险提示", "跟单会亏钱；目前只有模拟盘。"),

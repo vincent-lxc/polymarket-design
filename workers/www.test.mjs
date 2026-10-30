@@ -417,6 +417,8 @@ for (const lang of ["zh", "en"]) {
   assert.match(h, /data-mm="1"/);
   const ldp = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
   assert.ok(ldp["@graph"].length > 0);
+  const dsp = ldp["@graph"].find((g) => g["@type"] === "Dataset");
+  assert.ok(dsp && !dsp.variableMeasured.some((r) => r.propertyID === "roi"), "白名单 mm 页 Dataset 不含收益率");
 }
 /* 非白名单 indexable=false 照旧 noindex */
 for (const lang of ["zh", "en"]) {
