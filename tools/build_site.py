@@ -306,7 +306,7 @@ def home(lang, D):
 {f'<table class="lt"><thead>{lhead(lang, short=True)}</thead><tbody>{rows}</tbody></table>' if rows else f'<p class="nd pad">{T[lang]["nd"]}</p>'}
 <a class="more" data-live-more="home-top" href="/{lang}/leaderboard/">{"看全部" if zh else "View all"}{f" {n} " if n else " "}{"位 →" if zh else "traders →"}</a></div></section>''')
     feats = [
-     ("01", "先筛掉靠运气和刷量的地址" if zh else "Filter out luck and wash trading", "收益集中在一两个事件、或刷量的地址拿不到综合评分；疑似做市的地址不参与排名。目前多数地址的检查还在补。" if zh else "Addresses whose profit comes from one or two events, or from wash trading, get no score; likely market makers are not ranked. Checks for most addresses are still in progress.", "how-it-works/"),
+     ("01", "先筛掉靠运气和刷量的地址" if zh else "Filter out luck and wash trading", "收益集中在一两个事件、或刷量的地址拿不到综合评分；疑似做市的地址不参与排名。部分地址的检查还在补全。" if zh else "Addresses whose profit comes from one or two events, or from wash trading, get no score; likely market makers are not ranked. Checks for some addresses are still in progress.", "how-it-works/"),
      ("02", "每个地址一页数据" if zh else "A data page for every wallet", "近 90 天胜率、收益率、最大回撤、已结算市场数和收益曲线，缺的数据直接写「无数据」。" if zh else "90-day win rate, ROI, max drawdown, resolved markets and equity curve. Missing values say \"No data\".", "leaderboard/"),
      ("03", "模拟盘先算清成本" if zh else "Paper trading counts the costs", "按比例跟随，设上限和偏离阈值，每笔记录和对方的价差与延迟。" if zh else "Proportional mirroring with caps and a deviation limit; every trade logs its price gap and delay.", "copy-trading/"),
     ]
