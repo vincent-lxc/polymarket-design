@@ -125,3 +125,7 @@ td.r .ck{display:table;margin:3px 0 0 auto}
 /* 手机排行榜：表头不折行，收窄内边距和地址列，让评分、胜率、收益率都留在可视区内（#46 Casey gate） */
 .lt th{white-space:nowrap}
 @media (max-width:600px){.lt th,.lt td{padding-left:6px;padding-right:6px}.lt th:first-child,.lt td:first-child{padding-left:2px}.lt td.r{white-space:nowrap}.lt td a b{max-width:6em}.ck-m .ck{white-space:normal;border-radius:8px}}
+.wl-lead h2{font-size:20px;line-height:1.4}.app-link{margin:12px 2px 0}.app-link a{color:var(--mu,#9a9aa3);text-decoration:underline;text-underline-offset:3px}.app-link a:hover{color:var(--or)}
+.more-read{margin-top:24px}.more-read ul{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}.more-read a{color:inherit}.more-read a:hover{color:var(--or)}
+@media (max-width:640px){.more-read ul{grid-template-columns:1fr}}
+.answer{font-size:17px;color:inherit;margin-top:10px}.brand-line{margin:10px 0 18px}

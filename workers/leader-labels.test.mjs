@@ -25,7 +25,9 @@ function leader(extra = {}, metrics = {}) {
 }
 const page = (lang, l) => applyLeaderShell(shell(lang), lang, addr, l);
 const title = (h) => h.match(/<title>([\s\S]*?)<\/title>/)[1];
-const desc = (h) => h.match(/<meta name="description" content="([^"]*)">/)[1];
+// 页面正文那句（data-f=desc），保留原口径；head 的 description 用 PAGES 模板，见 metaDesc。
+const desc = (h) => h.match(/<p class="lead" data-f="desc">([^<]*)<\/p>/)[1];
+const metaDesc = (h) => h.match(/<meta name="description" content="([^"]*)">/)[1];
 
 // 1. 字段全缺：保持原样，不出现任何标注
 for (const lang of ["zh", "en"]) {
@@ -44,7 +46,7 @@ assert.equal(title(page("en", leader())), "0xcdcd…cdcd Polymarket Trader Stats
 assert.match(page("zh", leader()), /<span class="mu">综合评分<\/span> <b class="num">70\.3<\/b>/);
 // 没有综合评分（现网 leader 接口目前不带）：保持原标题
 const noScore = leader({ smart_score: null });
-assert.equal(title(page("zh", noScore)), "0xcdcd…cdcd 的 Polymarket 交易数据：胜率、收益率、回撤 | Wakeloom 织迹");
+assert.equal(title(page("zh", noScore)), "0xcdcd…cdcd 的 Polymarket 交易数据：胜率、回撤 | Wakeloom 织迹");
 assert.equal(scoreText(noScore), null);
 
 // 3. source=local：没有第三方标注
@@ -115,6 +117,25 @@ for (const lang of ["zh", "en"]) {
   assert.doesNotMatch(desc(h), /综合评分|score/i);
   assert.doesNotMatch(h, FORBIDDEN);
 }
+// 6b. 疑似做市：正文不写收益率/ROI，统计格不放收益率（第三方口径同样），并带 data-mm 给浏览器刷新用
+for (const lang of ["zh", "en"]) for (const source of ["local", "third_party"]) {
+  const h = page(lang, leader({ source, suspected_market_maker: true }));
+  assert.doesNotMatch(desc(h), /收益率|ROI|第三方口径|third-party basis/);
+  assert.doesNotMatch(h, /data-f="roi"/);
+  assert.match(h, /data-live="leader"[^>]*data-mm="1"/);
+  assert.match(desc(h), lang === "zh" ? /胜率 61\.0%/ : /win rate 61\.0%/);
+  const dsv = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])["@graph"].find((g) => g["@type"] === "Dataset").variableMeasured;
+  assert.ok(!dsv.some((r) => r.propertyID === "roi" || /收益率|ROI/.test(r.name)), "做市页 Dataset 不含收益率");
+  assert.ok(dsv.some((r) => r.propertyID === "win_rate"));
+}
+{
+  const h = page("zh", leader({ source: "third_party" }));
+  assert.match(desc(h), /收益率 \+20\.0%（第三方口径）/);
+  assert.match(h, /data-f="roi"/);
+  assert.doesNotMatch(h, /data-mm=/);
+  const dsv = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])["@graph"].find((g) => g["@type"] === "Dataset").variableMeasured;
+  assert.ok(dsv.some((r) => r.propertyID === "roi"), "非做市页 Dataset 保留收益率");
+}
 for (const v of [false, null, undefined, "true", 1]) {
   const h = page("zh", leader({ suspected_market_maker: v }));
   assert.doesNotMatch(h, /疑似做市/);
@@ -157,7 +178,9 @@ assert.match(live, /new AbortController\(\)/);
       assert.ok(d === c.description || d === escHtml(c.description), `${lang} meta: ${d}`);
       assert.ok(d.endsWith(escHtml(THIRD[lang])) || d.endsWith(THIRD[lang]), `${lang} meta end: ${d}`);
       const og = h.match(/<meta property="og:description" content="([^"]*)">/)[1];
-      assert.equal(og, d);
+      assert.equal(og, metaDesc(h));
+      assert.ok(og.includes(escHtml(THIRD[lang])) || og.includes(THIRD[lang]), `${lang} meta third: ${og}`);
+      assert.ok(!og.includes(CHAIN[lang]));
       const ld = h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
       assert.ok(ld.includes(lang === "zh" ? THIRD.zh : "hasn"), `${lang} JSON-LD`);
       assert.ok(!ld.includes(CHAIN[lang]), `${lang} JSON-LD still on-chain`);
@@ -204,6 +227,7 @@ assert.match(live, /new AbortController\(\)/);
       const c = leaderCopy(lang, addr, l);
       const d = desc(h);
       const og = h.match(/<meta property="og:description" content="([^"]*)">/)[1];
+      assert.equal(og, metaDesc(h));
       const ld = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
       const ds = ld["@graph"].find((g) => g["@type"] === "Dataset");
       const ids = ds.variableMeasured.map((v) => v.propertyID);

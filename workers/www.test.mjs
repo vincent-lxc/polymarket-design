@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import worker, { INDEXNOW_KEY, appRedirect, isShellRedirect, leaderDecision } from "./www.mjs";
+import worker, { INDEXNOW_KEY, appRedirect, isShellRedirect, leaderDecision, barePathRedirect } from "./www.mjs";
+import { leaderMetaDescription, leaderNotifyBlock, furtherReading, renderLeaderMain } from "./leader-page.mjs";
 import { localPreviewURL } from "../tools/preview-www.mjs";
 import { LEADER_INDEX_PINNED, applyPin, isPinned, mergePinnedSitemap } from "./leader-pin.mjs";
 
@@ -410,8 +411,14 @@ for (const lang of ["zh", "en"]) {
   const h = await r.text();
   assert.doesNotMatch(h, /noindex/);
   assert.match(h, lang === "zh" ? /疑似做市，不参与排名/ : /market maker/i);
+  // 白名单 mm:true 补的做市标记同样去掉正文收益率/ROI 和收益率格
+  assert.doesNotMatch(h.match(/data-f="desc">([^<]*)</)[1], /收益率|ROI/);
+  assert.doesNotMatch(h, /data-f="roi"/);
+  assert.match(h, /data-mm="1"/);
   const ldp = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
   assert.ok(ldp["@graph"].length > 0);
+  const dsp = ldp["@graph"].find((g) => g["@type"] === "Dataset");
+  assert.ok(dsp && !dsp.variableMeasured.some((r) => r.propertyID === "roi"), "白名单 mm 页 Dataset 不含收益率");
 }
 /* 非白名单 indexable=false 照旧 noindex */
 for (const lang of ["zh", "en"]) {
@@ -439,5 +446,71 @@ for (const lang of ["zh", "en"]) {
   assert.match(x, new RegExp(`<loc>https://www\\.wakeloom\\.com/en/leader/${pinAddr}/</loc><lastmod>2026-10-30`));
   assert.doesNotMatch(x, /0x1d24f81d/);
 }
+// P2：不带语言前缀的栏目 301 到 /zh/，其他路径不动
+for (const p of ["leaderboard", "how-it-works", "copy-trading", "faq", "risk", "privacy", "terms", "about"]) {
+  assert.equal(barePathRedirect("/" + p), `/zh/${p}/`);
+  assert.equal(barePathRedirect("/" + p + "/"), `/zh/${p}/`);
+}
+for (const p of ["/", "/zh/", "/en/faq/", "/leader/0xabc/", "/llms.txt", "/robots.txt", "/sitemap.xml", "/faqs", "/guides/"]) {
+  assert.equal(barePathRedirect(p), null, p);
+}
+const bareRes = await worker.fetch(new Request(host + "/faq?x=1"), { ASSETS: { fetch: async () => new Response("asset") } });
+assert.equal(bareRes.status, 301);
+assert.equal(bareRes.headers.get("Location"), host + "/zh/faq/?x=1");
+
+// P1：leader 页主 CTA 是上线通知表单，App 链接降为文字链接，延伸阅读只链现有页面
+for (const lang of ["zh", "en"]) {
+  const nb = leaderNotifyBlock(lang, "https://app.wakeloom.com/leader?addr=0x1");
+  assert.match(nb, /data-source="leader"/);
+  assert.match(nb, /class="wl-form/);
+  assert.doesNotMatch(nb, /class="btn pri" data-f="app"/);
+  assert.match(nb, /<p class="sm app-link"><a data-f="app"/);
+  const fr = furtherReading(lang);
+  for (const p of ["how-it-works", "faq", "copy-trading", "risk"]) {
+    assert.match(fr, new RegExp(`href="/${lang}/${p}/"`));
+    assert.ok(fs.existsSync(path.join(repo, lang, p, "index.html")), p);
+  }
+}
+assert.match(leaderNotifyBlock("zh", "x"), /想在上线后用模拟盘跟这个地址？留个邮箱，上线时通知你。/);
+
+// P1：head description 模板，缺值整句省略、不写 0
+const md = leaderMetaDescription("zh", { who: "0xf201…527e", score: "71", wr: "60.0%", dd: "12.0%", rm: "40", asof: "2026-10-30 06:00 UTC" });
+assert.equal(md, "0xf201…527e 综合评分 71（截至 2026-10-30）。近90天胜率 60.0%、最大回撤 12.0%，已结算市场 40 个。数据来自链上公开记录。仅供分析，尚未正式上线。");
+const mdBare = leaderMetaDescription("zh", { who: "0xf201…527e" });
+assert.equal(mdBare, "0xf201…527e 的 Polymarket 交易数据。数据来自链上公开记录。仅供分析，尚未正式上线。");
+assert.doesNotMatch(mdBare, /综合评分|胜率|\b0\b/);
+const mdEn = leaderMetaDescription("en", { who: "0xf201…527e", score: "71", wr: "60.0%", asof: "2026-10-30 06:00 UTC" });
+assert.equal(mdEn, "0xf201…527e: score 71 as of 2026-10-30. 90-day win rate 60.0%. Data from public on-chain records. For analysis only. Not yet launched.");
+for (const t of [md, mdBare, mdEn]) assert.doesNotMatch(t, /推荐|值得跟|实盘收益/);
+const main = renderLeaderMain("zh", "0x9a4cbaf3ba914b38ca92cc968cb6104c002998d0", {});
+assert.match(main, /data-source="leader"/);
+assert.match(main, /延伸阅读/);
+
+// P3 / R2 / R5：静态页
+for (const lang of ["zh", "en"]) {
+  const ct = fs.readFileSync(path.join(repo, lang, "copy-trading", "index.html"), "utf8");
+  assert.match(ct, /<p class="lead answer">/);
+  assert.match(ct, /data-source="copy-trading"/);
+  assert.match(ct, lang === "zh" ? /Polymarket 本身没有跟单功能。.*模拟盘（paper trading）.*尚未正式上线/ : /Polymarket has no built-in copy trading\..*paper trading only.*has not launched yet/);
+  const home = fs.readFileSync(path.join(repo, lang, "index.html"), "utf8");
+  assert.match(home, /<title>Wakeloom/);
+  assert.match(home, lang === "zh" ? /Wakeloom（织迹）是用于 Polymarket 的钱包分析和模拟盘跟单工具，尚未正式上线。/ : /Wakeloom is a wallet analytics and paper copy-trading tool for Polymarket\. It has not launched yet\./);
+  const lds = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+  const flat = lds.flatMap((x) => (x["@graph"] ? x["@graph"] : [x]));
+  const org = flat.find((x) => x["@type"] === "Organization");
+  assert.ok(org, "Organization");
+  assert.equal(org.name, "Wakeloom");
+  assert.ok(org.alternateName.includes("织迹"));
+  assert.ok(org.description);
+  assert.equal(org.sameAs, undefined);
+}
 
 console.log("www redirect tests ok");
+
+// 全站不出现「值得跟」类说法（HTML、llms.txt、生成器）
+{
+  const { readFileSync, readdirSync, statSync } = await import("node:fs");
+  const walk = (d) => readdirSync(d).flatMap((n) => { const p = d + "/" + n; return statSync(p).isDirectory() ? (["node_modules", ".git", "tools/__pycache__"].includes(n) ? [] : walk(p)) : [p]; });
+  const files = [...walk("zh"), ...walk("en"), "llms.txt", "tools/build_site.py", "index.html"].filter((f) => /\.(html|txt|py)$/.test(f));
+  for (const f of files) assert.doesNotMatch(readFileSync(f, "utf8"), /值得跟|值不值得|worth (following|copying)|traders to follow/i, f);
+}

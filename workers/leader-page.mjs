@@ -99,6 +99,40 @@ export function tzLabel(lang, tz) {
   return lang === "zh" ? `（${tz}）` : ` (${tz})`;
 }
 
+/**
+ * head 里的 description（PAGES-上线前页面改动 10-28 模板）。缺值的整句或分句省略，不写 0。
+ * 页面上 data-f=desc 那句仍用 leaderCopy.description，客户端刷新逻辑不变。
+ */
+export function leaderMetaDescription(lang, c) {
+  const zh = lang === "zh";
+  const day = c.asof ? c.asof.slice(0, 10) : "";
+  const out = [];
+  if (zh) {
+    out.push(c.score ? `${c.who} 综合评分 ${c.score}${day ? `（截至 ${day}）` : ""}。` : `${c.who} 的 Polymarket 交易数据。`);
+    const parts = [];
+    if (c.wr) parts.push(`近90天胜率 ${c.wr}`);
+    if (c.dd) parts.push(`最大回撤 ${c.dd}`);
+    const n = c.rm ? (c.ib ? `已结算市场（全部历史）${c.rm} 个` : `已结算市场 ${c.rm} 个`) : "";
+    if (parts.length) out.push(parts.join("、") + (n ? `，${n}` : "") + "。");
+    else if (n) out.push(n + "。");
+    out.push(c.thirdParty ? SOURCE_LINE.zh.third : SOURCE_LINE.zh.chain);
+    if (c.paper) out.push("模拟盘数据，不是实盘成交。");
+    out.push("仅供分析，尚未正式上线。");
+    return out.join("");
+  }
+  out.push(c.score ? `${c.who}: score ${c.score}${day ? ` as of ${day}` : ""}.` : `${c.who} Polymarket trader stats.`);
+  const parts = [];
+  if (c.wr) parts.push(`90-day win rate ${c.wr}`);
+  if (c.dd) parts.push(`max drawdown ${c.dd}`);
+  const n = c.rm ? (c.ib ? `${c.rm} resolved markets (all time)` : `${c.rm} resolved markets`) : "";
+  if (n) parts.push(n);
+  if (parts.length) out.push(parts.join(", ").replace(/^./, (x) => x.toUpperCase()) + ".");
+  out.push(c.thirdParty ? SOURCE_LINE.en.third : SOURCE_LINE.en.chain);
+  if (c.paper) out.push("Paper-trading figures, not live fills.");
+  out.push("For analysis only. Not yet launched.");
+  return out.join(" ");
+}
+
 export function formatAsOf(iso, lang) {
   if (iso == null || iso === "") return null;
   let d;
@@ -303,7 +337,7 @@ export function leaderCopy(lang, addr, leader) {
     const parts = [];
     if (score) parts.push(`综合评分 ${score}`);
     if (wr) parts.push(`近90天胜率 ${wr}`);
-    if (roi) parts.push(`收益率 ${roi}${roiNote}`);
+    if (roi && !flags.marketMaker) parts.push(`收益率 ${roi}${roiNote}`); // 疑似做市不写收益率（Casey 10-30）
     if (dd) parts.push(`最大回撤 ${dd}`);
     description = who + (parts.length ? "：" + parts.join("、") + "。" : "。");
     if (rm) description += ib ? `已结算市场（全部历史）${rm} 个。` : `已结算市场 ${rm} 个。`;
@@ -313,7 +347,7 @@ export function leaderCopy(lang, addr, leader) {
     const parts = [];
     if (score) parts.push(`score ${score}`);
     if (wr) parts.push(`90-day win rate ${wr}`);
-    if (roi) parts.push(`ROI ${roi}${roiNote}`);
+    if (roi && !flags.marketMaker) parts.push(`ROI ${roi}${roiNote}`);
     if (dd) parts.push(`max drawdown ${dd}`);
     description = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ");
     if (rm) description += ib ? `${rm} resolved markets (all time). ` : `${rm} resolved markets. `;
@@ -332,15 +366,16 @@ export function leaderCopy(lang, addr, leader) {
       : `${who} Polymarket Trader Stats: Score, Win Rate, Drawdown | Wakeloom`;
   } else {
     title = zh
-      ? `${who} 的 Polymarket 交易数据：胜率、收益率、回撤 | Wakeloom 织迹`
-      : `${who} Polymarket Trader Stats: Win Rate, ROI, Drawdown | Wakeloom`;
+      ? `${who} 的 Polymarket 交易数据：胜率、回撤 | Wakeloom 织迹`
+      : `${who} Polymarket Trader Stats: Win Rate, Drawdown | Wakeloom`;
   }
   const asof = formatAsOf(leader && (leader.as_of || leader.updated_at), lang);
   const asofLine = asof
     ? (zh ? "数据截至 " : "Data as of ") + asof + windowClause(lang, leader)
     : "";
   const asofIso = leader && (leader.as_of || leader.updated_at);
-  return { title, description, who, name: displayName(leader, addr), wr, roi, dd, rm, asof, asofLine, asofIso, paper, metrics: m, flags, score, roiNd, ib };
+  const metaDescription = leaderMetaDescription(lang, { who, score, wr, dd, rm, ib, asof, thirdParty: flags.thirdParty, paper: paper.on });
+  return { title, description, metaDescription, who, name: displayName(leader, addr), wr, roi, dd, rm, asof, asofLine, asofIso, paper, metrics: m, flags, score, roiNd, ib };
 }
 
 function stat(label, val, cls) {
@@ -394,7 +429,7 @@ function statsGrid(lang, m, opts) {
     opts && opts.keepRates && pct(m.win_rate, false, 1) == null
       ? ndStat(lang, zh ? "胜率（近90天）" : "Win rate (90d)", "win_rate")
       : stat(zh ? "胜率（近90天）" : "Win rate (90d)", pct(m.win_rate, false, 1), ""),
-    roiStat(lang, m, opts),
+    opts && opts.mm ? null : roiStat(lang, m, opts),
     stat(zh ? "最大回撤" : "Max drawdown", pct(m.max_drawdown), ""),
     ...(opts && opts.ib
       ? [basisStat(lang, "settled", opts.ib), basisStat(lang, "trades", opts.ib)]
@@ -475,7 +510,7 @@ function measured(lang, copy) {
   const m = copy.metrics;
   const rows = [
     [zh ? "胜率（近90天）" : "Win rate (90d)", "win_rate", pct(m.win_rate, false, 1)],
-    [(zh ? "收益率（近90天）" : "ROI (90d)") + (copy.flags && copy.flags.thirdParty ? (zh ? "（第三方口径）" : " (third-party basis)") : ""), "roi", copy.roiNd ? null : pct(m.roi, true)],
+    [(zh ? "收益率（近90天）" : "ROI (90d)") + (copy.flags && copy.flags.thirdParty ? (zh ? "（第三方口径）" : " (third-party basis)") : ""), "roi", copy.roiNd || (copy.flags && copy.flags.marketMaker) ? null : pct(m.roi, true)],
     [zh ? "最大回撤" : "Max drawdown", "max_drawdown", pct(m.max_drawdown)],
     ...(copy.ib
       ? [
@@ -529,7 +564,7 @@ export function leaderJsonLd(lang, addr, leader, copy) {
   const dataset = {
     "@type": "Dataset",
     name: zh ? `${copy.who} 的近 90 天交易统计` : `90-day trading stats for ${copy.who}`,
-    description: copy.description,
+    description: copy.metaDescription,
     url: canonical,
     creator: { "@id": `${SITE}/#org` },
     isAccessibleForFree: true,
@@ -604,6 +639,44 @@ export function checksBlock(lang, copy) {
   return `<div class="ckrow" data-f="checks"><div class="ck-line">${bits.join("")}</div>${ns}</div>`;
 }
 
+export const WAITLIST_API = "https://api.wakeloom.com/v1/waitlist";
+
+/**
+ * 和 tools/build_site.py wl_form 同一套标记，site-waitlist.js 负责提交；source 记录入口。
+ * @param {"zh"|"en"} lang
+ * @param {string} where id 前缀
+ * @param {string} source
+ */
+export function waitlistForm(lang, where, source) {
+  const zh = lang === "zh";
+  return `<form class="wl-form wl-${where}" data-endpoint="${WAITLIST_API}" data-lang="${lang}" data-source="${esc(source)}" novalidate>`
+    + `<label class="wl-lab" for="wl-${where}">${zh ? "上线通知我" : "Notify me at launch"}<span class="wl-sub"> / ${zh ? "Notify me at launch" : "上线通知我"}</span></label>`
+    + `<div class="wl-hp" aria-hidden="true"><label for="wl-${where}-web">Website</label><input id="wl-${where}-web" name="website" type="text" tabindex="-1" autocomplete="off" value=""></div>`
+    + `<div class="wl-row"><input id="wl-${where}" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="254" placeholder="you@example.com">`
+    + `<button class="btn pri" type="submit">${zh ? "通知我" : "Notify me"}</button></div>`
+    + `<p class="wl-msg" role="status" aria-live="polite"></p>`
+    + `<p class="wl-pv">邮箱仅用于上线通知，可随时退订 · Email used only for launch notice; unsubscribe anytime</p></form>`;
+}
+
+/** 主 CTA：上线通知表单（source=leader）；「在应用里打开」降为文字链接。英文待 Casey 定。 */
+export function leaderNotifyBlock(lang, appHref) {
+  const zh = lang === "zh";
+  const h = zh ? "想在上线后用模拟盘跟这个地址？留个邮箱，上线时通知你。" : "Want to paper-trade this wallet after launch? Leave your email and we'll let you know.";
+  const note = zh ? "上榜不代表以后的表现。" : "A ranking does not predict future results.";
+  const link = zh ? "在应用里打开这个地址" : "Open this wallet in the app";
+  return `<section class="card wl-card wl-gate wl-lead" id="notify" hidden><h2>${esc(h)}</h2><p class="mu sm">${esc(note)}</p>${waitlistForm(lang, "leader", "leader")}</section>`
+    + `<p class="sm app-link"><a data-f="app" href="${appHref}">${link} →</a></p>`;
+}
+
+/** 延伸阅读：只链现有页面。 */
+export function furtherReading(lang) {
+  const zh = lang === "zh";
+  const items = zh
+    ? [["how-it-works/", "选人方法"], ["faq/", "常见问题"], ["copy-trading/", "模拟盘跟单"], ["risk/", "风险提示"]]
+    : [["how-it-works/", "How we score traders"], ["faq/", "FAQ"], ["copy-trading/", "Paper copy trading"], ["risk/", "Risk notice"]];
+  return `<section class="card more-read"><h2>${zh ? "延伸阅读" : "Further reading"}</h2><ul>${items.map(([p, t]) => `<li><a href="/${lang}/${p}">${esc(t)}</a></li>`).join("")}</ul></section>`;
+}
+
 export function renderLeaderMain(lang, addr, leader) {
   const zh = lang === "zh";
   const copy = leaderCopy(lang, addr, leader);
@@ -617,21 +690,21 @@ export function renderLeaderMain(lang, addr, leader) {
   const paperNote = copy.paper.on
     ? `<p class="mu sm" data-f="paper">${esc(zh ? "模拟盘" : "Paper trading")}</p>`
     : "";
-  const ctaTitle = zh ? "在应用里打开这个地址" : "Open this wallet in the app";
-  const ctaBody = zh ? "上榜不代表以后的表现。" : "A ranking does not predict future results.";
-  const cta = zh ? "进入应用 →" : "Open the app →";
   const app = `https://app.wakeloom.com/leader?addr=${addr}&amp;lang=${lang}`;
-  return `<main><div data-live="leader" data-addr="${esc(addr)}"${copy.paper.on ? ' data-paper="1"' : ""}>
+  const notify = leaderNotifyBlock(lang, app);
+  const further = furtherReading(lang);
+  return `<main><div data-live="leader" data-addr="${esc(addr)}"${copy.paper.on ? ' data-paper="1"' : ""}${copy.flags.marketMaker ? ' data-mm="1"' : ""}>
 <section class="ph"><p class="crumb"><a href="/${lang}/">${home}</a> / <a href="/${lang}/leaderboard/">${board}</a> / ${esc(copy.who)}</p>
 <h1 data-f="name">${esc(copy.name)}</h1><p class="addr num" data-f="addr" title="${esc(addr)}">${esc(addr)}</p>${checks}<p class="lead" data-f="desc">${esc(copy.description)}</p>
 ${asof}${paperNote}
 <span class="live-badge" data-live-badge="leader"></span></section>
-${statsGrid(lang, copy.metrics, { thirdParty: copy.flags.thirdParty, roiNd: copy.roiNd, ib: copy.ib, keepRates: true })}
+${statsGrid(lang, copy.metrics, { thirdParty: copy.flags.thirdParty, roiNd: copy.roiNd, ib: copy.ib, keepRates: true, mm: copy.flags.marketMaker })}
 <div data-f="spark"></div>
 ${factsBlock(lang, leader, copy.metrics)}
 ${recentBlock(lang, leader)}
 ${paperBlock(lang, copy.paper)}
-<section class="card cta-row"><div><b>${ctaTitle}</b><p class="mu">${ctaBody}</p></div><a class="btn pri" data-f="app" href="${app}">${cta}</a></section>
+${notify}
+${further}
 </div>
 <script>
 (function(){
@@ -664,13 +737,13 @@ export function applyLeaderShell(shellHtml, lang, addr, leader) {
     html = html.replace(re, () => value);
   };
   put(/<title>[\s\S]*?<\/title>/, `<title>${esc(copy.title)}</title>`);
-  put(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(copy.description)}">`);
+  put(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(copy.metaDescription)}">`);
   put(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${canonical}">`);
   put(/<link rel="alternate" hreflang="zh-CN" href="[^"]*">/, `<link rel="alternate" hreflang="zh-CN" href="${zhUrl}">`);
   put(/<link rel="alternate" hreflang="en" href="[^"]*">/, `<link rel="alternate" hreflang="en" href="${enUrl}">`);
   put(/<link rel="alternate" hreflang="x-default" href="[^"]*">/, `<link rel="alternate" hreflang="x-default" href="${SITE}/">`);
   put(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(copy.title)}">`);
-  put(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(copy.description)}">`);
+  put(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(copy.metaDescription)}">`);
   put(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${canonical}">`);
   put(/<script type="application\/ld\+json">[\s\S]*?<\/script>/, jsonScript(leaderJsonLd(lang, addr, leader, copy)));
   if (leaderIndexable(leader)) {
