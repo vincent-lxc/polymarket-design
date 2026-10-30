@@ -63,18 +63,17 @@ for p in PATHS:
         c = vis.count(w) + lds[0].count(w)
         if c: known[(p, w)] = c
     imgs = re.findall(r"<img [^>]*>", main)
-    if L == "en":
-        ok(not imgs, f"{p} en no <img> in main")
-        ok("Product prototype" not in h and "<figcaption" not in h and "<figure" not in h, f"{p} en no caption")
-        ok(not re.search(r"/assets/guides/[^\"]*\.(webp|png|jpe?g)", h), f"{p} en no guide image ref")
-    elif p.count("/") > 3:
-        ok(len(imgs) == 1, f"{p} zh one figure")
+    CAP = {"zh": "产品原型，上线后界面可能不同", "en": "Product prototype. The live interface may differ."}
+    if p.count("/") > 3:
+        ok(len(imgs) == 1, f"{p} one figure")
         im = imgs[0]
         for a in ("width=", "height=", 'loading="lazy"', 'alt="'): ok(a in im, f"{p} img {a}")
         ok(re.search(r'alt="[^"]+"', im), f"{p} alt non-empty")
         src = re.search(r'src="([^"]+)"', im).group(1)
+        ok(src.endswith(f"-{L}.webp"), f"{p} img language {src}")
         ok(status(src) == 200, f"{p} img {src}")
-        ok("<figcaption>产品原型，上线后界面可能不同</figcaption>" in main, f"{p} caption")
+        ok(f"<figcaption>{CAP[L]}</figcaption>" in main, f"{p} caption")
+        ok(CAP["en" if L == "zh" else "zh"] not in h, f"{p} no other-language caption")
     for href in set(re.findall(r'href="(/[^"]*)"', h)):
         path, _, frag = href.partition("#")
         st = status(path); ok(st == 200, f"{p} link {href} {st}")

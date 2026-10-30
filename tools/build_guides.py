@@ -2,7 +2,7 @@
 
 正文取自 市场/guides/ 的稿件（中文 *.md、英文 en/*-en.md），不改字：
 - 「## 正文 / ## Body」到下一个「---」是正文；「## 常见问题 / ## FAQ」是 FAQPage。
-- 配图只放中文页（Morgan / Casey 10-30：英文页等英文界面原型，之后单独补）。英文稿里的图片和图注直接省略。
+- 配图中英各 3 张（img/zh、img/en，1440×944 含底部水印白带，未裁），缩到 1200 宽 webp；图注按语言统一输出。
 - 文末「延伸阅读」取稿件内链表里「文末「延伸阅读」」几行。
 - leader 链接占位符 {leader_link_*} 和上线通知 CTA 本次不上（可索引白名单在 PR #49；表单联调未走通）。
 用法：python3 tools/build_guides.py [稿件目录]
@@ -17,7 +17,7 @@ E = html.escape
 PUBLISHED = "2026-10-30"
 SLUGS = [("how-to-pick-polymarket-traders", "01"), ("polymarket-trader-data-checklist", "02"), ("polymarket-leaderboard-copy-pitfalls", "03")]
 IMG = {"01": "01-leaderboard", "02": "02-leader-detail", "03": "03-leader-ledger"}
-CAPTION = {"zh": "产品原型，上线后界面可能不同"}
+CAPTION = {"zh": "产品原型，上线后界面可能不同", "en": "Product prototype. The live interface may differ."}
 G = {"zh": dict(name="指南", h1="Polymarket 跟单指南", lead="怎么挑交易者、跟单前看哪些数据、照抄排行榜会踩哪些坑。只讲方法和怎么看数据。",
                 title="Polymarket 跟单指南 | Wakeloom 织迹", desc="怎么判断 Polymarket 交易者、跟单前该看哪些数据、照抄排行榜的常见坑。",
                 more="延伸阅读", faq="常见问题", read="阅读"),
@@ -50,9 +50,9 @@ def inline(t):
 
 def figure(lang, num, alt):
     from PIL import Image
-    name = f"{IMG[num]}.webp"
+    name = f"{IMG[num]}-{lang}.webp"
     dst = os.path.join(ROOT, "assets", "guides", name)
-    im = Image.open(os.path.join(SRC, "img", "zh", f"{IMG[num]}.png")).convert("RGB")
+    im = Image.open(os.path.join(SRC, "img", lang, f"{IMG[num]}.png")).convert("RGB")
     if im.width > 1200: im = im.resize((1200, round(im.height * 1200 / im.width)), Image.LANCZOS)
     im.save(dst, "WEBP", quality=82, method=6)
     return (f'<figure class="g-fig"><img src="/assets/guides/{name}" width="{im.width}" height="{im.height}" alt="{E(alt)}" loading="lazy" decoding="async">'
@@ -71,8 +71,8 @@ def body_html(lang, num, block):
         elif ln.startswith("### "): flush(); parts.append(f"<h2>{inline(ln[4:])}</h2>")
         elif m:
             flush()
-            if lang == "zh": parts.append(figure(lang, num, m.group(1)))
-            if i + 1 < len(lines) and re.match(r"^\*[^*].*\*$", lines[i + 1].strip()): i += 1  # 图注：英文页随图一起省略
+            parts.append(figure(lang, num, m.group(1)))
+            if i + 1 < len(lines) and re.match(r"^\*[^*].*\*$", lines[i + 1].strip()): i += 1  # 稿件里的斜体图注由 CAPTION 统一输出
         elif ln.startswith("- "): flush(); parts.append(f"<ul><li>{inline(ln[2:])}</li></ul>")
         else: para.append(ln)
         i += 1
@@ -170,7 +170,7 @@ def main():
                    "datePublished": PUBLISHED, "dateModified": PUBLISHED, "url": f"{bs.SITE}/{lang}/{path}",
                    "mainEntityOfPage": f"{bs.SITE}/{lang}/{path}",
                    "author": {"@id": bs.SITE + "/#org"}, "publisher": {"@id": bs.SITE + "/#org"}}
-            if lang == "zh": art["image"] = f"{bs.SITE}/assets/guides/{IMG[num]}.webp"
+            art["image"] = f"{bs.SITE}/assets/guides/{IMG[num]}-{lang}.webp"
             fp = {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": strip_md(q), "acceptedAnswer": {"@type": "Answer", "text": strip_md(a)}} for q, a in qs]}
             cr = bs.crumbs(lang, [(g["name"], "guides/"), (h1, path)])
             s = bs.page(lang, path, "guide", html_body, [art, fp, cr], title=title, desc=desc)
