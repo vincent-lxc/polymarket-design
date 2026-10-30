@@ -533,12 +533,13 @@
       var asofIso = d.as_of || d.updated_at || (wal && wal.as_of);
       var asof = stamp(asofIso);
       var f = flags(d);
+      if (root.getAttribute("data-mm") === "1") f.mm = true; // www 白名单补的做市标记
       var curve = (wal && wal.equity_curve) || [];
       var roiNd = roiMissing(f, m, wal ? curveFlat(curve) : undefined);
       var sc = f.mm ? null : scoreText(d);
       var roiNote = f.third ? (lang === "zh" ? "（第三方口径）" : " (third-party basis)") : "";
       var wr = pct(m.win_rate, false, 1),
-        roi = roiNd ? null : pct(m.roi, true),
+        roi = roiNd || f.mm ? null : pct(m.roi, true),
         dd = pct(m.max_drawdown),
         ib = basis(d),
         rm = ib ? basisCount(ib.settled, ib.settled_capped) : basisCount(m.resolved_markets, m.settled_capped);
@@ -571,7 +572,7 @@
       };
       var stats = [
         [L("胜率（近90天）", "Win rate (90d)"), wr, "", "", true],
-        [L("收益率（近90天）", "ROI (90d)"), roi, tone(m.roi), f.third ? tag(TXT.third) : "", true],
+        f.mm ? null : [L("收益率（近90天）", "ROI (90d)"), roi, tone(m.roi), f.third ? tag(TXT.third) : "", true],
         [L("最大回撤", "Max drawdown"), dd, ""],
         ib ? ["settled"] : [L("已结算市场", "Resolved markets"), rm, ""],
         ib ? ["trades"] : null,

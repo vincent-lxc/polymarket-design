@@ -337,7 +337,7 @@ export function leaderCopy(lang, addr, leader) {
     const parts = [];
     if (score) parts.push(`综合评分 ${score}`);
     if (wr) parts.push(`近90天胜率 ${wr}`);
-    if (roi) parts.push(`收益率 ${roi}${roiNote}`);
+    if (roi && !flags.marketMaker) parts.push(`收益率 ${roi}${roiNote}`); // 疑似做市不写收益率（Casey 10-30）
     if (dd) parts.push(`最大回撤 ${dd}`);
     description = who + (parts.length ? "：" + parts.join("、") + "。" : "。");
     if (rm) description += ib ? `已结算市场（全部历史）${rm} 个。` : `已结算市场 ${rm} 个。`;
@@ -347,7 +347,7 @@ export function leaderCopy(lang, addr, leader) {
     const parts = [];
     if (score) parts.push(`score ${score}`);
     if (wr) parts.push(`90-day win rate ${wr}`);
-    if (roi) parts.push(`ROI ${roi}${roiNote}`);
+    if (roi && !flags.marketMaker) parts.push(`ROI ${roi}${roiNote}`);
     if (dd) parts.push(`max drawdown ${dd}`);
     description = who + (parts.length ? ": " + parts.join(", ") + ". " : ". ");
     if (rm) description += ib ? `${rm} resolved markets (all time). ` : `${rm} resolved markets. `;
@@ -429,7 +429,7 @@ function statsGrid(lang, m, opts) {
     opts && opts.keepRates && pct(m.win_rate, false, 1) == null
       ? ndStat(lang, zh ? "胜率（近90天）" : "Win rate (90d)", "win_rate")
       : stat(zh ? "胜率（近90天）" : "Win rate (90d)", pct(m.win_rate, false, 1), ""),
-    roiStat(lang, m, opts),
+    opts && opts.mm ? null : roiStat(lang, m, opts),
     stat(zh ? "最大回撤" : "Max drawdown", pct(m.max_drawdown), ""),
     ...(opts && opts.ib
       ? [basisStat(lang, "settled", opts.ib), basisStat(lang, "trades", opts.ib)]
@@ -693,12 +693,12 @@ export function renderLeaderMain(lang, addr, leader) {
   const app = `https://app.wakeloom.com/leader?addr=${addr}&amp;lang=${lang}`;
   const notify = leaderNotifyBlock(lang, app);
   const further = furtherReading(lang);
-  return `<main><div data-live="leader" data-addr="${esc(addr)}"${copy.paper.on ? ' data-paper="1"' : ""}>
+  return `<main><div data-live="leader" data-addr="${esc(addr)}"${copy.paper.on ? ' data-paper="1"' : ""}${copy.flags.marketMaker ? ' data-mm="1"' : ""}>
 <section class="ph"><p class="crumb"><a href="/${lang}/">${home}</a> / <a href="/${lang}/leaderboard/">${board}</a> / ${esc(copy.who)}</p>
 <h1 data-f="name">${esc(copy.name)}</h1><p class="addr num" data-f="addr" title="${esc(addr)}">${esc(addr)}</p>${checks}<p class="lead" data-f="desc">${esc(copy.description)}</p>
 ${asof}${paperNote}
 <span class="live-badge" data-live-badge="leader"></span></section>
-${statsGrid(lang, copy.metrics, { thirdParty: copy.flags.thirdParty, roiNd: copy.roiNd, ib: copy.ib, keepRates: true })}
+${statsGrid(lang, copy.metrics, { thirdParty: copy.flags.thirdParty, roiNd: copy.roiNd, ib: copy.ib, keepRates: true, mm: copy.flags.marketMaker })}
 <div data-f="spark"></div>
 ${factsBlock(lang, leader, copy.metrics)}
 ${recentBlock(lang, leader)}

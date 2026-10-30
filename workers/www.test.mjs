@@ -411,6 +411,10 @@ for (const lang of ["zh", "en"]) {
   const h = await r.text();
   assert.doesNotMatch(h, /noindex/);
   assert.match(h, lang === "zh" ? /疑似做市，不参与排名/ : /market maker/i);
+  // 白名单 mm:true 补的做市标记同样去掉正文收益率/ROI 和收益率格
+  assert.doesNotMatch(h.match(/data-f="desc">([^<]*)</)[1], /收益率|ROI/);
+  assert.doesNotMatch(h, /data-f="roi"/);
+  assert.match(h, /data-mm="1"/);
   const ldp = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
   assert.ok(ldp["@graph"].length > 0);
 }

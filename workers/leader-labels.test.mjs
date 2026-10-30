@@ -117,6 +117,20 @@ for (const lang of ["zh", "en"]) {
   assert.doesNotMatch(desc(h), /综合评分|score/i);
   assert.doesNotMatch(h, FORBIDDEN);
 }
+// 6b. 疑似做市：正文不写收益率/ROI，统计格不放收益率（第三方口径同样），并带 data-mm 给浏览器刷新用
+for (const lang of ["zh", "en"]) for (const source of ["local", "third_party"]) {
+  const h = page(lang, leader({ source, suspected_market_maker: true }));
+  assert.doesNotMatch(desc(h), /收益率|ROI|第三方口径|third-party basis/);
+  assert.doesNotMatch(h, /data-f="roi"/);
+  assert.match(h, /data-live="leader"[^>]*data-mm="1"/);
+  assert.match(desc(h), lang === "zh" ? /胜率 61\.0%/ : /win rate 61\.0%/);
+}
+{
+  const h = page("zh", leader({ source: "third_party" }));
+  assert.match(desc(h), /收益率 \+20\.0%（第三方口径）/);
+  assert.match(h, /data-f="roi"/);
+  assert.doesNotMatch(h, /data-mm=/);
+}
 for (const v of [false, null, undefined, "true", 1]) {
   const h = page("zh", leader({ suspected_market_maker: v }));
   assert.doesNotMatch(h, /疑似做市/);
