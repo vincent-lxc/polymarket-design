@@ -33,6 +33,10 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 - [What to check before copying a trader: sample size, drawdown and concentration](https://www.wakeloom.com/en/guides/polymarket-trader-data-checklist/): How to read resolved markets, max drawdown, profit concentration and four more.
 - [照抄 Polymarket 排行榜的常见坑](https://www.wakeloom.com/zh/guides/polymarket-leaderboard-copy-pitfalls/): 重仓、浮盈、做市、刷量、延迟和价差等 9 个坑，每个配识别办法。
 - [Common pitfalls of copying the Polymarket leaderboard](https://www.wakeloom.com/en/guides/polymarket-leaderboard-copy-pitfalls/): Nine traps such as big bets, unrealized gains, market makers, delay and slippage, and how to spot each.
+- [研究](https://www.wakeloom.com/zh/research/): 公开页面快照研究：排行榜数据质量与选人含义。
+- [Research](https://www.wakeloom.com/en/research/): Studies from public page snapshots: leaderboard data quality and what it means for picking traders.
+- [Polymarket 排行榜头部地址，有多少数据能直接拿来选人？](https://www.wakeloom.com/zh/research/leaderboard-data-quality/): 前 50 名里 34% 是第三方来源；对照官方盈利榜前 100，公开详情页上 49 个尚未核对。数字保留原文。
+- [How much of the data on top Polymarket traders can you actually use to pick who to copy?](https://www.wakeloom.com/en/research/leaderboard-data-quality/): Of the top 50, 34% use third-party data. Of Polymarket's profit top 100, 49 are unverified on public wallet pages. Numbers kept verbatim.
 
 ## FAQ 结论摘要 / FAQ conclusions
 

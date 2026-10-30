@@ -34,6 +34,10 @@ export const STATIC_PAGES = [
   { loc: `${SITE}/en/guides/polymarket-trader-data-checklist/`, lastmod: "2026-10-30" },
   { loc: `${SITE}/zh/guides/polymarket-leaderboard-copy-pitfalls/`, lastmod: "2026-10-30" },
   { loc: `${SITE}/en/guides/polymarket-leaderboard-copy-pitfalls/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/zh/research/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/en/research/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/zh/research/leaderboard-data-quality/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/en/research/leaderboard-data-quality/`, lastmod: "2026-10-30" },
 ];
 
 let sitemapCache = null;
