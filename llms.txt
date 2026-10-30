@@ -32,7 +32,7 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 
 - **Polymarket 能跟单吗？怎么跟？** 能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例跟随。Wakeloom 第一期只做模拟盘，实盘跟单即将推出。
 - **怎么判断一个 Polymarket 交易者是不是长期表现稳定？** 看足够长的窗口和足够多的已结算市场，而不是单笔大赚。近 90 天同时看胜率、收益率、最大回撤，以及收益是否集中在一个事件上。
-- **Polymarket 排行榜第一名值得跟吗？** 不一定。按金额排的榜首常常是一次重仓押中，或成交里有刷量和做市对冲，这类表现很难复制。上榜也不代表以后还会这样。
+- **Polymarket 排行榜第一名能说明以后的表现吗？** 不一定。按金额排的榜首常常是一次重仓押中，或成交里有刷量和做市对冲，这类表现很难复制。上榜也不代表以后还会这样。
 - **跟单 Polymarket 会不会因为延迟和滑点亏钱？** 会。发现对方成交到自己下单之间有延迟，薄盘口还会更差。偏离过大就放弃，先在模拟盘里看扣掉成本后的结果。
 - **Wakeloom 会托管我的私钥吗？** 第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。登录时的签名不能用来转账，也不能授权交易。
 - **胜率和收益率哪个更重要？** 单看哪个都不够，要和回撤一起看。高胜率也可能一次失手就抹掉多次结果。
@@ -45,7 +45,7 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 
 - **Can you copy trade on Polymarket, and how?** Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet and mirror it proportionally. Wakeloom's first phase is paper trading only. Live copy trading is coming soon (即将推出).
 - **How can I tell whether a Polymarket trader has steady long-term results?** Look at a long enough window and enough resolved markets, not one big win. We use 90 days and check win rate, ROI, max drawdown, and whether results come from a single event.
-- **Is the #1 trader on a Polymarket leaderboard worth copying?** Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future.
+- **Does the #1 spot on a Polymarket leaderboard predict future results?** Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future.
 - **Will latency and slippage make copy trading on Polymarket lose money?** They can. The market can move before the next order, and thin books are worse. Trades that deviate too far are skipped. Net results are measured in paper trading first.
 - **Does Wakeloom hold my private key?** Phase one is paper trading only. Wakeloom never receives or holds your private key. The login signature cannot transfer funds or approve trades.
 - **Which matters more, win rate or ROI?** Neither alone. Read them together with drawdown. A high win rate can still be wiped out by one loss.

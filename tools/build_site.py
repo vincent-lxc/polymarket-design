@@ -154,7 +154,7 @@ DESC = {
  "zh": {
   "home": ("Wakeloom 织迹 – 用于 Polymarket 的钱包分析与模拟盘跟单工具", "从链上历史筛出长期表现稳定的 Polymarket 交易者，看胜率、收益率和回撤，先用模拟盘跟单再决定。"),
   "leaderboard": ("Polymarket 交易者排行榜：按综合评分排序 | Wakeloom 织迹", "按综合评分排序。胜率和收益率只作展示。"),
-  "how": ("我们怎么挑值得跟的 Polymarket 交易者 | Wakeloom 织迹", "Wakeloom 的选人规则与统计口径：近 90 天窗口、已结算市场、回撤、集中度，按综合评分排序。"),
+  "how": ("我们怎么选 Polymarket 地址、怎么排序 | Wakeloom 织迹", "Wakeloom 的选人规则与统计口径：近 90 天窗口、已结算市场、回撤、集中度，按综合评分排序。"),
   "copy": ("用于 Polymarket 的模拟盘跟单 | Wakeloom 织迹", "按比例跟随目标钱包，设单笔和单市场上限、价格偏离阈值、跟随平仓；全局停止即将推出。第一期只有模拟盘，不动真钱。"),
   "faq": ("Polymarket 跟单常见问题 | Wakeloom 织迹", "关于 Polymarket 跟单、排行榜、延迟和滑点、私钥与数据来源的常见问题，每题第一句先给结论。"),
   "risk": ("风险提示 | Wakeloom 织迹", "预测市场交易与跟单的主要风险说明。"),
@@ -165,7 +165,7 @@ DESC = {
  "en": {
   "home": ("Wakeloom – Wallet Analytics & Paper Copy Trading for Polymarket", "Find Polymarket traders with steady long-term results, see their win rate, ROI and drawdown, and paper-trade copying them before risking money."),
   "leaderboard": ("Polymarket Trader Leaderboard: Ranked by Composite Score | Wakeloom", "Ranked by composite score. Win rate and ROI are display columns."),
-  "how": ("How We Pick Polymarket Traders to Follow | Wakeloom", "Wakeloom's selection rules and stats: a 90-day window, resolved markets, drawdown and concentration, with wallets ranked by composite score."),
+  "how": ("How We Select and Rank Polymarket Wallets | Wakeloom", "Wakeloom's selection rules and stats: a 90-day window, resolved markets, drawdown and concentration, with wallets ranked by composite score."),
   "copy": ("Paper-Trade Copy Trading for Polymarket | Wakeloom", "Mirror a wallet proportionally with per-trade and per-market caps, a price-deviation limit, and follow-the-close; a global stop is coming soon. Phase one is paper trading only."),
   "faq": ("Polymarket Copy Trading FAQ | Wakeloom", "Answers about copy trading on Polymarket, leaderboards, latency and slippage, private keys and data sources. Each answer leads with the conclusion."),
   "risk": ("Risk Notice | Wakeloom", "The main risks of prediction-market trading and copy trading."),
@@ -178,7 +178,7 @@ FAQ = {
  "zh": [
   ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例下单。Wakeloom 第一期只做模拟盘：选定钱包、设好比例和上限，它成交时我们按当时盘口模拟成交，并记录价差。"),
   ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。我们用近 90 天数据，同时看胜率、收益率、最大回撤和收益是否集中在一个事件上。被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查。"),
-  ("Polymarket 排行榜第一名值得跟吗？", "不一定。按金额排的榜首常常是一次重仓押中，或者成交量里有大量刷量和做市对冲，这类表现很难复制。Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查，请自己再看一下。上榜也不代表以后还会这样。"),
+  ("Polymarket 排行榜第一名能说明以后的表现吗？", "不一定。按金额排的榜首常常是一次重仓押中，或者成交量里有大量刷量和做市对冲，这类表现很难复制。Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。目前多数地址的数据来自第三方，还没做这几项检查，请自己再看一下。上榜也不代表以后还会这样。"),
   ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。我们发现对方成交到自己下单之间有延迟，价格可能已经变了，薄盘口还会吃到更差的价。所以每一笔都记录和对方的成交价差，偏离超过阈值就放弃，先在模拟盘里算清楚扣掉成本后的结果。"),
   ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。钱包登录只签署登录接口返回的那段文案（例如 Sign in to Wakeloom.），该签名不能用来转账，也不能授权交易。"),
   ("胜率和收益率哪个更重要？", "单看哪个都不够，要结合买入价格和回撤一起看。在 90¢ 买入的高胜率可能一次失手就抹掉多次收益，低胜率但买得便宜的人也可能长期为正，所以我们同时展示胜率、收益率、最大回撤和平均买入价。"),
@@ -190,7 +190,7 @@ FAQ = {
  "en": [
   ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet's fills and place proportional orders. Wakeloom's first phase is paper trading only: pick a wallet, set a ratio and caps, and each time it fills we simulate a fill at the live order book and record the price gap."),
   ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event. Addresses flagged as likely market makers are not ranked. Most addresses currently use third-party data and haven't been through these checks yet."),
-  ("Is the #1 trader on a Polymarket leaderboard worth copying?", "Not necessarily. The top spot by dollars is often one large bet that paid off, or volume inflated by wash trades and market-making hedges, which you can't replicate. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Most addresses currently use third-party data and have not been through these checks yet, so please review them yourself. A ranking doesn't predict the future."),
+  ("Does the #1 spot on a Polymarket leaderboard predict future results?", "Not necessarily. The top spot by dollars is often one large bet that paid off, or volume inflated by wash trades and market-making hedges, which you can't replicate. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Most addresses currently use third-party data and have not been through these checks yet, so please review them yourself. A ranking doesn't predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. By the time we see a fill and place our own order the price may have moved, and thin books give worse prices. We log the price gap on every trade, skip trades that deviate past a threshold, and measure net results after costs in paper trading first."),
   ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or custodied your private key. Wallet login only signs the nonce text returned by the API (e.g. Sign in to Wakeloom.); that signature cannot transfer funds or approve trades."),
   ("Which matters more, win rate or ROI?", "Neither alone; read them with entry price and drawdown. A high win rate bought at 90¢ can be wiped out by one loss, while a lower win rate bought cheaply can still come out ahead, so we show win rate, ROI, max drawdown and average entry price together."),
@@ -498,7 +498,7 @@ def article(lang, path, key, h1, secs, crumb):
 
 def content(lang):
     zh = lang == "zh"; L = (lambda z, e: z if zh else e)
-    article(lang, "how-it-works/", "how", L("我们怎么挑值得跟的 Polymarket 交易者", "How we pick Polymarket traders to follow"), [
+    article(lang, "how-it-works/", "how", L("我们怎么选 Polymarket 地址、怎么排序", "How we select and rank Polymarket wallets"), [
       (L("统计口径", "What we measure"), [L("统计窗口是近 90 天，只算已经结算的市场。每个地址展示胜率、收益率、最大回撤、已结算市场数、平均买入价、单笔中位金额和持仓中位时长。", "The window is the last 90 days and only resolved markets count. For each wallet we show win rate, ROI, max drawdown, resolved markets, average entry price, median trade size and median holding time."),
         L("收益率 = 已实现盈亏 ÷ 投入，不含未结算持仓的浮动盈亏。目前多数地址的数据来自第三方，收益率用对方给的数字，口径可能不同。", "ROI = realized P&L ÷ capital invested, excluding unrealized P&L on open positions. For most addresses, which currently use third-party data, ROI is the provider's figure and may be calculated differently."),
         L("成交笔数太少的地址样本太小，不生成详情页。", "Wallets with too few trades are too small a sample and get no detail page.")]),
@@ -508,7 +508,7 @@ def content(lang):
       (L("限制", "Limitations"), [L("过去 90 天的表现不代表以后。筛选规则能去掉明显的噪音，但去不掉所有运气，也看不到地址背后的人是否改变了策略。", "Past 90-day results don't predict the future. The filters remove obvious noise but not all luck, and they can't see whether the person behind a wallet has changed strategy.")]),
     ], L("选人方法", "How it works"))
     article(lang, "copy-trading/", "copy", L("用于 Polymarket 的模拟盘跟单", "Paper-trade copy trading for Polymarket"), [
-      (L("适用场景", "Who it's for"), [L("想研究某个 Polymarket 地址值不值得跟，又不想直接拿真钱试的人。", "People who want to test whether a Polymarket wallet is worth following without putting real money in first.")]),
+      (L("适用场景", "Who it's for"), [L("想研究某个 Polymarket 地址的历史表现，又不想直接拿真钱试的人。", "People who want to study a Polymarket wallet's track record without putting real money in first.")]),
       (L("规则", "Rules you set"), [L("按比例：对方下多少，我们按你设的比例下。", "Ratio: we size each order as a proportion of theirs."),
         L("上限：单笔上限和单个市场上限，超过就截断。", "Caps: a per-trade cap and a per-market cap; anything above is cut."),
         L("偏离阈值：我们的价格和对方成交价差得太多就放弃这一笔。", "Deviation limit: if our price is too far from their fill, we skip the trade."),
@@ -652,7 +652,7 @@ LLMS_SUMMARY = {
  "zh": [
   ("Polymarket 能跟单吗？怎么跟？", "能，但 Polymarket 本身没有跟单功能，需要第三方工具盯住目标钱包的成交再按比例跟随。Wakeloom 第一期只做模拟盘，实盘跟单即将推出。"),
   ("怎么判断一个 Polymarket 交易者是不是长期表现稳定？", "看足够长的窗口和足够多的已结算市场，而不是单笔大赚。近 90 天同时看胜率、收益率、最大回撤，以及收益是否集中在一个事件上。"),
-  ("Polymarket 排行榜第一名值得跟吗？", "不一定。按金额排的榜首常常是一次重仓押中，或成交里有刷量和做市对冲，这类表现很难复制。上榜也不代表以后还会这样。"),
+  ("Polymarket 排行榜第一名能说明以后的表现吗？", "不一定。按金额排的榜首常常是一次重仓押中，或成交里有刷量和做市对冲，这类表现很难复制。上榜也不代表以后还会这样。"),
   ("跟单 Polymarket 会不会因为延迟和滑点亏钱？", "会。发现对方成交到自己下单之间有延迟，薄盘口还会更差。偏离过大就放弃，先在模拟盘里看扣掉成本后的结果。"),
   ("Wakeloom 会托管我的私钥吗？", "第一期只有模拟盘。Wakeloom 不接收、不托管用户私钥。登录时的签名不能用来转账，也不能授权交易。"),
   ("胜率和收益率哪个更重要？", "单看哪个都不够，要和回撤一起看。高胜率也可能一次失手就抹掉多次结果。"),
@@ -664,7 +664,7 @@ LLMS_SUMMARY = {
  "en": [
   ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet and mirror it proportionally. Wakeloom's first phase is paper trading only. Live copy trading is coming soon (即将推出)."),
   ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days and check win rate, ROI, max drawdown, and whether results come from a single event."),
-  ("Is the #1 trader on a Polymarket leaderboard worth copying?", "Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future."),
+  ("Does the #1 spot on a Polymarket leaderboard predict future results?", "Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. The market can move before the next order, and thin books are worse. Trades that deviate too far are skipped. Net results are measured in paper trading first."),
   ("Does Wakeloom hold my private key?", "Phase one is paper trading only. Wakeloom never receives or holds your private key. The login signature cannot transfer funds or approve trades."),
   ("Which matters more, win rate or ROI?", "Neither alone. Read them together with drawdown. A high win rate can still be wiped out by one loss."),

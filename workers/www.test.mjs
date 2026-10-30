@@ -500,3 +500,11 @@ for (const lang of ["zh", "en"]) {
 }
 
 console.log("www redirect tests ok");
+
+// 全站不出现「值得跟」类说法（HTML、llms.txt、生成器）
+{
+  const { readFileSync, readdirSync, statSync } = await import("node:fs");
+  const walk = (d) => readdirSync(d).flatMap((n) => { const p = d + "/" + n; return statSync(p).isDirectory() ? (["node_modules", ".git", "tools/__pycache__"].includes(n) ? [] : walk(p)) : [p]; });
+  const files = [...walk("zh"), ...walk("en"), "llms.txt", "tools/build_site.py", "index.html"].filter((f) => /\.(html|txt|py)$/.test(f));
+  for (const f of files) assert.doesNotMatch(readFileSync(f, "utf8"), /值得跟|值不值得|worth (following|copying)|traders to follow/i, f);
+}
