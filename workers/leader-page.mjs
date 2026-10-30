@@ -366,8 +366,8 @@ export function leaderCopy(lang, addr, leader) {
       : `${who} Polymarket Trader Stats: Score, Win Rate, Drawdown | Wakeloom`;
   } else {
     title = zh
-      ? `${who} 的 Polymarket 交易数据：胜率、收益率、回撤 | Wakeloom 织迹`
-      : `${who} Polymarket Trader Stats: Win Rate, ROI, Drawdown | Wakeloom`;
+      ? `${who} 的 Polymarket 交易数据：胜率、回撤 | Wakeloom 织迹`
+      : `${who} Polymarket Trader Stats: Win Rate, Drawdown | Wakeloom`;
   }
   const asof = formatAsOf(leader && (leader.as_of || leader.updated_at), lang);
   const asofLine = asof
@@ -661,7 +661,7 @@ export function waitlistForm(lang, where, source) {
 /** 主 CTA：上线通知表单（source=leader）；「在应用里打开」降为文字链接。英文待 Casey 定。 */
 export function leaderNotifyBlock(lang, appHref) {
   const zh = lang === "zh";
-  const h = zh ? "想在上线后用模拟盘跟这个地址？留个邮箱，上线时通知你。" : "Want to paper-trade this wallet after launch? Leave your email and we'll tell you when we launch.";
+  const h = zh ? "想在上线后用模拟盘跟这个地址？留个邮箱，上线时通知你。" : "Want to paper-trade this wallet after launch? Leave your email and we'll let you know.";
   const note = zh ? "上榜不代表以后的表现。" : "A ranking does not predict future results.";
   const link = zh ? "在应用里打开这个地址" : "Open this wallet in the app";
   return `<section class="card wl-card wl-gate wl-lead" id="notify" hidden><h2>${esc(h)}</h2><p class="mu sm">${esc(note)}</p>${waitlistForm(lang, "leader", "leader")}</section>`
@@ -672,8 +672,8 @@ export function leaderNotifyBlock(lang, appHref) {
 export function furtherReading(lang) {
   const zh = lang === "zh";
   const items = zh
-    ? [["how-it-works/", "选人方法"], ["faq/", "常见问题"], ["copy-trading/", "模拟盘跟单怎么运行"], ["risk/", "风险提示"]]
-    : [["how-it-works/", "How it works: scoring and metrics"], ["faq/", "FAQ"], ["copy-trading/", "How paper copy trading runs"], ["risk/", "Risk notice"]];
+    ? [["how-it-works/", "选人方法"], ["faq/", "常见问题"], ["copy-trading/", "模拟盘跟单"], ["risk/", "风险提示"]]
+    : [["how-it-works/", "How we score traders"], ["faq/", "FAQ"], ["copy-trading/", "Paper copy trading"], ["risk/", "Risk notice"]];
   return `<section class="card more-read"><h2>${zh ? "延伸阅读" : "Further reading"}</h2><ul>${items.map(([p, t]) => `<li><a href="/${lang}/${p}">${esc(t)}</a></li>`).join("")}</ul></section>`;
 }
 

@@ -46,7 +46,7 @@ assert.equal(title(page("en", leader())), "0xcdcd…cdcd Polymarket Trader Stats
 assert.match(page("zh", leader()), /<span class="mu">综合评分<\/span> <b class="num">70\.3<\/b>/);
 // 没有综合评分（现网 leader 接口目前不带）：保持原标题
 const noScore = leader({ smart_score: null });
-assert.equal(title(page("zh", noScore)), "0xcdcd…cdcd 的 Polymarket 交易数据：胜率、收益率、回撤 | Wakeloom 织迹");
+assert.equal(title(page("zh", noScore)), "0xcdcd…cdcd 的 Polymarket 交易数据：胜率、回撤 | Wakeloom 织迹");
 assert.equal(scoreText(noScore), null);
 
 // 3. source=local：没有第三方标注
