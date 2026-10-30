@@ -26,6 +26,14 @@ export const STATIC_PAGES = [
   { loc: `${SITE}/en/terms/`, lastmod: "2026-10-21" },
   { loc: `${SITE}/zh/about/`, lastmod: "2026-10-21" },
   { loc: `${SITE}/en/about/`, lastmod: "2026-10-21" },
+  { loc: `${SITE}/zh/guides/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/en/guides/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/zh/guides/how-to-pick-polymarket-traders/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/en/guides/how-to-pick-polymarket-traders/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/zh/guides/polymarket-trader-data-checklist/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/en/guides/polymarket-trader-data-checklist/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/zh/guides/polymarket-leaderboard-copy-pitfalls/`, lastmod: "2026-10-30" },
+  { loc: `${SITE}/en/guides/polymarket-leaderboard-copy-pitfalls/`, lastmod: "2026-10-30" },
 ];
 
 let sitemapCache = null;
