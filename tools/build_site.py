@@ -188,7 +188,7 @@ FAQ = {
   ("Wakeloom 和 Polymarket 是什么关系？", "没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。"),
  ],
  "en": [
-  ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet's fills and place proportional orders. Wakeloom's first phase is paper trading only: pick a wallet, set a ratio and caps, and each time it fills we simulate a fill at the live order book and record the price gap."),
+  ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet's fills and place proportional orders. Wakeloom currently does paper trading only: pick a wallet, set a ratio and caps, and each time it fills we simulate a fill at the live order book and record the price gap."),
   ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days of data and check win rate, ROI, max drawdown and whether results come from a single event. Addresses flagged as likely market makers are not ranked. Some addresses use third-party data, and the page shows the source."),
   ("Can you rely on the #1 trader on a Polymarket leaderboard?", "Not necessarily. The top spot by dollars is often one large bet that paid off, or volume inflated by wash trades and market-making hedges, which you can't replicate. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Some addresses use third-party data, and the page shows the source, so please review them yourself. A ranking doesn't predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. By the time we see a fill and place our own order the price may have moved, and thin books give worse prices. We log the price gap on every trade, skip trades that deviate past a threshold, and measure net results after costs in paper trading first."),
@@ -662,7 +662,7 @@ LLMS_SUMMARY = {
   ("Wakeloom 和 Polymarket 是什么关系？", "没有隶属或合作关系。Wakeloom 是用于 Polymarket 的独立分析工具，只读取公开的链上和接口数据。"),
  ],
  "en": [
-  ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet and mirror it proportionally. Wakeloom's first phase is paper trading only. Live copy trading is coming soon (即将推出)."),
+  ("Can you copy trade on Polymarket, and how?", "Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet and mirror it proportionally. Wakeloom currently does paper trading only. Live copy trading is coming soon (即将推出)."),
   ("How can I tell whether a Polymarket trader has steady long-term results?", "Look at a long enough window and enough resolved markets, not one big win. We use 90 days and check win rate, ROI, max drawdown, and whether results come from a single event."),
   ("Can you rely on the #1 trader on a Polymarket leaderboard?", "Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future."),
   ("Will latency and slippage make copy trading on Polymarket lose money?", "They can. The market can move before the next order, and thin books are worse. Trades that deviate too far are skipped. Net results are measured in paper trading first."),

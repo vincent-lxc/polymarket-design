@@ -43,7 +43,7 @@ Wakeloom (织迹) reads public Polymarket wallet history and lets you paper-trad
 
 ### English
 
-- **Can you copy trade on Polymarket, and how?** Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet and mirror it proportionally. Wakeloom's first phase is paper trading only. Live copy trading is coming soon (即将推出).
+- **Can you copy trade on Polymarket, and how?** Yes, but Polymarket has no built-in copy trading, so a third-party tool has to watch a wallet and mirror it proportionally. Wakeloom currently does paper trading only. Live copy trading is coming soon (即将推出).
 - **How can I tell whether a Polymarket trader has steady long-term results?** Look at a long enough window and enough resolved markets, not one big win. We use 90 days and check win rate, ROI, max drawdown, and whether results come from a single event.
 - **Can you rely on the #1 trader on a Polymarket leaderboard?** Not necessarily. The top spot by dollars is often one large bet, or volume inflated by wash trades and market-making. A ranking does not predict the future.
 - **Will latency and slippage make copy trading on Polymarket lose money?** They can. The market can move before the next order, and thin books are worse. Trades that deviate too far are skipped. Net results are measured in paper trading first.
