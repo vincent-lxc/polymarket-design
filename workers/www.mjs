@@ -5,6 +5,7 @@
 
 import { applyLeaderShell, leaderIndexable } from "./leader-page.mjs";
 import { loadSitemapLeaders, renderSitemap } from "./sitemap-bff.mjs";
+import { applyPin, mergePinnedSitemap } from "./leader-pin.mjs";
 
 export const BFF_ORIGIN = "https://api.wakeloom.com";
 
@@ -190,7 +191,7 @@ export async function leaderPage(request, env, lang, addr) {
     });
   }
   try {
-    const leader = await fetchPublicLeader(env, addr);
+    const leader = applyPin(await fetchPublicLeader(env, addr), addr);
     const shell = await readShell(request, env, lang);
     const html = applyLeaderShell(shell, lang, addr, leader);
     const indexable = leaderIndexable(leader);
@@ -218,7 +219,7 @@ export async function sitemapResponse(request, env) {
   }
   try {
     const leaders = await loadSitemapLeaders(env);
-    const xml = renderSitemap(leaders);
+    const xml = renderSitemap(mergePinnedSitemap(leaders));
     return textResponse(xml, 200, request.method, {
       "content-type": "application/xml; charset=utf-8",
       "cache-control": "public, max-age=300",

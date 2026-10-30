@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import worker, { INDEXNOW_KEY, appRedirect, isShellRedirect, leaderDecision } from "./www.mjs";
 import { localPreviewURL } from "../tools/preview-www.mjs";
+import { LEADER_INDEX_PINNED, applyPin, isPinned, mergePinnedSitemap } from "./leader-pin.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -356,7 +357,8 @@ assert.equal(siteAssets.length, 0);
 const xml = await siteRes.text();
 assert.doesNotMatch(xml, /app\.wakeloom\.com/);
 const leaderLocs = xml.match(/<loc>https:\/\/www\.wakeloom\.com\/(?:zh|en)\/leader\/0x[a-f0-9]{40}\//g) || [];
-assert.equal(leaderLocs.length, 6);
+const pinnedCount = Object.keys(LEADER_INDEX_PINNED).length;
+assert.equal(leaderLocs.length, 6 + pinnedCount * 2);
 for (const a of [liveAddr, otherAddr, thirdAddr]) {
   assert.equal(xml.split(a).length - 1, 6);
 }
@@ -378,5 +380,64 @@ const siteStuck = await worker.fetch(
   bffEnv(async () => Response.json({ sitemap: { leaders: [{ address: liveAddr, updated_at: "2026-10-23T00:00:00.000Z" }], next_offset: 0 } })),
 );
 assert.equal(siteStuck.status, 503);
+
+/* ---- 过渡白名单（GSC 有展示的地址） ---- */
+const pinKeys = Object.keys(LEADER_INDEX_PINNED);
+assert.equal(pinKeys.length, 10);
+for (const a of pinKeys) assert.match(a, /^0x[a-f0-9]{40}$/);
+assert.equal(isPinned("0x1d24f81d4cd23201dda9b7c9fe17403b82f7e6ff"), false);
+assert.equal(isPinned("0xF201A19B43471261A3C1BA9247335D55270E527E"), true);
+assert.equal(pinKeys.filter((a) => LEADER_INDEX_PINNED[a].mm).length, 6);
+const pinAddr = "0xf201a19b43471261a3c1ba9247335d55270e527e";
+const pinLeaderSrc = leaderFixture(pinAddr, { indexable: false }).leader;
+const pinned = applyPin(pinLeaderSrc, pinAddr);
+assert.equal(pinLeaderSrc.indexable, false);
+assert.equal(pinned.indexable, true);
+assert.equal(pinned.suspected_market_maker, true);
+assert.equal(applyPin({ indexable: false, suspected_market_maker: false }, pinAddr).suspected_market_maker, false);
+assert.equal(applyPin({ indexable: true, index_basis: { indexable: false } }, pinAddr).index_basis.indexable, true);
+assert.equal(applyPin(pinLeaderSrc, liveAddr), pinLeaderSrc);
+assert.equal(mergePinnedSitemap([{ address: pinAddr, updated_at: "x" }]).length, 10);
+
+for (const lang of ["zh", "en"]) {
+  const r = await worker.fetch(
+    new Request(host + `/${lang}/leader/${pinAddr}/`),
+    bffEnv(async () => Response.json(leaderFixture(pinAddr, { indexable: false }))),
+  );
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("x-wakeloom-indexable"), "true");
+  assert.equal(r.headers.get("x-robots-tag"), null);
+  const h = await r.text();
+  assert.doesNotMatch(h, /noindex/);
+  assert.match(h, lang === "zh" ? /疑似做市，不参与排名/ : /market maker/i);
+  const ldp = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+  assert.ok(ldp["@graph"].length > 0);
+}
+/* 非白名单 indexable=false 照旧 noindex */
+for (const lang of ["zh", "en"]) {
+  const r = await worker.fetch(
+    new Request(host + `/${lang}/leader/${otherAddr}/`),
+    bffEnv(async () => Response.json(leaderFixture(otherAddr, { indexable: false }))),
+  );
+  assert.equal(r.headers.get("x-robots-tag"), "noindex, follow");
+  assert.match(await r.text(), /<meta name="robots" content="noindex,follow">/);
+}
+/* 0x1d24 不在白名单 */
+{
+  const a = "0x1d24f81d4cd23201dda9b7c9fe17403b82f7e6ff";
+  const r = await worker.fetch(new Request(host + `/en/leader/${a}/`), bffEnv(async () => Response.json(leaderFixture(a, { indexable: false }))));
+  assert.equal(r.headers.get("x-robots-tag"), "noindex, follow");
+}
+/* sitemap：BFF 清单不含白名单时补上，已含时不重复 */
+{
+  const r = await worker.fetch(new Request(host + "/sitemap.xml"), bffEnv(sitemapFetch({ 0: { leaders: [{ address: pinAddr, updated_at: "2026-10-30T00:00:00.000Z" }], next_offset: null } })));
+  const x = await r.text();
+  for (const a of pinKeys) {
+    assert.equal((x.match(new RegExp(`<loc>https://www\\.wakeloom\\.com/zh/leader/${a}/</loc>`, "g")) || []).length, 1, a);
+    assert.equal((x.match(new RegExp(`<loc>https://www\\.wakeloom\\.com/en/leader/${a}/</loc>`, "g")) || []).length, 1, a);
+  }
+  assert.match(x, new RegExp(`<loc>https://www\\.wakeloom\\.com/en/leader/${pinAddr}/</loc><lastmod>2026-10-30`));
+  assert.doesNotMatch(x, /0x1d24f81d/);
+}
 
 console.log("www redirect tests ok");
