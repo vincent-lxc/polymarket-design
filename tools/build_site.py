@@ -248,7 +248,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
 <title>{E(tt)}</title><meta name="description" content="{E(dd)}"><link rel="canonical" href="{url}">{hre}
 <meta property="og:type" content="website"><meta property="og:site_name" content="Wakeloom"><meta property="og:title" content="{E(tt)}"><meta property="og:description" content="{E(dd)}"><meta property="og:url" content="{url}"><meta property="og:image" content="{SITE}/icons/favicon-512.png"><meta property="og:locale" content="{t["og"]}"><meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0d0d10"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icons/wakeloom.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/site.css?v={CSS_V}">
+<link rel="stylesheet" href="/site.css?v={CSS_V}">{'<link rel="stylesheet" href="/assets/app-run.css?v=1">' if key == 'home' else ''}
 <script type="application/ld+json">{json.dumps(graph, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")}</script>
 </head><body>
 {banner(lang)}
@@ -256,7 +256,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
 <nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="https://app.wakeloom.com/board">{t["cta"]}</a></div></header>
 <main>{body}</main>
 <footer class="ft"><div class="fl"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="22" height="22" alt=""><b>{t["name"]}</b></a><span>{t["tag"]}</span></div><nav>{foot}</nav><p>{E(t["indep"])}</p></footer>
-<script src="/site.js" defer></script><script src="/site-live.js" defer></script></body></html>'''
+<script src="/site.js" defer></script><script src="/site-live.js" defer></script>{'<script src="/assets/app-run.js?v=1" defer></script>' if key == 'home' else ''}</body></html>'''
 
 def write(rel, s):
     p = os.path.join(ROOT, rel); os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -290,6 +290,7 @@ def spark(curve, lang):
 # ---------------- 各页 ----------------
 def L2(zh, a, b): return a if zh else b
 def home(lang, D):
+    from app_run import app_run_html
     zh = lang == "zh"; n = len(D["leaders"])
     top = D["leaders"][:3]
     rows = "".join(lrow(lang, i + 1, l, D) for i, l in enumerate(top))
@@ -330,7 +331,7 @@ def home(lang, D):
     ]
     sc = "".join(f'<figure class="shot card shot-imgfirst"><div class="shot-img"><img src="/assets/screens/{f}.webp" width="1200" height="1290" loading="lazy" decoding="async" alt="{E(alt)}"><span class="shot-tag">{"测试版 · 模拟盘" if zh else "Beta · Paper trading"}</span></div><figcaption><h3>{E(h)}</h3><p>{E(t)}</p></figcaption></figure>' for f, h, t, alt in shots)
     shots_html = f'<section class="shots"><h2>{"应用里能做什么" if zh else "Inside the app"}</h2><p class="mu sm">{"截图来自测试版，使用演示数据，不含真实地址。" if zh else "Screenshots from the beta with demo data; no real wallets shown."}</p><div class="shot-grid">{sc}</div></section>'
-    body = hero + f'<section class="feats">{fh}</section>' + shots_html + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/board">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
+    body = hero + f'<section class="feats">{fh}</section>' + shots_html + app_run_html(lang) + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/board">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
     write(f"{lang}/index.html", page(lang, "", "home", body, [softapp(lang), crumbs(lang, []), {"@type": "WebPage", "url": f"{SITE}/{lang}/", "name": DESC[lang]["home"][0], "inLanguage": T[lang]["html"], "isPartOf": {"@id": SITE + "/#website"}}]))
 
 # 排行榜表格：和 site-live.js rowFull / rowShort / fillHead 输出同一套 HTML，爬虫看到的就是浏览器刷新后的样子。
