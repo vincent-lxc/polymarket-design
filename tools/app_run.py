@@ -21,6 +21,14 @@ COPY = {
             ("资金曲线", "按模拟订单更新"),
         ],
         "nodes": ["信号", "agent", "策略", "筛选", "下单", "曲线"],
+        "activity_seed": [
+            ("08:58", "模拟终端就绪", "演示数据已载入"),
+            ("08:58", "Leaders 信号", "演示信号已连接"),
+            ("08:59", "策略命中", "策略规则已载入"),
+            ("08:59", "筛选", "风控规则已载入"),
+            ("08:59", "自动下单", "模拟订单流就绪"),
+            ("08:59", "资金曲线", "等待首笔模拟单"),
+        ],
     },
     "en": {
         "title": "How the app runs", "badge": "Pre-launch preview · DEMO DATA",
@@ -40,6 +48,14 @@ COPY = {
             ("Equity curve", "Update from paper orders"),
         ],
         "nodes": ["Signal", "Agent", "Match", "Filter", "Order", "Equity"],
+        "activity_seed": [
+            ("08:58", "Paper terminal ready", "Demo data loaded"),
+            ("08:58", "Leader signals", "Demo feed connected"),
+            ("08:59", "Strategy match", "Rules loaded"),
+            ("08:59", "Risk checks", "Limits loaded"),
+            ("08:59", "Auto order", "Paper stream ready"),
+            ("08:59", "Equity curve", "Waiting for first order"),
+        ],
     },
 }
 
@@ -56,6 +72,10 @@ def app_run_html(lang):
         f'<div class="apr-node" data-apr-node="{i}"><span class="apr-node-dot" aria-hidden="true"></span><span>{e(name)}</span></div>'
         for i, name in enumerate(c["nodes"])
     )
+    activity_seed = "".join(
+        f'<li data-key="seed-{i}"><time class="num">{e(time)}</time><strong>{e(label)}</strong><small>{e(detail)}</small></li>'
+        for i, (time, label, detail) in enumerate(c["activity_seed"])
+    )
     return f'''<section class="app-run" id="how-app-runs" aria-labelledby="app-run-title" data-apr-lang="{lang}">
   <div class="apr-heading"><div><p class="apr-badge">{e(c["badge"])}</p><h2 id="app-run-title">{e(c["title"])}</h2><p class="apr-lead">{e(c["lead"])}</p></div><button class="apr-toggle" type="button" data-apr-toggle aria-label="{e(c["pause"])}" aria-pressed="false"><span aria-hidden="true">Ⅱ</span></button></div>
   <p class="apr-sr">{e(c["summary"])}</p>
@@ -65,7 +85,7 @@ def app_run_html(lang):
       <header class="apr-top"><div class="apr-brand"><img src="/icons/wakeloom.svg" width="42" height="42" alt=""><div><strong>Wakeloom</strong><small class="num">AUTO / PAPER</small></div></div><div class="apr-balance"><span>{e(c["balance"])}</span><strong class="num" data-apr-balance>$44.82</strong><small class="num" data-apr-clock>09:00:00</small></div><div class="apr-stats"><div><span>TRADES</span><b class="num" data-apr-trades>0</b></div><div><span>WINS</span><b class="num" data-apr-wins>0</b></div><div><span>LOSSES</span><b class="num" data-apr-losses>0</b></div></div></header>
       <div class="apr-body"><aside class="apr-steps"><div class="apr-panel-head"><span>{e(c["steps"])}</span><span class="num">01 — 06</span></div><ol>{steps}</ol></aside>
         <div class="apr-main"><div class="apr-panel-head"><span>{e(c["pipeline"])}</span><span class="num" data-apr-state>LIVE</span></div><div class="apr-pipeline">{nodes}</div><div class="apr-order-zone"><div class="apr-panel-head"><span>{e(c["feed"])}</span><span class="num">AUTO</span></div><div class="apr-event-title" data-apr-event>—</div><div class="apr-order-stage"><div class="apr-order-card" data-apr-order><span class="apr-order-side" data-apr-order-side>—</span><strong data-apr-order-event>—</strong><small class="num" data-apr-order-detail>—</small></div><div class="apr-receipt" data-apr-receipt><span data-apr-receipt-side>—</span><strong data-apr-receipt-event>—</strong><small class="num" data-apr-receipt-detail>—</small></div></div></div><div class="apr-equity"><div class="apr-panel-head"><span>{e(c["equity"])}</span><strong class="num" data-apr-equity>$44.82</strong></div><svg viewBox="0 0 600 150" preserveAspectRatio="none" aria-hidden="true"><path class="apr-grid" d="M0 125H600 M0 75H600 M0 25H600"/><path class="apr-curve-shadow" d="{CURVE}"/><path class="apr-curve" data-apr-curve pathLength="1000" d="{CURVE}"/></svg><div class="apr-equity-foot num"><span>{e(c["start"])} $44.82</span><span>{e(c["now"])} <b data-apr-equity-foot>$44.82</b></span></div></div></div>
-        <aside class="apr-activity"><div class="apr-panel-head"><span>{e(c["activity"])}</span><span class="num" data-apr-lines>00</span></div><ol data-apr-activity></ol></aside></div>
+        <aside class="apr-activity"><div class="apr-panel-head"><span>{e(c["activity"])}</span><span class="num" data-apr-lines>06</span></div><ol data-apr-activity>{activity_seed}</ol></aside></div>
       <div class="apr-stream"><div class="apr-panel-head"><span>{e(c["stream"])}</span><span class="num" data-apr-stream-count>00</span></div><ol data-apr-stream></ol></div>
     </div><div class="apr-disclaimer"><strong>{e(c["demo"])}</strong><span>{e(c["disclaimer"])}</span></div><div class="apr-loop-veil" aria-hidden="true"></div>
   </div>

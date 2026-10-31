@@ -63,6 +63,12 @@
     const streamCount = q("[data-apr-stream-count]");
     const veil = q(".apr-loop-veil");
     if (!toggle || !curve || !stream) return;
+    const activitySeed = [...activity.children].map(li => ({
+      key: li.dataset.key,
+      time: li.querySelector("time").textContent,
+      label: li.querySelector("strong").textContent,
+      detail: li.querySelector("small").textContent
+    }));
 
     let visible = false, paused = false, raf = 0, elapsed = 0, lastFrame = 0;
     let lastEventIndex = -2, lastActivityKey = "", lastStreamKey = "";
@@ -84,7 +90,7 @@
       });
     };
     const activityEntries = p => {
-      const entries = [];
+      const entries = activitySeed.slice();
       events.forEach((event, index) => {
         if (event[0] > p) return;
         const phases = [
