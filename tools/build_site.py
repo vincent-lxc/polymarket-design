@@ -256,7 +256,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
 <title>{E(tt)}</title><meta name="description" content="{E(dd)}"><link rel="canonical" href="{url}">{hre}
 <meta property="og:type" content="website"><meta property="og:site_name" content="Wakeloom"><meta property="og:title" content="{E(tt)}"><meta property="og:description" content="{E(dd)}"><meta property="og:url" content="{url}"><meta property="og:image" content="{SITE}/icons/favicon-512.png"><meta property="og:locale" content="{t["og"]}"><meta name="twitter:card" content="summary">
 <meta name="theme-color" content="#0d0d10"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/icons/wakeloom.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="/site.css?v={CSS_V}">{'<link rel="stylesheet" href="/assets/app-run.css?v=1">' if key == 'home' else ''}
+<link rel="stylesheet" href="/site.css?v={CSS_V}">{'<link rel="stylesheet" href="/assets/app-run.css?v=2">' if key == 'home' else ''}
 <script type="application/ld+json">{json.dumps(graph, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")}</script>
 </head><body>
 {banner(lang)}
@@ -264,7 +264,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
 <nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="https://app.wakeloom.com/board">{t["cta"]}</a></div></header>
 <main>{body}</main>
 <footer class="ft"><div class="fl"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="22" height="22" alt=""><b>{t["name"]}</b></a><span>{t["tag"]}</span></div><nav>{foot}</nav><p>{E(t["indep"])}</p></footer>
-<script src="/site.js" defer></script><script src="/site-live.js" defer></script>{'<script src="/assets/app-run.js?v=1" defer></script>' if key == 'home' else ''}</body></html>'''
+<script src="/site.js" defer></script><script src="/site-live.js" defer></script>{'<script src="/assets/app-run.js?v=2" defer></script>' if key == 'home' else ''}</body></html>'''
 
 def write(rel, s):
     p = os.path.join(ROOT, rel); os.makedirs(os.path.dirname(p), exist_ok=True)
