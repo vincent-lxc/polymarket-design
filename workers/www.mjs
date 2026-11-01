@@ -276,8 +276,37 @@ export async function llmsResponse(request, env) {
   return plain(body, 200, "public, max-age=3600", request.method);
 }
 
+
+/** Workers 自定义域名上明文 HTTP 常被边缘直接 500；在 Worker 内把 http 301 到 https，
+ *  给 Bingbot 等先探 HTTP 的爬虫一条干净跳转。本地 127.0.0.1 / localhost 预览不跳。
+ *  @param {Request} request
+ *  @returns {string|null} 需要 301 时返回绝对 https 地址，否则 null
+ */
+export function httpsRedirect(request) {
+  const url = new URL(request.url);
+  const host = url.hostname;
+  if (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host.endsWith(".localhost")
+  ) {
+    return null;
+  }
+  const xf = (request.headers.get("x-forwarded-proto") || "").split(",")[0].trim().toLowerCase();
+  const isHttp = url.protocol === "http:" || xf === "http";
+  if (!isHttp) return null;
+  const dest = new URL(url.href);
+  dest.protocol = "https:";
+  // URL() 在 http→https 时可能保留默认端口；清掉 80/443 的显式端口更干净
+  if (dest.port === "80" || dest.port === "443") dest.port = "";
+  return dest.toString();
+}
+
 export default {
   async fetch(request, env) {
+    const httpsDest = httpsRedirect(request);
+    if (httpsDest) return Response.redirect(httpsDest, 301);
     const keyed = indexNowResponse(request);
     if (keyed) return keyed;
     const llms = await llmsResponse(request, env);

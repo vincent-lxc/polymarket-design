@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import worker, { INDEXNOW_KEY, appRedirect, isShellRedirect, leaderDecision, barePathRedirect } from "./www.mjs";
+import worker, { INDEXNOW_KEY, appRedirect, httpsRedirect, isShellRedirect, leaderDecision, barePathRedirect } from "./www.mjs";
 import { leaderMetaDescription, leaderNotifyBlock, furtherReading, renderLeaderMain } from "./leader-page.mjs";
 import { localPreviewURL } from "../tools/preview-www.mjs";
 import { LEADER_INDEX_PINNED, applyPin, isPinned, mergePinnedSitemap } from "./leader-pin.mjs";
@@ -503,6 +503,57 @@ for (const lang of ["zh", "en"]) {
   assert.ok(org.alternateName.includes("织迹"));
   assert.ok(org.description);
   assert.equal(org.sameAs, undefined);
+}
+
+
+/* HTTP → HTTPS 301（Workers 自定义域名 / Bingbot 探 HTTP） */
+{
+  const httpHost = "http://www.wakeloom.com";
+  const sampleAddr = "0x" + "ab".repeat(20);
+  assert.equal(httpsRedirect(new Request(httpHost + "/")), "https://www.wakeloom.com/");
+  assert.equal(
+    httpsRedirect(new Request(httpHost + `/zh/leader/${sampleAddr}/?x=1`)),
+    `https://www.wakeloom.com/zh/leader/${sampleAddr}/?x=1`,
+  );
+  assert.equal(
+    httpsRedirect(new Request(host + "/zh/?q=1", { headers: { "X-Forwarded-Proto": "http" } })),
+    "https://www.wakeloom.com/zh/?q=1",
+  );
+  assert.equal(
+    httpsRedirect(new Request(host + "/zh/?q=1", { headers: { "x-forwarded-proto": "http, https" } })),
+    "https://www.wakeloom.com/zh/?q=1",
+  );
+  assert.equal(httpsRedirect(new Request(host + "/")), null);
+  assert.equal(httpsRedirect(new Request("http://127.0.0.1:8765/")), null);
+  assert.equal(httpsRedirect(new Request("http://localhost:8765/zh/")), null);
+
+  const emptyAssets = {
+    ASSETS: {
+      async fetch() {
+        return new Response("should-not-run", { status: 500 });
+      },
+    },
+  };
+  const httpHome = await worker.fetch(new Request(httpHost + "/"), emptyAssets);
+  assert.equal(httpHome.status, 301);
+  assert.equal(httpHome.headers.get("location"), "https://www.wakeloom.com/");
+  const httpLeader = await worker.fetch(
+    new Request(httpHost + `/zh/leader/${sampleAddr}/?utm=bing`),
+    emptyAssets,
+  );
+  assert.equal(httpLeader.status, 301);
+  assert.equal(
+    httpLeader.headers.get("location"),
+    `https://www.wakeloom.com/zh/leader/${sampleAddr}/?utm=bing`,
+  );
+  const xfHome = await worker.fetch(
+    new Request(host + "/", { headers: { "X-Forwarded-Proto": "http" } }),
+    emptyAssets,
+  );
+  assert.equal(xfHome.status, 301);
+  assert.equal(xfHome.headers.get("location"), "https://www.wakeloom.com/");
+  const loopback = await worker.fetch(new Request("http://127.0.0.1:8765/"), emptyAssets);
+  assert.notEqual(loopback.status, 301);
 }
 
 console.log("www redirect tests ok");
