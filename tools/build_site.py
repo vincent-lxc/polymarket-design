@@ -457,9 +457,9 @@ def leaderboard(lang, D):
         else:
             tbl = f'<div class="tw"><table class="lt"><thead>{lhead(lang, basis=any(lb_basis(l) for l in chunk))}</thead><tbody>{rows}</tbody></table></div>'
         count = f"共 {total} 位" if zh else f"{total} traders"
-        live = current == 1
+        live = current == 1 and not paginated
         stamp = f'{"数据截至" if zh else "Data as of"} {E(asof)} · {count}' if asof else count
-        meta = (f'<p class="mu sm"><span data-live-meta="leaderboard"{f" data-index-total=\"{total}\"" if paginated else ""}>{stamp}</span>' if live else f'<p class="mu sm">{stamp}')
+        meta = (f'<p class="mu sm"><span data-live-meta="leaderboard">{stamp}</span>' if live else f'<p class="mu sm">{stamp}')
         if live: meta += ' · <span class="live-badge" data-live-badge="leaderboard"></span>'
         meta += f' · <a class="ln" href="/{lang}/how-it-works/">{"选人方法" if zh else "How we pick"} →</a></p>'
         body = f'''<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {"排行榜" if zh else "Leaderboard"}</p><h1>{"Polymarket 交易者排行榜" if zh else "Leaderboard of Polymarket traders"}</h1><p class="lead">{E(intro)}</p>
@@ -643,6 +643,9 @@ def sitemap(D):
     lm_data = iso(D["as_of"]) if D["as_of"] else None
     static_lm = "2026-10-21"
     urls = [("", lm_data or static_lm), ("leaderboard/", lm_data or static_lm)]
+    if D.get("sitemap_ok") and isinstance(D.get("lb_index"), list):
+        for n in range(2, max(1, (len(D["lb_index"]) + 49) // 50) + 1):
+            urls.append((f"leaderboard/page/{n}/", lm_data or static_lm))
     for k in ["how-it-works/", "copy-trading/", "faq/", "risk/", "privacy/", "terms/", "about/"]: urls.append((k, static_lm))
     for a, u in D["pages"]:
         d = D["details"].get(a) or {}

@@ -68,11 +68,11 @@ class LeaderboardPagesTest(unittest.TestCase):
                 self.assertIn(f'href="/{lang}/leaderboard/page/2/"', html)
                 self.assertIn("105 位" if lang == "zh" else "105 traders", html)
                 self.assertIn(f'<td class="num mu">{first}</td>', html)
-                if number == 1:
-                    self.assertIn('data-live="leaderboard"', html)
-                    self.assertIn('data-index-total="105"', html)
-                else:
-                    self.assertNotIn('data-live="leaderboard"', html)
+                self.assertNotIn('data-live="leaderboard"', html)
+                self.assertNotIn('data-index-total', html)
+                self.assertNotIn('data-live-meta="leaderboard"', html)
+                self.assertNotIn('data-live-badge="leaderboard"', html)
+                if number > 1:
                     self.assertIn("第 " + str(number) + " 页" if lang == "zh" else "Page " + str(number), html)
                     self.assertIn(f'href="/{lang}/leaderboard/"', html)
                 graph = json.loads(re.search(r'<script type="application/ld\+json">(.*?)</script>', html).group(1))
@@ -88,6 +88,24 @@ class LeaderboardPagesTest(unittest.TestCase):
             bs.leaderboard("en", data)
         self.assertEqual(list(output), ["en/leaderboard/index.html"])
         self.assertIn('data-live="leaderboard"', output["en/leaderboard/index.html"])
+
+    def test_sitemap_includes_only_existing_leaderboard_pages(self):
+        data = {"as_of": "2026-11-02T00:00:00Z", "sitemap_ok": True,
+                "lb_index": [leader(n) for n in range(101)], "pages": [], "details": {}}
+        output = {}
+        with patch.object(bs, "write", side_effect=lambda path, content: output.setdefault(path, content)):
+            bs.sitemap(data)
+        xml = output["sitemap.xml"]
+        for lang in ("zh", "en"):
+            self.assertIn(f"/{lang}/leaderboard/page/2/</loc>", xml)
+            self.assertIn(f"/{lang}/leaderboard/page/3/</loc>", xml)
+            self.assertNotIn(f"/{lang}/leaderboard/page/4/</loc>", xml)
+
+        data["lb_index"] = data["lb_index"][:50]
+        output = {}
+        with patch.object(bs, "write", side_effect=lambda path, content: output.setdefault(path, content)):
+            bs.sitemap(data)
+        self.assertNotIn("/leaderboard/page/2/", output["sitemap.xml"])
 
     def test_load_skips_full_index_when_sitemap_fails(self):
         calls = []

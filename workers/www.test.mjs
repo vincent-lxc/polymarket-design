@@ -6,6 +6,7 @@ import worker, { INDEXNOW_KEY, appRedirect, httpsRedirect, isShellRedirect, lead
 import { leaderMetaDescription, leaderNotifyBlock, furtherReading, renderLeaderMain } from "./leader-page.mjs";
 import { localPreviewURL } from "../tools/preview-www.mjs";
 import { LEADER_INDEX_PINNED, applyPin, isPinned, mergePinnedSitemap } from "./leader-pin.mjs";
+import { renderSitemap } from "./sitemap-bff.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -334,6 +335,13 @@ function sitemapFetch(map) {
     return Response.json({ sitemap: page });
   };
 }
+
+const sitemapRows = Array.from({ length: 51 }, (_, n) => ({ address: `0x${n.toString(16).padStart(40, "0")}` }));
+const pagedXml = renderSitemap(sitemapRows);
+for (const lang of ["zh", "en"]) {
+  assert.match(pagedXml, new RegExp(`<loc>${host}/${lang}/leaderboard/page/2/</loc><lastmod>2026-10-22T11:24:55Z</lastmod>`));
+}
+assert.doesNotMatch(renderSitemap(sitemapRows.slice(0, 50)), /\/leaderboard\/page\/2\//);
 
 const siteAssets = [];
 const siteRes = await worker.fetch(
