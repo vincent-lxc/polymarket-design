@@ -343,6 +343,9 @@ const siteRes = await worker.fetch(
       leaders: [
         { address: liveAddr, updated_at: "2026-10-23T10:36:23.000Z" },
         { address: otherAddr.toUpperCase(), updated_at: "2026-10-23T01:02:03.000Z" },
+        { address: "0x" + "de".repeat(20), indexable: false },
+        { address: "0x" + "df".repeat(20), indexable: null },
+        { address: "0x" + "da".repeat(20), indexable: "true" },
       ],
       next_offset: 2,
     },
@@ -357,6 +360,7 @@ assert.equal(siteRes.headers.get("x-wakeloom-sitemap"), "bff");
 assert.equal(siteAssets.length, 0);
 const xml = await siteRes.text();
 assert.doesNotMatch(xml, /app\.wakeloom\.com/);
+for (const hex of ["de", "df", "da"]) assert.doesNotMatch(xml, new RegExp("0x" + hex.repeat(20)));
 const leaderLocs = xml.match(/<loc>https:\/\/www\.wakeloom\.com\/(?:zh|en)\/leader\/0x[a-f0-9]{40}\//g) || [];
 const pinnedCount = Object.keys(LEADER_INDEX_PINNED).length;
 assert.equal(leaderLocs.length, 6 + pinnedCount * 2);

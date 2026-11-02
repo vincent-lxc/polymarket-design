@@ -85,6 +85,19 @@ def inline(t):
     return "".join(out)
 
 
+def link_source_paths(md, lang):
+    """Keep the research source outside www intact while linking its public page paths."""
+    if lang == "zh":
+        old = "Wakeloom 官网中英文排行榜 `www.wakeloom.com/zh/leaderboard/`、`/en/leaderboard/`，以及 `/en/leader/0x…/` 详情页服务端直出的 HTML 和 JSON-LD。"
+        new = "Wakeloom 官网中英文排行榜 [www.wakeloom.com/zh/leaderboard/](/zh/leaderboard/)、[/en/leaderboard/](/en/leaderboard/)，以及从排行榜进入的 [/zh/leader/0x…/](/zh/leaderboard/) 详情页服务端直出的 HTML 和 JSON-LD。"
+    else:
+        old = "Wakeloom `www.wakeloom.com/en/leaderboard/` and `/zh/leaderboard/`, plus `/en/leader/0x…/` pages: server-rendered HTML and JSON-LD."
+        new = "Wakeloom [www.wakeloom.com/en/leaderboard/](/en/leaderboard/) and [/zh/leaderboard/](/zh/leaderboard/), plus [/en/leader/0x…/](/en/leaderboard/) pages reached from the leaderboard: server-rendered HTML and JSON-LD."
+    if md.count(old) != 1:
+        raise ValueError(f"research source paths changed: {lang}")
+    return md.replace(old, new)
+
+
 def is_table_sep(ln):
     return bool(re.match(r"^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$", ln))
 
@@ -272,7 +285,7 @@ def main():
         m = META[lang]
         home = bs.T[lang]["home"]
         path = f"research/{SLUG}/"
-        body = body_html(docs[lang])
+        body = body_html(link_source_paths(docs[lang], lang))
         html_body = (
             f'<section class="ph"><p class="crumb"><a href="/{lang}/">{home}</a> / '
             f'<a href="/{lang}/research/">{m["name"]}</a> / {E(m["h1"])}</p>'
