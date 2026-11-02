@@ -51,7 +51,7 @@ for p in PATHS:
     bad = {k for k in keys(ld) if re.search(r"price|rating|review|offers", k, re.I)}
     ok(not bad, f"{p} banned LD keys {bad}")
     ok(f'<link rel="canonical" href="{SITE}{p}">' in h, f"{p} canonical")
-    for hl, u in (("zh-CN", f"{SITE}/zh{rest}"), ("en", f"{SITE}/en{rest}"), ("x-default", f"{SITE}/")):
+    for hl, u in (("zh-CN", f"{SITE}/zh{rest}"), ("en", f"{SITE}/en{rest}"), ("x-default", f"{SITE}/en{rest}")):
         ok(f'<link rel="alternate" hreflang="{hl}" href="{u}">' in h, f"{p} hreflang {hl}")
     ok(f'href="/{other}{rest}"' in h, f"{p} language switch")
     ok(h.count(f'href="/{L}/guides/"') >= 2, f"{p} nav + footer entry")

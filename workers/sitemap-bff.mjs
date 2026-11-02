@@ -73,7 +73,9 @@ function lastmodOk(value) {
 function urlEntry(loc, lastmod) {
   const alt = alternatesFor(loc);
   const mod = lastmodOk(lastmod) ? `<lastmod>${escXml(lastmod)}</lastmod>` : "";
-  return `<url><loc>${escXml(loc)}</loc>${mod}<xhtml:link rel="alternate" hreflang="zh-CN" href="${escXml(alt.zh)}"/><xhtml:link rel="alternate" hreflang="en" href="${escXml(alt.en)}"/><xhtml:link rel="alternate" hreflang="x-default" href="${SITE}/"/></url>`;
+  const pathname = new URL(loc).pathname;
+  const xDefault = ["/", "/zh/", "/en/"].includes(pathname) ? `${SITE}/` : alt.en;
+  return `<url><loc>${escXml(loc)}</loc>${mod}<xhtml:link rel="alternate" hreflang="zh-CN" href="${escXml(alt.zh)}"/><xhtml:link rel="alternate" hreflang="en" href="${escXml(alt.en)}"/><xhtml:link rel="alternate" hreflang="x-default" href="${escXml(xDefault)}"/></url>`;
 }
 
 export function renderSitemap(leaders) {
