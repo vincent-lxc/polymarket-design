@@ -741,7 +741,7 @@ export function applyLeaderShell(shellHtml, lang, addr, leader) {
   put(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${canonical}">`);
   put(/<link rel="alternate" hreflang="zh-CN" href="[^"]*">/, `<link rel="alternate" hreflang="zh-CN" href="${zhUrl}">`);
   put(/<link rel="alternate" hreflang="en" href="[^"]*">/, `<link rel="alternate" hreflang="en" href="${enUrl}">`);
-  put(/<link rel="alternate" hreflang="x-default" href="[^"]*">/, `<link rel="alternate" hreflang="x-default" href="${SITE}/">`);
+  put(/<link rel="alternate" hreflang="x-default" href="[^"]*">/, `<link rel="alternate" hreflang="x-default" href="${enUrl}">`);
   put(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(copy.title)}">`);
   put(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(copy.metaDescription)}">`);
   put(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${canonical}">`);

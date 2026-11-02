@@ -246,9 +246,10 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
     if desc: dd = desc
     url = f"{SITE}/{lang}/{path}"
     other = "en" if lang == "zh" else "zh"
+    default = f"{SITE}/en/{path}" if path else f"{SITE}/"
     hre = (f'<link rel="alternate" hreflang="zh-CN" href="{SITE}/zh/{path}">'
            f'<link rel="alternate" hreflang="en" href="{SITE}/en/{path}">'
-           f'<link rel="alternate" hreflang="x-default" href="{SITE}/">')
+           f'<link rel="alternate" hreflang="x-default" href="{default}">')
     graph = ld_clean({"@context": "https://schema.org", "@graph": [ORG, website(lang)] + ld})
     nav = "".join(f'<a href="/{lang}/{p}"{" class=on" if path.startswith(p) else ""}>{n}</a>' for p, n in t["nav"])
     foot = foot_nav(lang)
@@ -589,7 +590,8 @@ def sitemap(D):
     out = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">',
            f'<url><loc>{SITE}/</loc><lastmod>{static_lm}</lastmod><xhtml:link rel="alternate" hreflang="zh-CN" href="{SITE}/zh/"/><xhtml:link rel="alternate" hreflang="en" href="{SITE}/en/"/><xhtml:link rel="alternate" hreflang="x-default" href="{SITE}/"/></url>']
     for p, lm in urls:
-        alt = f'<xhtml:link rel="alternate" hreflang="zh-CN" href="{SITE}/zh/{p}"/><xhtml:link rel="alternate" hreflang="en" href="{SITE}/en/{p}"/><xhtml:link rel="alternate" hreflang="x-default" href="{SITE}/"/>'
+        default = f"{SITE}/en/{p}" if p else f"{SITE}/"
+        alt = f'<xhtml:link rel="alternate" hreflang="zh-CN" href="{SITE}/zh/{p}"/><xhtml:link rel="alternate" hreflang="en" href="{SITE}/en/{p}"/><xhtml:link rel="alternate" hreflang="x-default" href="{default}"/>'
         for lang in ("zh", "en"): out.append(f"<url><loc>{SITE}/{lang}/{p}</loc><lastmod>{lm}</lastmod>{alt}</url>")
     out.append("</urlset>")
     write("sitemap.xml", "\n".join(out) + "\n")

@@ -137,14 +137,27 @@ assert.doesNotMatch(homeHtml, /rel="canonical" href="https:\/\/www\.wakeloom\.co
 assert.match(homeHtml, /property="og:image" content="https:\/\/www\.wakeloom\.com\/assets\/og-home\.png"/);
 assert.match(homeHtml, /name="twitter:card" content="summary_large_image"/);
 assert.match(homeHtml, /hreflang="x-default" href="https:\/\/www\.wakeloom\.com\/"/);
+assert.match(homeHtml, /hreflang="zh-CN" href="https:\/\/www\.wakeloom\.com\/zh\/"/);
+assert.match(homeHtml, /hreflang="en" href="https:\/\/www\.wakeloom\.com\/en\/"/);
 assert.match(homeHtml, /application\/ld\+json/);
 assert.match(homeHtml, /"@type":"Organization"/);
 
 const en = await worker.fetch(new Request(host + "/en/"), { ASSETS: assets });
 const enHtml = await en.text();
 assert.match(enHtml, /rel="canonical" href="https:\/\/www\.wakeloom\.com\/en\/"/);
+assert.match(enHtml, /hreflang="x-default" href="https:\/\/www\.wakeloom\.com\/"/);
 assert.match(enHtml, /application\/ld\+json/);
 assert.match(enHtml, /"@type":"Organization"/);
+const zh = await worker.fetch(new Request(host + "/zh/"), { ASSETS: assets });
+assert.match(await zh.text(), /hreflang="x-default" href="https:\/\/www\.wakeloom\.com\/"/);
+for (const p of ["faq/", "guides/", "guides/polymarket-trader-data-checklist/", "research/", "research/leaderboard-data-quality/"]) {
+  for (const lang of ["zh", "en"]) {
+    const res = await worker.fetch(new Request(`${host}/${lang}/${p}`), { ASSETS: assets });
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.ok(html.includes(`<link rel="alternate" hreflang="x-default" href="${host}/en/${p}">`), `/${lang}/${p}`);
+  }
+}
 
 const previewPort = 8765;
 for (const ok of ["/", "/llms.txt", "/zh/", "/en/faq/", "/assets/og-home.png", "/fc81fd20e5cda8d8f5d37c7bf054a1cd.txt"]) {
@@ -243,7 +256,7 @@ assert.match(trueHtml, /0xabab…abab：综合评分 65\.7、近90天胜率 12\.
 assert.match(trueHtml, new RegExp(`rel="canonical" href="https://www\\.wakeloom\\.com/zh/leader/${liveAddr}/"`));
 assert.match(trueHtml, new RegExp(`hreflang="zh-CN" href="https://www\\.wakeloom\\.com/zh/leader/${liveAddr}/"`));
 assert.match(trueHtml, new RegExp(`hreflang="en" href="https://www\\.wakeloom\\.com/en/leader/${liveAddr}/"`));
-assert.match(trueHtml, /hreflang="x-default" href="https:\/\/www\.wakeloom\.com\/"/);
+assert.ok(trueHtml.includes(`<link rel="alternate" hreflang="x-default" href="${host}/en/leader/${liveAddr}/">`));
 assert.match(trueHtml, /数据截至 2026-10-23 10:06（UTC）/);
 assert.match(trueHtml, />12\.3%</);
 assert.match(trueHtml, /@vinii/);
@@ -264,6 +277,7 @@ const falseRes = await worker.fetch(
 assert.equal(falseRes.status, 200);
 assert.equal(falseRes.headers.get("x-wakeloom-indexable"), "false");
 const falseHtml = await falseRes.text();
+assert.ok(falseHtml.includes(`<link rel="alternate" hreflang="x-default" href="${host}/en/leader/${liveAddr}/">`));
 assert.match(falseHtml, /<meta name="robots" content="noindex,follow">/);
 assert.match(falseHtml, /0xabab…abab: score 65\.7, max drawdown 5\.1%/);
 // copy-engine #90：胜率、收益率为 null 时摘要句不写假数字；格子保留写 No data（不再整格省略）
@@ -361,7 +375,19 @@ const leaderLocs = xml.match(/<loc>https:\/\/www\.wakeloom\.com\/(?:zh|en)\/lead
 const pinnedCount = Object.keys(LEADER_INDEX_PINNED).length;
 assert.equal(leaderLocs.length, 6 + pinnedCount * 2);
 for (const a of [liveAddr, otherAddr, thirdAddr]) {
-  assert.equal(xml.split(a).length - 1, 6);
+  assert.equal(xml.split(a).length - 1, 8);
+}
+function sitemapRow(loc) {
+  const start = `<url><loc>${host}${loc}</loc>`;
+  assert.ok(xml.includes(start), loc);
+  return xml.split(start, 2)[1].split("</url>", 1)[0];
+}
+for (const loc of ["/", "/zh/", "/en/"]) {
+  assert.ok(sitemapRow(loc).includes(`<xhtml:link rel="alternate" hreflang="x-default" href="${host}/"/>`), loc);
+}
+for (const loc of ["/zh/faq/", "/en/guides/", "/zh/research/leaderboard-data-quality/", `/zh/leader/${liveAddr}/`, `/en/leader/${liveAddr}/`]) {
+  const enPath = loc.replace(/^\/zh\//, "/en/");
+  assert.ok(sitemapRow(loc).includes(`<xhtml:link rel="alternate" hreflang="x-default" href="${host}${enPath}"/>`), loc);
 }
 assert.match(xml, new RegExp(`<loc>https://www\\.wakeloom\\.com/zh/leader/${liveAddr}/</loc><lastmod>2026-10-23T10:36:23\\.000Z</lastmod>`));
 assert.match(xml, /<loc>https:\/\/www\.wakeloom\.com\/zh\/faq\/<\/loc>/);
