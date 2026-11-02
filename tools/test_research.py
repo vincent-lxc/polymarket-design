@@ -6,6 +6,7 @@ import json, os, re, subprocess, sys, urllib.request, urllib.error
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8947"
+OFFLINE = BASE == "--offline"
 SITE = "https://www.wakeloom.com"
 SLUG = "leaderboard-data-quality"
 PATHS = [f"/{L}/research/{s}" for L in ("zh", "en") for s in ("", f"{SLUG}/")]
@@ -35,11 +36,18 @@ def ok(c, m):
 
 
 def get(p):
+    if OFFLINE:
+        fp = os.path.join(ROOT, p.lstrip("/"), "index.html") if p.endswith("/") else os.path.join(ROOT, p.lstrip("/"))
+        with open(fp, encoding="utf-8") as f:
+            return 200, f.read()
     with urllib.request.urlopen(BASE + p) as r:
         return r.status, r.read().decode()
 
 
 def status(p):
+    if OFFLINE:
+        fp = os.path.join(ROOT, p.lstrip("/"), "index.html") if p.endswith("/") else os.path.join(ROOT, p.lstrip("/"))
+        return 200 if os.path.isfile(fp) else 404
     try:
         with urllib.request.urlopen(urllib.request.Request(BASE + p, method="GET")) as r:
             return r.status
@@ -108,6 +116,8 @@ for p in PATHS:
     ok(not re.search(r'href="/[a-z]{2}/leader/0x', h), f"{p} no leader href")
     ok(not re.findall(r'<form class="wl-form', main), f"{p} no CTA form")
     if p.endswith(f"/{SLUG}/"):
+        ok(f'<a href="/{L}/leaderboard/">/{L}/leader/0x…/</a>' in main, f"{p} leader pattern links to leaderboard")
+        ok(f'<a href="/{L}/leaderboard/">www.wakeloom.com/{L}/leaderboard/</a>' in main, f"{p} leaderboard source linked")
         for num in NUMS[L]:
             ok(num in main, f"{p} verbatim {num}")
         ok(f'href="/{L}/guides/how-to-pick-polymarket-traders/"' in main, f"{p} link pick guide")

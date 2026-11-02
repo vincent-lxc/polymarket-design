@@ -80,6 +80,11 @@ function urlEntry(loc, lastmod) {
 
 export function renderSitemap(leaders) {
   const rows = STATIC_PAGES.map((p) => urlEntry(p.loc, p.lastmod));
+  const pages = Math.max(1, Math.ceil((leaders || []).length / 50));
+  for (let n = 2; n <= pages; n++) {
+    rows.push(urlEntry(`${SITE}/zh/leaderboard/page/${n}/`, "2026-10-22T11:24:55Z"));
+    rows.push(urlEntry(`${SITE}/en/leaderboard/page/${n}/`, "2026-10-22T11:24:55Z"));
+  }
   for (const row of leaders || []) {
     const addr = String(row.address || "").toLowerCase();
     if (!/^0x[a-f0-9]{40}$/.test(addr)) continue;
@@ -115,6 +120,9 @@ export async function loadSitemapLeaders(env) {
     if (!box || !Array.isArray(box.leaders)) throw new Error("bff sitemap shape");
     for (const row of box.leaders) {
       if (!row || typeof row !== "object") continue;
+      // BFF /v1/public/sitemap 本身是门槛清单。2026-11-02 实测 515 个地址的行都无 indexable，
+      // 逐个查询 /v1/public/leaders/:addr 均为 indexable=true；这里防御未来显式给出非 true 的行。
+      if (Object.hasOwn(row, "indexable") && row.indexable !== true) continue;
       const addr = String(row.address || "").toLowerCase();
       if (!/^0x[a-f0-9]{40}$/.test(addr) || seen.has(addr)) continue;
       seen.add(addr);

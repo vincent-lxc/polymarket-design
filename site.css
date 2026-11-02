@@ -33,6 +33,8 @@ h1{font-size:var(--f1);line-height:1.12;letter-spacing:-.02em;font-weight:750}
 .lt .r{text-align:right}.lt tbody tr{transition:opacity .2s}.lt tbody tr:hover td{background:var(--card2)}
 .lt a b{transition:color .2s}.lt a:hover b{color:var(--or)}
 .tw{overflow-x:auto}
+.lb-pages{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:8px;margin:20px 0}.lb-pages [aria-current=page]{border-color:var(--or);color:var(--or)}
+@media (max-width:420px){.lb-pages{gap:6px}.lb-pages .btn.sm{padding:6px 10px}}
 .feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
 .feat{position:relative;margin:0;padding:26px;transition:transform .45s var(--ease);overflow:hidden}
 .feat:hover{transform:translateY(-4px)}

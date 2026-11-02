@@ -33,7 +33,7 @@ def get(path):
 
 # ---------------- 数据 ----------------
 def load():
-    data = {"ok": False, "as_of": None, "leaders": [], "wallets": {}, "pages": [], "details": {}, "source": None, "err": None, "sitemap_ok": False}
+    data = {"ok": False, "as_of": None, "leaders": [], "lb_index": None, "wallets": {}, "pages": [], "details": {}, "source": None, "err": None, "sitemap_ok": False}
     try:
         lb = get(LB_PATH)
         b = lb.get("leaderboard") or {}
@@ -47,7 +47,9 @@ def load():
         while off is not None:
             sm = get(f"/v1/public/sitemap?offset={off}&limit=1000").get("sitemap") or {}
             ls = sm.get("leaders") or []
-            addrs += [(x["address"].lower(), x.get("updated_at")) for x in ls if x.get("address")]
+            # 可收录口径：地址必须在 BFF sitemap 服务端门槛清单里；若行带 indexable，必须严格为 true。
+            addrs += [(x["address"].lower(), x.get("updated_at")) for x in ls
+                      if x.get("address") and ("indexable" not in x or x["indexable"] is True)]
             if not ls: break
             off = sm.get("next_offset")
         data["sitemap_ok"] = True
@@ -55,6 +57,33 @@ def load():
         data["err"] = (data["err"] or "") + " sitemap: " + str(e)
         addrs = [(l["address"].lower(), data["as_of"]) for l in data["leaders"]]   # 退回：只用排行榜地址
     seen = set(); data["pages"] = [(a, u) for a, u in addrs if not (a in seen or seen.add(a))]
+    if data["sitemap_ok"]:
+        eligible = {a for a, _ in data["pages"]}
+        try:
+            all_leaders, off = [], 0
+            for _ in range(100):
+                box = get(f"/v1/public/leaderboard?window=90d&metric=smart_score&limit=100&offset={off}").get("leaderboard") or {}
+                batch = box.get("leaders") or []
+                if not batch: break
+                all_leaders.extend(batch)
+                nxt = box.get("next_offset")
+                if nxt is None: break
+                if not isinstance(nxt, int) or isinstance(nxt, bool) or nxt <= off:
+                    raise ValueError("leaderboard cursor did not advance")
+                off = nxt
+            else:
+                raise ValueError("leaderboard exceeded 100 pages")
+            # sitemap 是服务端门槛清单；榜单行自身带 indexable 时仍须严格为 true。
+            used, index = set(), []
+            for l in sort_by_smart_score(all_leaders):
+                a = str(l.get("address") or "").lower()
+                if a not in eligible or a in used or ("indexable" in l and l["indexable"] is not True):
+                    continue
+                used.add(a)
+                index.append({**l, "address": a})
+            data["lb_index"] = index
+        except Exception as e:
+            data["err"] = (data["err"] or "") + " leaderboard pages: " + str(e)
     # 方案 2：构建只拉排行榜前 N 的详情作 SEO 快照；其余地址由客户端读接口。
     # sitemap 仍收录全部公开地址，部署体积不再提交数千 HTML。
     SNAP = int(os.environ.get("WAKELOOM_SEO_LEADERS", "50"))
@@ -401,20 +430,52 @@ short_ = short
 
 def leaderboard(lang, D):
     zh = lang == "zh"; asof = bj(D["as_of"], lang)
-    rows = "".join(lrow_full(lang, i + 1, l, D) for i, l in enumerate(D["leaders"]))
-    if not D["ok"]:
-        tbl = f'<p class="nd pad">{T[lang]["nd"]}</p><p class="mu pad">{"构建时排行榜接口不可用，本页为占位，下次构建会自动补上。" if zh else "The leaderboard API was unavailable at build time; this is a placeholder until the next build."}</p>'
-    else:
-        tbl = f'<div class="tw"><table class="lt"><thead>{lhead(lang, basis=any(lb_basis(l) for l in D["leaders"]))}</thead><tbody>{rows}</tbody></table></div>'
+    paginated = D.get("sitemap_ok") and D.get("lb_index") is not None
+    leaders = D["lb_index"] if paginated else D["leaders"]
+    total = len(leaders)
+    pages = max(1, (total + 49) // 50) if paginated else 1
+    def url(n): return f"/{lang}/leaderboard/" if n == 1 else f"/{lang}/leaderboard/page/{n}/"
+    def nav(current):
+        if pages == 1: return ""
+        links = []
+        if current > 1: links.append(f'<a class="btn sm" href="{url(current - 1)}">{"上一页" if zh else "Previous"}</a>')
+        numbers = sorted({1, pages, *range(max(1, current - 2), min(pages, current + 2) + 1)})
+        last = 0
+        for n in numbers:
+            if n > last + 1: links.append('<span class="mu" aria-hidden="true">…</span>')
+            links.append(f'<a class="btn sm" href="{url(n)}"{f" aria-current=\"page\"" if n == current else ""}>{n}</a>')
+            last = n
+        if current < pages: links.append(f'<a class="btn sm" href="{url(current + 1)}">{"下一页" if zh else "Next"}</a>')
+        return f'<nav class="lb-pages" aria-label="{"排行榜分页" if zh else "Leaderboard pages"}">{"".join(links)}</nav>'
     intro = ("按综合评分排序。胜率和收益率只作展示，不是排序依据。Wakeloom 用收益集中度、刷量等门槛给地址打分，没通过的地址没有综合评分；被识别为疑似做市的地址不参与排名。部分地址的数据来自第三方，页面会标出来源，请自己再看一下。只收录成交笔数足够多的地址。排名不代表以后的表现。" if zh else
              "Ranked by composite score. Win rate and ROI are display columns, not the sort key. Wakeloom scores addresses using checks such as single-event concentration and wash trading; addresses that fail get no score, and likely market makers are not ranked. Some addresses use third-party data, and the page shows the source, so please review them yourself. We only list wallets with enough trades. A ranking does not predict future results.")
-    meta = f'<p class="mu sm"><span data-live-meta="leaderboard">{"数据截至" if zh else "Data as of"} {E(asof)} · {"共" if zh else ""} {len(D["leaders"])} {"位" if zh else "traders"}</span> · <span class="live-badge" data-live-badge="leaderboard"></span> · <a class="ln" href="/{lang}/how-it-works/">{"选人方法" if zh else "How we pick"} →</a></p>' if asof else '<p class="mu sm"><span data-live-meta="leaderboard"></span> <span class="live-badge" data-live-badge="leaderboard"></span></p>'
-    body = f'''<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {"排行榜" if zh else "Leaderboard"}</p><h1>{"Polymarket 交易者排行榜" if zh else "Leaderboard of Polymarket traders"}</h1><p class="lead">{E(intro)}</p>
+    for current in range(1, pages + 1):
+        start = (current - 1) * 50
+        chunk = leaders[start:start + 50]
+        rows = "".join(lrow_full(lang, start + i + 1, l, D) for i, l in enumerate(chunk))
+        if not D["ok"]:
+            tbl = f'<p class="nd pad">{T[lang]["nd"]}</p><p class="mu pad">{"构建时排行榜接口不可用，本页为占位，下次构建会自动补上。" if zh else "The leaderboard API was unavailable at build time; this is a placeholder until the next build."}</p>'
+        else:
+            tbl = f'<div class="tw"><table class="lt"><thead>{lhead(lang, basis=any(lb_basis(l) for l in chunk))}</thead><tbody>{rows}</tbody></table></div>'
+        count = f"共 {total} 位" if zh else f"{total} traders"
+        live = current == 1 and not paginated
+        stamp = f'{"数据截至" if zh else "Data as of"} {E(asof)} · {count}' if asof else count
+        meta = (f'<p class="mu sm"><span data-live-meta="leaderboard">{stamp}</span>' if live else f'<p class="mu sm">{stamp}')
+        if live: meta += ' · <span class="live-badge" data-live-badge="leaderboard"></span>'
+        meta += f' · <a class="ln" href="/{lang}/how-it-works/">{"选人方法" if zh else "How we pick"} →</a></p>'
+        body = f'''<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {"排行榜" if zh else "Leaderboard"}</p><h1>{"Polymarket 交易者排行榜" if zh else "Leaderboard of Polymarket traders"}</h1><p class="lead">{E(intro)}</p>
 {meta}</section>
-<section class="card" data-live="leaderboard">{tbl}</section>'''
-    il = {"@type": "ItemList", "name": DESC[lang]["leaderboard"][0], "numberOfItems": len(D["leaders"]),
-          "itemListElement": [{"@type": "ListItem", "position": i + 1, "url": f"{SITE}/{lang}/leader/{l['address']}/", "name": dname(D["wallets"].get(l["address"]), l["address"])} for i, l in enumerate(D["leaders"])]}
-    write(f"{lang}/leaderboard/index.html", page(lang, "leaderboard/", "leaderboard", body, [il, crumbs(lang, [("排行榜" if zh else "Leaderboard", "leaderboard/")])]))
+<section class="card"{' data-live="leaderboard"' if live else ''}>{tbl}</section>{nav(current)}'''
+        il = {"@type": "ItemList", "name": DESC[lang]["leaderboard"][0], "numberOfItems": len(chunk),
+              "itemListElement": [{"@type": "ListItem", "position": start + i + 1, "url": f"{SITE}/{lang}/leader/{l['address']}/", "name": dname(D["wallets"].get(l["address"]), l["address"])} for i, l in enumerate(chunk)]}
+        path = url(current).removeprefix(f"/{lang}/")
+        title, desc = DESC[lang]["leaderboard"]
+        if current > 1:
+            title = f"{title} · {'第 ' + str(current) + ' 页' if zh else 'Page ' + str(current)}"
+            desc = f"{desc} {'第 ' + str(current) + ' 页。' if zh else 'Page ' + str(current) + '.'}"
+        write(f"{lang}/{path}index.html", page(lang, path, "leaderboard", body,
+              [il, crumbs(lang, [("排行榜" if zh else "Leaderboard", "leaderboard/")])],
+              title=title, desc=desc))
 
 def leader(lang, a, upd, rank, D):
     zh = lang == "zh"; d = D["details"].get(a) or {}; w = dict(D["wallets"].get(a) or {}); w.update({k: v for k, v in d.items() if k in ("user_name", "x_username")})
@@ -583,6 +644,9 @@ def sitemap(D):
     lm_data = iso(D["as_of"]) if D["as_of"] else None
     static_lm = "2026-10-21"
     urls = [("", lm_data or static_lm), ("leaderboard/", lm_data or static_lm)]
+    if D.get("sitemap_ok") and isinstance(D.get("lb_index"), list):
+        for n in range(2, max(1, (len(D["lb_index"]) + 49) // 50) + 1):
+            urls.append((f"leaderboard/page/{n}/", lm_data or static_lm))
     for k in ["how-it-works/", "copy-trading/", "faq/", "risk/", "privacy/", "terms/", "about/"]: urls.append((k, static_lm))
     for a, u in D["pages"]:
         d = D["details"].get(a) or {}
@@ -752,6 +816,7 @@ def main():
     print("data ok" if D["ok"] else "data FAILED: " + str(D["err"]), "| as_of", D["as_of"], "| leaders", len(D["leaders"]), "| seo_snap", len(snaps), "| sitemap_addrs", len(D["pages"]), "| sitemap api", D["sitemap_ok"])
     for lang in ("zh", "en"):
         shutil.rmtree(os.path.join(ROOT, lang, "leader"), ignore_errors=True)
+        shutil.rmtree(os.path.join(ROOT, lang, "leaderboard", "page"), ignore_errors=True)
         home(lang, D); leaderboard(lang, D); content(lang); leader_shell(lang)
         rk = {l["address"].lower(): i + 1 for i, l in enumerate(D["leaders"])}
         for a, u in snaps: leader(lang, a, u, rk.get(a), D)
@@ -776,12 +841,15 @@ def refresh_tables(D):
         zh = lang == "zh"; st = utc_stamp(asof, lang) or T[lang]["nd"]
         # 排行榜页
         f = os.path.join(ROOT, lang, "leaderboard", "index.html"); h = open(f, encoding="utf-8").read()
+        match = re.search(r'data-index-total="(\d+)"', h)
+        index_total = int(match.group(1)) if match else n
+        total_attr = f' data-index-total="{index_total}"' if match else ""
         body = "".join(lrow_full(lang, i + 1, l, D) for i, l in enumerate(leaders))
         h, k = re.subn(r'(<section class="card" data-live="leaderboard"[^>]*><div class="tw"><table class="lt">)<thead>.*?</tbody>',
                    lambda m_: m_.group(1) + f"<thead>{lhead(lang, basis=basis)}</thead><tbody>{body}</tbody>", h, count=1, flags=re.S)
         if k != 1: raise SystemExit("refresh-snapshot: leaderboard table not found")
-        meta = (f"数据截至 {st} · 按综合评分 · 共 {n} 位" if zh else f"Data as of {st} · Ranked by score · {n} traders")
-        h = _sub1(r'<span data-live-meta="leaderboard"[^>]*>[^<]*</span>', f'<span data-live-meta="leaderboard" data-asof-iso="{E(asof or "")}" data-sort="smart_score">{E(meta)}</span>', h, "leaderboard meta")
+        meta = (f"数据截至 {st} · 按综合评分 · 共 {index_total} 位" if zh else f"Data as of {st} · Ranked by score · {index_total} traders")
+        h = _sub1(r'<span data-live-meta="leaderboard"[^>]*>[^<]*</span>', f'<span data-live-meta="leaderboard"{total_attr} data-asof-iso="{E(asof or "")}" data-sort="smart_score">{E(meta)}</span>', h, "leaderboard meta")
         h = re.sub(r'<p class="mu xs ck-foot" data-f="roi-note">[^<]*</p>', "", h)
         if any(lb_flags(l)["third"] for l in leaders):
             h = re.sub(r'(<section class="card" data-live="leaderboard".*?</table></div>)', lambda m_: m_.group(1) + f'<p class="mu xs ck-foot" data-f="roi-note">{E(LBT[lang]["roiNote"])}</p>', h, count=1, flags=re.S)

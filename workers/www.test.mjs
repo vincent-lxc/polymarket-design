@@ -6,6 +6,7 @@ import worker, { INDEXNOW_KEY, appRedirect, httpsRedirect, isShellRedirect, lead
 import { leaderMetaDescription, leaderNotifyBlock, furtherReading, renderLeaderMain } from "./leader-page.mjs";
 import { localPreviewURL } from "../tools/preview-www.mjs";
 import { LEADER_INDEX_PINNED, applyPin, isPinned, mergePinnedSitemap } from "./leader-pin.mjs";
+import { renderSitemap } from "./sitemap-bff.mjs";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -349,6 +350,13 @@ function sitemapFetch(map) {
   };
 }
 
+const sitemapRows = Array.from({ length: 51 }, (_, n) => ({ address: `0x${n.toString(16).padStart(40, "0")}` }));
+const pagedXml = renderSitemap(sitemapRows);
+for (const lang of ["zh", "en"]) {
+  assert.match(pagedXml, new RegExp(`<loc>${host}/${lang}/leaderboard/page/2/</loc><lastmod>2026-10-22T11:24:55Z</lastmod>`));
+}
+assert.doesNotMatch(renderSitemap(sitemapRows.slice(0, 50)), /\/leaderboard\/page\/2\//);
+
 const siteAssets = [];
 const siteRes = await worker.fetch(
   new Request(host + "/sitemap.xml"),
@@ -357,6 +365,9 @@ const siteRes = await worker.fetch(
       leaders: [
         { address: liveAddr, updated_at: "2026-10-23T10:36:23.000Z" },
         { address: otherAddr.toUpperCase(), updated_at: "2026-10-23T01:02:03.000Z" },
+        { address: "0x" + "de".repeat(20), indexable: false },
+        { address: "0x" + "df".repeat(20), indexable: null },
+        { address: "0x" + "da".repeat(20), indexable: "true" },
       ],
       next_offset: 2,
     },
@@ -371,6 +382,7 @@ assert.equal(siteRes.headers.get("x-wakeloom-sitemap"), "bff");
 assert.equal(siteAssets.length, 0);
 const xml = await siteRes.text();
 assert.doesNotMatch(xml, /app\.wakeloom\.com/);
+for (const hex of ["de", "df", "da"]) assert.doesNotMatch(xml, new RegExp("0x" + hex.repeat(20)));
 const leaderLocs = xml.match(/<loc>https:\/\/www\.wakeloom\.com\/(?:zh|en)\/leader\/0x[a-f0-9]{40}\//g) || [];
 const pinnedCount = Object.keys(LEADER_INDEX_PINNED).length;
 assert.equal(leaderLocs.length, 6 + pinnedCount * 2);

@@ -448,7 +448,7 @@
       tbody.classList.remove("live-skel");
       if (meta) {
         var asof = stamp(b.as_of);
-        meta.textContent = boardMeta(leaders.length, asof);
+        meta.textContent = boardMeta(Number(meta.getAttribute("data-index-total")) || leaders.length, asof);
         meta.setAttribute("data-asof", b.as_of || "");
         meta.setAttribute("data-sort", "smart_score");
       }
