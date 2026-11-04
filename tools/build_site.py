@@ -834,44 +834,40 @@ def _sub1(pat, repl, html, what):
     out, n = re.subn(pat, lambda _m: repl, html, count=1, flags=re.S)
     if n != 1: raise SystemExit(f"refresh-snapshot: {what} not found")
     return out
+def _refresh_live_leaderboard(lang, D, leaders, n, asof, basis, st, zh):
+    f = os.path.join(ROOT, lang, "leaderboard", "index.html"); h = open(f, encoding="utf-8").read()
+    match = re.search(r'data-index-total="(\d+)"', h)
+    index_total = int(match.group(1)) if match else n
+    total_attr = f' data-index-total="{index_total}"' if match else ""
+    body = "".join(lrow_full(lang, i + 1, l, D) for i, l in enumerate(leaders))
+    h, k = re.subn(r'(<section class="card" data-live="leaderboard"[^>]*><div class="tw"><table class="lt">)<thead>.*?</tbody>',
+               lambda m_: m_.group(1) + f"<thead>{lhead(lang, basis=basis)}</thead><tbody>{body}</tbody>", h, count=1, flags=re.S)
+    if k != 1: raise SystemExit("refresh-snapshot: leaderboard table not found")
+    meta = (f"数据截至 {st} · 按综合评分 · 共 {index_total} 位" if zh else f"Data as of {st} · Ranked by score · {index_total} traders")
+    h = _sub1(r'<span data-live-meta="leaderboard"[^>]*>[^<]*</span>', f'<span data-live-meta="leaderboard"{total_attr} data-asof-iso="{E(asof or "")}" data-sort="smart_score">{E(meta)}</span>', h, "leaderboard meta")
+    open(f, "w", encoding="utf-8").write(h)
+
 def refresh_tables(D):
     leaders = D["leaders"]; n = len(leaders); asof = D["as_of"]
     basis = any(lb_basis(l) for l in leaders)
     for lang in ("zh", "en"):
         zh = lang == "zh"; st = utc_stamp(asof, lang) or T[lang]["nd"]
-        # 排行榜页
-        f = os.path.join(ROOT, lang, "leaderboard", "index.html"); h = open(f, encoding="utf-8").read()
-        match = re.search(r'data-index-total="(\d+)"', h)
-        index_total = int(match.group(1)) if match else n
-        total_attr = f' data-index-total="{index_total}"' if match else ""
-        body = "".join(lrow_full(lang, i + 1, l, D) for i, l in enumerate(leaders))
-        h, k = re.subn(r'(<section class="card" data-live="leaderboard"[^>]*><div class="tw"><table class="lt">)<thead>.*?</tbody>',
-                   lambda m_: m_.group(1) + f"<thead>{lhead(lang, basis=basis)}</thead><tbody>{body}</tbody>", h, count=1, flags=re.S)
-        if k != 1: raise SystemExit("refresh-snapshot: leaderboard table not found")
-        meta = (f"数据截至 {st} · 按综合评分 · 共 {index_total} 位" if zh else f"Data as of {st} · Ranked by score · {index_total} traders")
-        h = _sub1(r'<span data-live-meta="leaderboard"[^>]*>[^<]*</span>', f'<span data-live-meta="leaderboard"{total_attr} data-asof-iso="{E(asof or "")}" data-sort="smart_score">{E(meta)}</span>', h, "leaderboard meta")
-        h = re.sub(r'<p class="mu xs ck-foot" data-f="roi-note">[^<]*</p>', "", h)
-        if any(lb_flags(l)["third"] for l in leaders):
-            h = re.sub(r'(<section class="card" data-live="leaderboard".*?</table></div>)', lambda m_: m_.group(1) + f'<p class="mu xs ck-foot" data-f="roi-note">{E(LBT[lang]["roiNote"])}</p>', h, count=1, flags=re.S)
-        items = [{"@type": "ListItem", "position": i + 1, "url": f"{SITE}/{lang}/leader/{l['address']}/", "name": lb_name(l)} for i, l in enumerate(leaders)]
-        def fix_ld(m_):
-            g = json.loads(m_.group(1))
-            for node in (g.get("@graph") or [g]):
-                if node.get("@type") == "ItemList":
-                    node["numberOfItems"] = n; node["itemListElement"] = items
-                if node.get("@type") in ("CollectionPage", "WebPage", "Dataset") and "dateModified" in node and asof:
-                    node["dateModified"] = asof
-            return '<script type="application/ld+json">' + json.dumps(g, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/") + "</script>"
-        h = re.sub(r'<script type="application/ld\+json">(.*?)</script>', fix_ld, h, count=1, flags=re.S)
-        open(f, "w", encoding="utf-8").write(h)
+        # 排行榜页：#57 起是全量可收录地址的静态分页（无 data-live），按全量构建同一函数重写各页；
+        # 旧的单页 live 版式（无 lb_index）才走下面的正则替换。
+        if D.get("sitemap_ok") and D.get("lb_index") is not None:
+            leaderboard(lang, D)
+        else:
+            _refresh_live_leaderboard(lang, D, leaders, n, asof, basis, st, zh)
         # 首页前 3
         f = os.path.join(ROOT, lang, "index.html"); h = open(f, encoding="utf-8").read()
-        top = "".join(lrow(lang, i + 1, l, D) for i, l in enumerate(leaders[:3]))
+        # 首页前 3 与排行榜第 1 页同源：有 lb_index 时取其前 3，保证同一批人、同一数据时间
+        src = D["lb_index"] if D.get("lb_index") else leaders
+        top = "".join(lrow(lang, i + 1, l, D) for i, l in enumerate(src[:3]))
         h, k = re.subn(r'(data-live="home-top".*?<table class="lt">)<thead>.*?</tbody>', lambda m_: m_.group(1) + f"<thead>{lhead(lang, short=True)}</thead><tbody>{top}</tbody>", h, count=1, flags=re.S)
         if k != 1: raise SystemExit("refresh-snapshot: home-top table not found")
         hm = (f"数据截至 {st} · 按综合评分" if zh else f"Data as of {st} · Ranked by score")
         h = _sub1(r'<span class="mu sm" data-live-meta="home-top"[^>]*>[^<]*</span>', f'<span class="mu sm" data-live-meta="home-top" data-asof-iso="{E(asof or "")}" data-sort="smart_score">{E(hm)}</span>', h, "home-top meta")
-        h, k = re.subn(r'(<a class="more" data-live-more="home-top"[^>]*>)[^<]*(</a>)', lambda m_: m_.group(1) + (f"看全部 {n} 位 →" if zh else f"View all {n} traders →") + m_.group(2), h, count=1)
+        h, k = re.subn(r'(<a class="more" data-live-more="home-top"[^>]*>)[^<]*(</a>)', lambda m_: m_.group(1) + (f"看全部 {len(src)} 位 →" if zh else f"View all {len(src)} traders →") + m_.group(2), h, count=1)
         if k != 1: raise SystemExit("refresh-snapshot: home more link not found")
         open(f, "w", encoding="utf-8").write(h)
 def refresh_snapshot_curves():
@@ -901,13 +897,11 @@ def refresh_snapshot_curves():
 
 if __name__ == "__main__":
     if "--refresh-snapshot" in sys.argv:
-        D = {"wallets": {}, "err": None}
-        try:
-            b = get(LB_PATH).get("leaderboard") or {}
-            for l in b.get("leaders") or []: l["address"] = l["address"].lower()
-            D.update(ok=True, as_of=b.get("as_of"), leaders=sort_by_smart_score(b.get("leaders") or []))
-        except Exception as e:
-            D.update(ok=False, err=str(e))
+        # 等候名单开关沿用现网页面上的值，避免刷数据时把表单开关冲掉
+        if "WAKELOOM_WAITLIST" not in os.environ:
+            WAITLIST_ON = 'data-waitlist="on"' in open(os.path.join(ROOT, "zh", "index.html"), encoding="utf-8").read()
+        D = load()
+        if D.get("err"): print("refresh-snapshot: warn:", D["err"])
         if not D.get("ok") or not D.get("leaders"): raise SystemExit(f"refresh-snapshot: leaderboard API failed: {D.get('err')}")
         refresh_tables(D); refresh_snapshot_curves()
         print(f"refresh-snapshot: {len(D['leaders'])} leaders, as_of {D['as_of']}")
