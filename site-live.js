@@ -464,6 +464,33 @@
     }
   }
 
+  /* 首页前 3 与排行榜第 1 页同源：构建时排行榜只收 /v1/public/sitemap 门槛清单里的地址（行带 indexable 时须为 true）。
+     这里按同一口径过滤，取前 3；sitemap 读失败就整体算失败，不回落到未过滤的前 50。 */
+  async function indexableSet() {
+    var set = {}, n = 0, off = 0;
+    for (var i = 0; i < 50 && off !== null && off !== undefined; i++) {
+      var sm = (await get("/v1/public/sitemap?offset=" + off + "&limit=1000")).sitemap || {};
+      var ls = sm.leaders || [];
+      ls.forEach(function (x) {
+        if (!x || !x.address || ("indexable" in x && x.indexable !== true)) return;
+        var a = String(x.address).toLowerCase();
+        if (!set[a]) { set[a] = true; n++; }
+      });
+      if (!ls.length) break;
+      var nx = sm.next_offset;
+      if (typeof nx !== "number" || nx <= off) break;
+      off = nx;
+    }
+    return { set: set, n: n };
+  }
+  /* 快照新鲜度：静态页上的 data-asof-iso 距今不超过 36 小时（每日刷新 + 余量）就算新 */
+  var SNAPSHOT_FRESH_MS = 36 * 3600 * 1000;
+  function snapshotFresh(meta) {
+    var iso = meta && meta.getAttribute("data-asof-iso");
+    var t = iso ? Date.parse(iso) : NaN;
+    return isFinite(t) && Date.now() - t <= SNAPSHOT_FRESH_MS;
+  }
+
   async function refreshHomeTop() {
     var tbody = document.querySelector("[data-live=home-top] tbody");
     var meta = document.querySelector("[data-live-meta=home-top]");
@@ -479,9 +506,14 @@
           ? [["#", "num"], ["地址", ""], ["综合评分", "r"], ["胜率", "r"], ["收益率", "r"]]
           : [["#", "num"], ["Wallet", ""], ["Score", "r"], ["Win rate", "r"], ["ROI", "r"]]
       );
-      var j = await get(LB);
-      var b = j.leaderboard || {};
-      var leaders = sortBySmartScore(b.leaders || []).slice(0, 3);
+      var res = await Promise.all([get(LB), indexableSet()]);
+      var b = res[0].leaderboard || {};
+      var idx = res[1];
+      var leaders = sortBySmartScore(b.leaders || []).filter(function (l) {
+        var a = String(l.address || "").toLowerCase();
+        return idx.set[a] && !("indexable" in l && l.indexable !== true);
+      }).slice(0, 3);
+      if (leaders.length < 3) throw new Error("not enough indexable leaders");
       tbody.innerHTML = leaders.map(function (l, i) {
         return rowShort(i + 1, l);
       }).join("");
@@ -492,14 +524,13 @@
         meta.setAttribute("data-asof", b.as_of || "");
         meta.setAttribute("data-sort", "smart_score");
       }
-      if (more) {
-        var n = (b.leaders || []).length;
-        more.textContent = (lang === "zh" ? "看全部 " : "View all ") + n + (lang === "zh" ? " 位 →" : " traders →");
+      if (more && idx.n) {
+        more.textContent = (lang === "zh" ? "看全部 " : "View all ") + idx.n + (lang === "zh" ? " 位 →" : " traders →");
       }
       hideBadge(badge);
     } catch (e) {
       tbody.classList.remove("live-skel");
-      setBadge(badge, "err", TXT.fail);
+      if (snapshotFresh(meta)) hideBadge(badge); else setBadge(badge, "err", TXT.fail);
     }
   }
 
