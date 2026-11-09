@@ -1,0 +1,56 @@
+# 每天刷新官网 SEO 快照（首页前 3、排行榜分页、前 50 leader 收益曲线）。
+# 注意：main 接了 Cloudflare Workers Builds，推到 main 就会部署生产。
+# 所以本任务不直接推 main：有变化时提交到 auto/www-snapshot-refresh 分支，并开/更新一个 PR，由人过发布门后合并。
+name: www-snapshot-refresh
+
+on:
+  schedule:
+    - cron: "40 2 * * *"   # 每天 02:40 UTC（香港 10:40），BFF 排行榜约 02:2x UTC 更新
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: www-snapshot-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BRANCH: auto/www-snapshot-refresh
+      # 不设 WAKELOOM_WAITLIST：--refresh-snapshot 会沿用 zh/index.html 上现有的等候名单开关
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Refresh snapshot
+        run: python3 tools/build_site.py --refresh-snapshot
+      - name: Worker tests
+        run: node --test workers/*.test.mjs
+      - name: Commit and open PR if changed
+        env:
+          GH_TOKEN: ${{ secrets.SNAPSHOT_PR_TOKEN || github.token }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then echo "no changes"; exit 0; fi
+          ASOF=$(python3 -c "import re;print(re.search(r'data-asof-iso=\"([^\"]+)\"',open('zh/index.html',encoding='utf-8').read()).group(1))")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add -A
+          git commit -m "www: 每日刷新快照 as_of ${ASOF}"
+          git push -f origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number -q '.[].number')" ]; then
+            gh pr create --base main --head "$BRANCH" \
+              --title "www：每日快照刷新（自动）" \
+              --body "由 www-snapshot-refresh 定时任务生成：tools/build_site.py --refresh-snapshot，数据 as_of ${ASOF}。合并后 Cloudflare Workers Builds 会部署生产，请按发布门处理。"
+          else
+            echo "PR already open; branch updated to as_of ${ASOF}"
+          fi
