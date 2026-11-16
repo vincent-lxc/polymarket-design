@@ -41,11 +41,12 @@ def field(md, key):
 
 def inline(t):
     out, pos = [], 0
-    for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|`([^`]+)`", t):
+    for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|`([^`]+)`|\*([^*]+)\*", t):
         out.append(E(t[pos:m.start()]))
         if m.group(1): out.append(f'<a href="{E(m.group(2))}">{E(m.group(1))}</a>')
         elif m.group(3): out.append(f"<strong>{inline(m.group(3))}</strong>")
-        else: out.append(f"<code>{E(m.group(4))}</code>")
+        elif m.group(4): out.append(f"<code>{E(m.group(4))}</code>")
+        else: out.append(f"<em>{E(m.group(5))}</em>")
         pos = m.end()
     out.append(E(t[pos:]))
     return "".join(out)
@@ -145,6 +146,11 @@ def strip_md(t):
 
 
 def further(lang, md, titles):
+    # English source can pin its published reading list, including links absent from Chinese tables.
+    if lang == "en" and re.search(r"^## Further reading$", md, re.M):
+        links = [f'<li><a href="{E(url)}">{E(label)}</a></li>'
+                 for label, url in re.findall(r"^- \[([^\]]+)\]\((/en/[^)]+)\)$", section(md, "Further reading"), re.M)]
+        return f'<section class="card prose g-more"><h2>{G[lang]["more"]}</h2><ul>{"".join(links)}</ul></section>'
     zh = open(src_path("zh", *[(n, s) for s, n in SLUGS if s in md_slug(md)][0]), encoding="utf-8").read() if lang == "en" else md
     rows = re.findall(r"^\| 文末「延伸阅读」 \| .*? \| (.*?) \|$", zh, re.M)
     links = []
@@ -233,7 +239,7 @@ def main():
                          f'<article class="card prose g-art">{body}</article>'
                          f'<section class="faq g-faq"><h2 class="g-h">{g["faq"]}</h2>{qa}</section>' + further(lang, md, titles) + see_leaders(lang, md) + cta(lang, num, md))
             art = {"@type": "Article", "headline": h1, "description": desc, "inLanguage": bs.T[lang]["html"],
-                   "datePublished": PUBLISHED, "dateModified": PUBLISHED, "url": f"{bs.SITE}/{lang}/{path}",
+                   "datePublished": PUBLISHED, "dateModified": "2026-11-16" if lang == "en" and num in ("01", "03") else PUBLISHED, "url": f"{bs.SITE}/{lang}/{path}",
                    "mainEntityOfPage": f"{bs.SITE}/{lang}/{path}",
                    "author": {"@id": bs.SITE + "/#org"}, "publisher": {"@id": bs.SITE + "/#org"}}
             art["image"] = f"{bs.SITE}/assets/guides/{IMG[num]}-{lang}.webp"
