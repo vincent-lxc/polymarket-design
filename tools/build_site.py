@@ -202,7 +202,7 @@ DESC = {
   "home": ("Wakeloom – Wallet Analytics & Paper Copy Trading for Polymarket", "Find Polymarket traders with steady long-term results, see their win rate, ROI and drawdown, and paper-trade copying them before risking money."),
   "leaderboard": ("Polymarket Trader Leaderboard: Ranked by Composite Score | Wakeloom", "Ranked by composite score. Win rate and ROI are display columns."),
   "how": ("How We Score Polymarket Traders | Wakeloom", "Wakeloom's selection rules and stats: a 90-day window, resolved markets, drawdown and concentration, with wallets ranked by composite score."),
-  "copy": ("Paper-Trade Copy Trading for Polymarket | Wakeloom", "Mirror a wallet proportionally with per-trade and per-market caps, a price-deviation limit, and follow-the-close; a global stop is coming soon. Currently paper trading only."),
+  "copy": ("Paper-Trade Copy Trading Simulator for Polymarket | Wakeloom", "Wakeloom paper-trades a wallet after each observed fill, walking the order book as it stands at that moment. It logs the price gap, delay and estimated fees. Not a historical backtest. Paper trading only; no real orders."),
   "faq": ("Polymarket Copy Trading FAQ | Wakeloom", "Answers about copy trading on Polymarket, leaderboards, latency and slippage, private keys and data sources. Each answer leads with the conclusion."),
   "risk": ("Risk Notice | Wakeloom", "The main risks of prediction-market trading and copy trading."),
   "privacy": ("Privacy | Wakeloom", "What data Wakeloom collects and how it is used."),
@@ -548,22 +548,95 @@ def leader(lang, a, upd, rank, D):
 # copy-trading 首屏直接回答 + 上线通知（source=copy-trading）+「为什么先用模拟盘」。文案待 Casey 定字。
 COPY_FIRST = {
   "zh": ('Polymarket 本身没有跟单功能。Wakeloom 目前只做模拟盘（paper trading）跟单：按你的规则模拟跟随一个地址，记下价差和延迟，不下真实订单。产品尚未正式上线。', ('上线时通知你', '留个邮箱，Wakeloom 正式上线时发一封通知。'), ('为什么先用模拟盘', '跟单的结果通常比被跟的地址差一些。发现对方成交要时间，这段时间价格会动，还要付手续费。先用模拟盘跑一段，看扣掉这些成本后还剩多少，再决定下一步。')),
-  "en": ("Polymarket has no built-in copy trading. Wakeloom currently offers paper trading only: it simulates following a wallet under your rules and logs the price gap and delay, with no real orders. Wakeloom has not launched yet.", ('Get notified at launch', "Leave your email and we'll send one notice when Wakeloom launches."), ('Why paper trading first', 'Copying usually lands a little behind the wallet you follow: spotting their fill takes time, the price moves meanwhile, and fees come on top. Paper trading for a while shows what is left after those costs before you decide anything else.')),
+  "en": ("Polymarket has no built-in copy trading. Wakeloom currently offers a paper-trading copy simulator only: after it sees a wallet's fill, it simulates your fill against the order book as it stands at that moment, under rules you set, and logs the price gap, delay and estimated fees. No real orders are placed. Wakeloom has not launched live copy trading.", ('Get notified at launch', "Leave your email and we'll send one notice when Wakeloom launches."), ('Why paper trading first', 'Copying usually lands a little behind the wallet you follow: spotting their fill takes time, the price moves meanwhile, and fees come on top. Paper trading for a while shows what is left after those costs before you decide anything else.')),
 }
+COPY_SECOND_EN = "This is a forward simulation from each observed fill. It is not a replay or backtest of a trader's past days, and it is not a promise that live trading is available."
+
+def copy_inline(s):
+    """Escape copy text while allowing local Markdown links and emphasis."""
+    out, end = [], 0
+    for m in re.finditer(r"\[([^\]]+)\]\((/en/[^)]+)\)|\*([^*]+)\*", s):
+        out.append(E(s[end:m.start()]))
+        out.append(f'<a href="{E(m.group(2))}">{E(m.group(1))}</a>' if m.group(1) else f'<em>{E(m.group(3))}</em>')
+        end = m.end()
+    return "".join(out) + E(s[end:])
+
+def copy_section(lang, h, ps):
+    render = copy_inline if lang == "en" else E
+    if isinstance(ps, tuple):
+        tag, items = ps
+        inner = f'<{tag}>' + "".join(f'<li>{render(p)}</li>' for p in items) + f'</{tag}>'
+    else:
+        inner = "".join(f'<p>{render(p)}</p>' for p in ps)
+    return f'<section class="card prose"><h2>{E(h)}</h2>{inner}</section>'
+
 def article(lang, path, key, h1, secs, crumb):
     tt, dd = DESC[lang][key]
-    inner = "".join(f'<section class="card prose"><h2>{E(h)}</h2>{"".join(f"<p>{E(p)}</p>" for p in ps)}</section>' for h, ps in secs)
+    inner = "".join(copy_section(lang, h, ps) if key == "copy" else f'<section class="card prose"><h2>{E(h)}</h2>{"".join(f"<p>{E(p)}</p>" for p in ps)}</section>' for h, ps in secs)
     body = f'<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {E(crumb)}</p><h1>{E(h1)}</h1><p class="lead">{E(dd)}</p></section>{inner}'
     if key == "copy":
         ans, cta, why = COPY_FIRST[lang]
-        body = (f'<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {E(crumb)}</p><h1>{E(h1)}</h1><p class="lead answer">{E(ans)}</p><p class="mu sm">{E(dd)}</p></section>'
-                f'<section class="card wl-card wl-gate" id="notify" hidden><h2>{E(cta[0])}</h2><p class="mu sm">{E(cta[1])}</p>{wl_form("copy", lang, "copy-trading")}</section>'
+        second = COPY_SECOND_EN if lang == "en" else dd
+        body = (f'<section class="ph"><p class="crumb"><a href="/{lang}/">{T[lang]["home"]}</a> / {E(crumb)}</p><h1>{E(h1)}</h1><p class="lead answer">{E(ans)}</p><p class="mu sm">{E(second)}</p></section>'
+                f'<section class="card wl-card wl-gate" id="notify" hidden><h2>{E(cta[0])}</h2><p class="mu sm">{html.escape(cta[1], quote=False) if lang == "en" else E(cta[1])}</p>{wl_form("copy", lang, "copy-trading")}</section>'
                 f'<section class="card prose"><h2>{E(why[0])}</h2><p>{E(why[1])}</p></section>{inner}')
     ld = [{"@type": "Article", "headline": h1, "description": dd, "inLanguage": T[lang]["html"], "url": f"{SITE}/{lang}/{path}",
-           "author": {"@id": SITE + "/#org"}, "publisher": {"@id": SITE + "/#org"}, "datePublished": "2026-10-21", "dateModified": "2026-10-21"},
+           "author": {"@id": SITE + "/#org"}, "publisher": {"@id": SITE + "/#org"}, "datePublished": "2026-10-21", "dateModified": "2026-11-16" if lang == "en" and key == "copy" else "2026-10-21"},
           crumbs(lang, [(crumb, path)])]
     if key == "copy": ld.insert(0, softapp(lang))
-    write(f"{lang}/{path}index.html", page(lang, path, key, body, ld))
+    rendered = page(lang, path, key, body, ld)
+    if lang == "en" and key == "copy":
+        rendered = rendered.replace('data-waitlist="off"', 'data-waitlist="on"', 1)
+        rendered = rendered.replace('href="https://app.wakeloom.com/board"', 'href="https://app.wakeloom.com/markets?tab=board&lang=en"', 1)
+        rendered = rendered.replace('</a>\n<nav class="nv">', '</a><nav class="nv">', 1)
+    write(f"{lang}/{path}index.html", rendered)
+
+def copy_content(lang):
+    zh = lang == "zh"; L = (lambda z, e: z if zh else e)
+    copy_secs = [
+      ("适用场景", ["想先用模拟盘看看某个 Polymarket 地址跟下来是什么结果、又不想直接拿真钱试的人。"]),
+      ("规则", ["按比例：对方下多少，我们按你设的比例下。", "上限：单笔上限和单个市场上限，超过就截断。", "偏离阈值：我们的价格和对方成交价差得太多就放弃这一笔。", "跟随平仓：对方减仓或平仓，我们按比例跟着做。", "全局停止（即将推出）：一键暂停所有跟随。"]),
+      ("流程", ["发现对方成交后，按当时的盘口模拟成交，记录我们和对方的价差、延迟和手续费。跑 1–2 周后看扣掉成本后的结果，再决定要不要考虑实盘。实盘跟单即将推出。"]),
+      ("限制", ["目前只有模拟盘，不下真实订单。模拟成交按盘口估算，实盘的成交价可能更差。"]),
+    ] if zh else [
+      ("Who it's for", ["People who want to see how copying a Polymarket wallet would play out in paper trading before putting real money in."]),
+      ("Rules you set", [
+        "Ratio: we size each order as a proportion of theirs.",
+        "Caps: a per-trade cap and a per-market cap; anything above is cut.",
+        "Deviation limit: if our simulated price is too far from their fill, we skip the trade. The default threshold is 3% and you can change it. This skip applies when copying a leader's entry.",
+        "Follow the close: when they reduce or exit, we do the same proportionally.",
+        "Global stop (coming soon): pause all copying at once.",
+      ]),
+      ("What this simulator is — and is not", [
+        "Some tools advertise a historical copy-trade simulator: you enter a bankroll, size, slippage and fees, and replay a trader's recent days. Wakeloom does not offer that.",
+        "Wakeloom's paper trading works forward. The engine waits until it observes a fill from the wallet you chose, then walks the live order book at the moment that fill is processed and records a simulated fill. The aim is to show what copying that wallet would have looked like *after* the fill was seen — including a worse price, a delay, and estimated taker fees — not what you would have gotten by entering at the leader's exact historical price.",
+        "Use it when you already have a wallet in mind and want to watch the copy under your own ratio, caps and deviation limit before any live trading is even an option. It is currently paper trading only.",
+      ]),
+      ("How it runs", ("ol", [
+        "Choose a wallet and set a copy ratio, a per-trade cap, a per-market cap, and a price-deviation limit.",
+        "When Wakeloom sees that wallet's fill, it simulates your order against the order book as it stands at that moment (not the book at the leader's original timestamp, and not a reconstructed past week).",
+        "If the simulated price is beyond your deviation limit, the trade is skipped and the skip is recorded.",
+        "Each simulated fill is logged with the price gap versus the leader, the delay, and an estimated taker fee. This log is not a complete fee or rebate reconciliation.",
+        "When the followed wallet reduces or exits, the paper position is reduced or closed by the same proportion.",
+        "After one to two weeks, review what's left after those gaps, delays and estimated fees. Use that reading only as research. Live copy trading is not open; it is marked coming soon and is not available on this site.",
+      ])),
+      ("Is copy trading on Polymarket profitable?", [
+        "There is no yes-or-no answer that holds for every wallet or every follower. A leader's displayed PnL is not your result. You enter later, often into a thinner book, at a different size, and after costs. You can follow every signal and still lose money.",
+        "Wakeloom does not claim that paper or live copy trading is profitable, and this page does not publish a win-rate or loss-rate for copiers. The practical next step is to paper-trade first and read the gap, delay and fee log — then read why copiers' results diverge in [Common pitfalls of copying the Polymarket leaderboard](/en/guides/polymarket-leaderboard-copy-pitfalls/).",
+      ]),
+      ("Limitations", ("ul", [
+        "Currently paper trading only. No real orders are placed, and live copy trading is not open.",
+        "The simulation starts when the fill is seen and processed, so it is always later than the leader's trade. Simulated fills are estimates from the book at that moment; live fills, if and when they exist, may be worse.",
+        "Estimated fees are recorded on simulated fills. Wakeloom does not provide a full breakdown of trading fees, rebates or rewards, and a paper account's headline PnL should not be read as an after-fee, after-rebate audit.",
+        "A dated, reviewable sample of those paper logs is not published on this page. Do not treat the description above as a backtested return.",
+        "A global stop that pauses all copying at once is coming soon and is not a current user-facing control on this site.",
+        "Past paper results do not predict future ones. Nothing here is investment advice.",
+      ])),
+      ("Next step", [
+        "Decide who to copy with [How to evaluate a Polymarket trader before copying](/en/guides/how-to-pick-polymarket-traders/), then read [delay, slippage and why a copier's result can diverge](/en/guides/polymarket-leaderboard-copy-pitfalls/). Scoring fields and ROI definitions are in [How we score Polymarket traders](/en/how-it-works/). Also see the [FAQ on latency and slippage](/en/faq/#faq-delay-slippage) and the [risk notice](/en/risk/). Browse addresses on the [leaderboard](/en/leaderboard/) and check each page's data time; do not copy from a stale snapshot.",
+      ]),
+    ]
+    article(lang, "copy-trading/", "copy", L("用于 Polymarket 的模拟盘跟单", "Paper-trade copy trading for Polymarket: a forward simulator"), copy_secs, L("模拟盘跟单", "Paper copy trading"))
 
 def content(lang):
     zh = lang == "zh"; L = (lambda z, e: z if zh else e)
@@ -576,16 +649,7 @@ def content(lang):
       (L("数据来源与更新", "Sources and updates"), [L("成交来自 Polygon 链上记录和 Polymarket 公开接口。排行榜和详情页由浏览器请求公开接口刷新数字；仓库里的 HTML 是 SEO 快照。每页写明数据截至时间（按你浏览器的本地时区显示）。拿不到的数值显示「无数据」，不用 0 填充。", "Fills come from Polygon on-chain records and Polymarket's public APIs. Website pages are rebuilt daily and show their data time in your local timezone. Values we can't get show \"No data\" and are never filled with 0.")]),
       (L("限制", "Limitations"), [L("过去 90 天的表现不代表以后。筛选规则能去掉明显的噪音，但去不掉所有运气，也看不到地址背后的人是否改变了策略。", "Past 90-day results don't predict the future. The filters remove obvious noise but not all luck, and they can't see whether the person behind a wallet has changed strategy.")]),
     ], L("选人方法", "How it works"))
-    article(lang, "copy-trading/", "copy", L("用于 Polymarket 的模拟盘跟单", "Paper-trade copy trading for Polymarket"), [
-      (L("适用场景", "Who it's for"), [L("想先用模拟盘看看某个 Polymarket 地址跟下来是什么结果、又不想直接拿真钱试的人。", "People who want to see how copying a Polymarket wallet would play out in paper trading before putting real money in.")]),
-      (L("规则", "Rules you set"), [L("按比例：对方下多少，我们按你设的比例下。", "Ratio: we size each order as a proportion of theirs."),
-        L("上限：单笔上限和单个市场上限，超过就截断。", "Caps: a per-trade cap and a per-market cap; anything above is cut."),
-        L("偏离阈值：我们的价格和对方成交价差得太多就放弃这一笔。", "Deviation limit: if our price is too far from their fill, we skip the trade."),
-        L("跟随平仓：对方减仓或平仓，我们按比例跟着做。", "Follow the close: when they reduce or exit, we do the same proportionally."),
-        L("全局停止（即将推出）：一键暂停所有跟随。", "Global stop (coming soon): pause all copying at once.")]),
-      (L("流程", "How it runs"), [L("发现对方成交后，按当时的盘口模拟成交，记录我们和对方的价差、延迟和手续费。跑 1–2 周后看扣掉成本后的结果，再决定要不要考虑实盘。实盘跟单即将推出。", "When we see their fill, we simulate ours against the live order book and log the price gap, delay and fees. After one to two weeks we look at the net result after costs before considering live trading. Live copy trading is coming soon.")]),
-      (L("限制", "Limitations"), [L("目前只有模拟盘，不下真实订单。模拟成交按盘口估算，实盘的成交价可能更差。", "Currently paper trading only; no real orders are placed. Simulated fills are estimated from the book and live fills may be worse.")]),
-    ], L("模拟盘跟单", "Paper copy trading"))
+    copy_content(lang)
     simple = {
      "risk": (L("风险提示", "Risk notice"), [L("预测市场交易可能损失全部本金。跟单不能消除风险：过去的表现不代表以后，延迟、滑点和手续费会让你的结果比被跟随的地址更差。", "Prediction-market trading can lose all of your stake. Copying doesn't remove risk: past results don't predict future ones, and latency, slippage and fees can make your results worse than the wallet you follow."),
         L("Wakeloom 目前只提供模拟盘，展示的跟单结果都是模拟结果，不是真实成交。请遵守你所在地区关于预测市场的法律。", "Wakeloom currently offers paper trading only; any copy results shown are simulated, not real fills. Follow the laws on prediction markets where you live."),
