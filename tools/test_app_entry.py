@@ -20,9 +20,9 @@ if str(TOOLS) not in sys.path:
 
 import build_site as bs  # noqa: E402
 
-APP = "https://app-test.wakeloom.com"
+APP = "https://app.wakeloom.com"
 APP_HOME = APP + "/#/auth/start"
-OLD_APP = "https://app.wakeloom.com"
+OLD_APP = "https://app-test.wakeloom.com"
 DETAIL_ADDR = "0xf1f9a438f2697381b4ac8eb283d6f4dd772d1245"
 
 
@@ -122,8 +122,8 @@ class GeneratorTemplateTest(unittest.TestCase):
 class ClientAndDeploySourcesTest(unittest.TestCase):
     def test_site_js_does_not_append_lang_or_use_old_domain(self):
         js = read("site.js")
-        self.assertIn("app-test.wakeloom.com", js)
-        self.assertNotIn("app.wakeloom.com", js)
+        self.assertIn("app.wakeloom.com", js)
+        self.assertNotIn("app-test.wakeloom.com", js)
         self.assertNotIn('searchParams.set("lang"', js)
         self.assertIn('searchParams.delete("lang")', js)
 
