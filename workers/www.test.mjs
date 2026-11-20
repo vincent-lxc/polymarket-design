@@ -11,7 +11,7 @@ import { renderSitemap } from "./sitemap-bff.mjs";
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const host = "https://www.wakeloom.com";
-const APP = "https://app-test.wakeloom.com";
+const APP = "https://app.wakeloom.com";
 const APP_HOME = APP + "/#/auth/start";
 const legacyWallet = "0x" + "ab".repeat(20);
 assert.equal(APP_ORIGIN, APP);
@@ -58,7 +58,7 @@ for (const input of [
 ]) {
   const dest = appRedirect(host + input);
   assert.ok(dest.startsWith(APP + "/#/"), input);
-  assert.doesNotMatch(dest, /app\.wakeloom\.com|tab=board|window=|from=|next=|lang=/, input);
+  assert.doesNotMatch(dest, /app-test\.wakeloom\.com|tab=board|window=|from=|next=|lang=/, input);
 }
 assert.equal(appRedirect(host + "/zh/"), null);
 assert.equal(appRedirect(host + "/app-not"), null);
@@ -186,26 +186,26 @@ assert.match(await zh.text(), /hreflang="x-default" href="https:\/\/www\.wakeloo
   for (const lang of ["zh", "en"]) {
     const idx = fs.readFileSync(path.join(repo, lang, "index.html"), "utf8");
     assert.ok(idx.includes(`href="${appHome}"`), `${lang} home CTA`);
-    assert.doesNotMatch(idx, /app\.wakeloom\.com|tab=board/, `${lang} home old app`);
+    assert.doesNotMatch(idx, /app-test\.wakeloom\.com|tab=board/, `${lang} home old app`);
 
     const lb = fs.readFileSync(path.join(repo, lang, "leaderboard", "index.html"), "utf8");
     assert.ok(lb.includes(`href="${appHome}"`), `${lang} leaderboard header CTA`);
-    assert.doesNotMatch(lb, /app\.wakeloom\.com|tab=board/, `${lang} leaderboard old app`);
+    assert.doesNotMatch(lb, /app-test\.wakeloom\.com|tab=board/, `${lang} leaderboard old app`);
 
     const detail = fs.readFileSync(path.join(repo, lang, "leader", detailAddr, "index.html"), "utf8");
     assert.ok(detail.includes(`href="${appHome}"`), `${lang} detail header CTA`);
     assert.ok(detail.includes(`href="${APP_HOME}?returnTo=/leader/${detailAddr}"`), `${lang} detail CTA`);
-    assert.doesNotMatch(detail, /app\.wakeloom\.com|leader\?addr=|tab=board/, `${lang} detail old app`);
+    assert.doesNotMatch(detail, /app-test\.wakeloom\.com|leader\?addr=|tab=board/, `${lang} detail old app`);
 
     const shell = fs.readFileSync(path.join(repo, lang, "leader", "_shell", "index.html"), "utf8");
     assert.ok(shell.includes(`href="${appHome}"`), `${lang} shell header CTA`);
     assert.ok(shell.includes(`${APP_HOME}?returnTo=/leader/"+a`), `${lang} shell detail base`);
-    assert.doesNotMatch(shell, /app\.wakeloom\.com|tab=board/, `${lang} shell old app`);
+    assert.doesNotMatch(shell, /app-test\.wakeloom\.com|tab=board/, `${lang} shell old app`);
   }
 
   const siteJs = fs.readFileSync(path.join(repo, "site.js"), "utf8");
-  assert.match(siteJs, /app-test\.wakeloom\.com/);
-  assert.doesNotMatch(siteJs, /app\.wakeloom\.com/);
+  assert.match(siteJs, /app\.wakeloom\.com/);
+  assert.doesNotMatch(siteJs, /app-test\.wakeloom\.com/);
   assert.doesNotMatch(siteJs, /searchParams\.set\(["']lang/);
 }
 for (const p of ["faq/", "guides/", "guides/polymarket-trader-data-checklist/", "research/", "research/leaderboard-data-quality/"]) {
@@ -322,7 +322,7 @@ assert.doesNotMatch(trueHtml, /加载中|打开后从公开接口加载/);
 /* 详情入口：带该地址进入测试 App 的 Hash 路由，不带 lang。 */
 assert.ok(trueHtml.includes(`href="${APP_HOME}?returnTo=/leader/${liveAddr}"`));
 assert.ok(trueHtml.includes(`app.href="${APP_HOME}?returnTo=/leader/"+a`));
-assert.doesNotMatch(trueHtml, /app\.wakeloom\.com|leader\?addr=|tab=board/);
+assert.doesNotMatch(trueHtml, /app-test\.wakeloom\.com|leader\?addr=|tab=board/);
 const ld = JSON.parse(trueHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
 const types = ld["@graph"].map((node) => node["@type"]);
 assert.ok(types.includes("ProfilePage"));
@@ -667,7 +667,7 @@ console.log("www redirect tests ok");
   // 已生成的官网页面不能再把旧 App 域名或旧榜单参数作为入口。
   for (const f of [...walk("zh"), ...walk("en")].filter((x) => x.endsWith(".html"))) {
     const html = readFileSync(f, "utf8");
-    assert.doesNotMatch(html, /https:\/\/app\.wakeloom\.com/, f);
+    assert.doesNotMatch(html, /https:\/\/app-test\.wakeloom\.com/, f);
     assert.doesNotMatch(html, /markets\?tab=board|tab=board&lang=/, f);
   }
 }

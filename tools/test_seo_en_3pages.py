@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = "https://www.wakeloom.com"
-APP = "https://app-test.wakeloom.com"
+APP = "https://app.wakeloom.com"
 APP_HOME = APP + "/#/auth/start"
 PAGES = [
     "/en/copy-trading/",
@@ -20,7 +20,8 @@ HAS_MAIN = subprocess.run(["git", "rev-parse", "--verify", "origin/main"], cwd=R
 
 
 def normalize_app_urls(source):
-    """把旧 App 入口换成当前目标测试 App 的 Hash 路由，用于确认页面只改了入口。"""
+    """把历史 App 入口换成当前目标 App 的 Hash 路由，用于确认页面只改了入口。"""
+    source = source.replace("https://app-test.wakeloom.com", APP)
     source = re.sub(
         r"https://app\.wakeloom\.com/markets\?tab=board&lang=(?:zh|en)",
         APP_HOME,
@@ -140,7 +141,7 @@ class SeoThreePages(unittest.TestCase):
         self.assertIn('data-source="copy-trading"', source)
         self.assertIn('data-waitlist="on"', source)
         self.assertIn(f'href="{APP_HOME}"', source)
-        self.assertNotIn("app.wakeloom.com", source)
+        self.assertNotIn("app-test.wakeloom.com", source)
         self.assertNotIn("tab=board", source)
         self.assertNotIn('<p class="mu sm">' + metadata(source, "description") + '</p>', source)
         self.assertIn("This skip applies when copying a leader&#x27;s entry.", source)

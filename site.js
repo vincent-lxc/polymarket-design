@@ -5,7 +5,7 @@ document.querySelectorAll(".lg").forEach(function(a){a.addEventListener("click",
 /* 进 App 不再带 lang：目标应用是 HashRouter，没有 lang 查询或 i18n 入口。
    动态详情链接统一走发起页并带 returnTo（/leader/<地址>），不再直接落 #/leader/。
    若旧页面残留 lang 参数，只在 App 链接上清掉，避免破坏 Hash 路由。 */
-document.querySelectorAll('a[href*="app-test.wakeloom.com"]').forEach(function(a){
+document.querySelectorAll('a[href*="app.wakeloom.com"]').forEach(function(a){
   try{
     var u=new URL(a.href), h=u.hash, m=h.match(/^#\/leader\/(0x[0-9a-fA-F]{40})$/);
     if(m){ u.hash="#/auth/start?returnTo=/leader/"+m[1].toLowerCase(); }

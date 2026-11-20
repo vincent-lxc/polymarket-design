@@ -17,7 +17,7 @@ SITE = "https://www.wakeloom.com"
 #   分段：/#/auth/start?returnTo=/markets
 #   详情：/#/auth/start?returnTo=/leader/<小写地址>
 # 应用没有 lang 查询或 i18n 入口，所有官网入口都不带 lang。
-APP = "https://app-test.wakeloom.com"
+APP = "https://app.wakeloom.com"
 APP_START_PATH = "/#/auth/start"
 APP_HOME = APP + APP_START_PATH
 

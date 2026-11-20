@@ -6,7 +6,7 @@
  *  应用没有 lang 查询或 i18n 入口，所有入口都不带 lang。
  */
 
-export const APP_ORIGIN = "https://app-test.wakeloom.com";
+export const APP_ORIGIN = "https://app.wakeloom.com";
 export const APP_START_PATH = "/#/auth/start";
 export const APP_HOME = APP_ORIGIN + APP_START_PATH;
 
