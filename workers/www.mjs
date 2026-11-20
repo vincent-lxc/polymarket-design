@@ -1,4 +1,4 @@
-/** 官网 Worker：旧 /app 前缀 301 到 app.wakeloom.com。
+/** 官网 Worker：旧 /app 前缀和旧 .html 书签 301 到目标测试 App 的 Hash 路由。
  *  leader 详情在返回 HTML 前向 BFF 取数（服务端渲染）。
  *  /sitemap.xml 只消费 BFF 门槛清单，失败返回 503，不回落静态大表。
  *  IndexNow 密钥和 /llms.txt 在资产层之前返回，避免被重定向或改写。 */
@@ -6,31 +6,14 @@
 import { applyLeaderShell, leaderIndexable } from "./leader-page.mjs";
 import { loadSitemapLeaders, renderSitemap } from "./sitemap-bff.mjs";
 import { applyPin, mergePinnedSitemap } from "./leader-pin.mjs";
+import { APP_HOME, APP_ORIGIN, appLeaderUrl, appRoute, appStart, legacyAppRoute } from "./app-links.mjs";
 
 export const BFF_ORIGIN = "https://api.wakeloom.com";
 
-export const APP_ORIGIN = "https://app.wakeloom.com";
+export { APP_ORIGIN };
 
 /** IndexNow 密钥。正文必须与根目录同名 .txt 完全一致，不能多一个换行。 */
 export const INDEXNOW_KEY = "fc81fd20e5cda8d8f5d37c7bf054a1cd";
-
-/** 以前挂在官网根上的 App 页面，直接送到子域上的同名文件。 */
-export const LEGACY_APP_PAGES = [
-  "/account.html",
-  "/board.html",
-  "/config.html",
-  "/health.html",
-  "/leader-5c1e.html",
-  "/leader-91d4.html",
-  "/leader-avalon.html",
-  "/leader-lunadegen.html",
-  "/leader.html",
-  "/leaders.html",
-  "/login.html",
-  "/markets.html",
-  "/overview.html",
-  "/strategies.html",
-];
 
 const SHELL_PATH = /^\/(en|zh)\/leader\/_shell(?:\/(?:index\.html)?)?$/;
 const WALLET_PATH = /^\/(en|zh)\/leader\/(0x[a-fA-F0-9]{40})(\/)?$/i;
@@ -42,20 +25,24 @@ const WALLET_PATH = /^\/(en|zh)\/leader\/(0x[a-fA-F0-9]{40})(\/)?$/i;
 export function appRedirect(input) {
   const url = typeof input === "string" ? new URL(input) : input;
   const path = url.pathname;
-  let rest = null;
-  if (path === "/app" || path === "/app/") rest = "/";
-  else if (path.startsWith("/app/")) rest = path.slice("/app".length);
-  else if (LEGACY_APP_PAGES.includes(path)) rest = path;
-  if (rest == null) return null;
-  if (rest === "/board" || rest === "/board/" || rest === "/board.html") {
-    const dest = new URL("/markets", APP_ORIGIN);
-    url.searchParams.forEach((value, key) => {
-      if (key !== "tab") dest.searchParams.append(key, value);
-    });
-    dest.searchParams.set("tab", "board");
-    return dest.toString();
+  if (path === "/app" || path === "/app/") return APP_HOME;
+
+  let legacyPath = null;
+  if (path.startsWith("/app/")) legacyPath = path.slice("/app".length);
+  else if (legacyAppRoute(path) !== null) legacyPath = path;
+  if (legacyPath == null) return null;
+
+  const normalized = legacyPath.replace(/\/+$/, "") || "/";
+  // 钱包详情：旧 /leader.html?addr=… → 发起页 + returnTo=/leader/<addr>；没有合法地址退到领袖列表。
+  if (normalized === "/leader.html" || normalized === "/leader") {
+    const addr = (url.searchParams.get("addr") || "").trim();
+    return /^0x[a-fA-F0-9]{40}$/.test(addr) ? appLeaderUrl(addr) : appRoute("leaders");
   }
-  return APP_ORIGIN + rest + url.search;
+  if (normalized === "/board" || normalized === "/board.html" || normalized === "/leaders.html") {
+    return appRoute("leaders");
+  }
+  const route = legacyAppRoute(normalized);
+  return route === null ? APP_HOME : appStart(route);
 }
 
 /**

@@ -6,11 +6,61 @@
          其余手改过的 HTML 原样保留。全量重建会把多次手改（等候名单开关、App 链接、壳页文案等）冲掉，不要用全量重建刷数据。
 数据：构建时读公开接口生成 SEO 快照（排行榜 + 前 50 详情 + JSON-LD）；页面打开后由 site-live.js 再请求接口刷新数字。其余 leader 走 _shell + _redirects。
 """
-import json, os, re, sys, html, shutil, time, urllib.request, datetime as dt
+import json, os, re, sys, html, shutil, time, urllib.request, urllib.parse, datetime as dt
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = "https://www.wakeloom.com"
+# 目标测试 App。它是 HashRouter，所有官网入口统一先进发起页 /#/auth/start，
+# 站内目标放在 returnTo 查询里（以 / 开头），例如：
+#   通用：/#/auth/start
+#   分段：/#/auth/start?returnTo=/markets
+#   详情：/#/auth/start?returnTo=/leader/<小写地址>
+# 应用没有 lang 查询或 i18n 入口，所有官网入口都不带 lang。
+APP = "https://app-test.wakeloom.com"
+APP_START_PATH = "/#/auth/start"
+APP_HOME = APP + APP_START_PATH
+
+def app_start(return_to=None):
+    """进入应用的唯一入口。returnTo 只接受以 / 开头的站内路径，按查询参数编码（保留路径斜杠）。"""
+    p = "" if return_to is None else str(return_to).strip()
+    if not p.startswith("/"):
+        return APP_HOME
+    return f"{APP_HOME}?returnTo={urllib.parse.quote(p, safe='/')}"
+
+def app_route(path=""):
+    """分段入口。path 不带 #，例如 markets、leaders；统一经发起页并带 returnTo。"""
+    p = str(path or "").strip("/")
+    return app_start("/" + p) if p else APP_HOME
+
+def app_leader_url(addr):
+    """钱包详情：经发起页，returnTo=/leader/<小写地址>，不再直接落 #/leader/。"""
+    return app_start("/leader/" + str(addr).lower())
+
+def app_leader_base():
+    """壳页 JS 动态详情前缀：app_leader_base() + addr。"""
+    return APP_HOME + "?returnTo=/leader/"
+
+# 旧官网根路径（或 /app 前缀）上的 App 页面 → 发起页的 returnTo 路径。
+# 空字符串表示通用发起页（/login.html、/overview.html 不再落到 #/login 或 #/overview）。
+# 不照搬 tab=board、window、from、next 等旧参数。
+LEGACY_APP_ROUTES = {
+    "/account.html": "/accounts",
+    "/board.html": "/leaders",
+    "/config.html": "/connections",
+    "/health.html": "/health",
+    "/leader-5c1e.html": "/leaders",
+    "/leader-91d4.html": "/leaders",
+    "/leader-avalon.html": "/leaders",
+    "/leader-lunadegen.html": "/leaders",
+    "/leader.html": "/leaders",
+    "/leaders.html": "/leaders",
+    "/login.html": "",
+    "/markets.html": "/markets",
+    "/overview.html": "",
+    "/strategies.html": "/strategies",
+}
+
 # 根路径分享图。不能用 favicon；尺寸 1200×630，由 tools/render_og_home.py 生成。
 OG_IMAGE = SITE + "/assets/og-home.png"
 API = os.environ.get("WAKELOOM_API", "https://api.wakeloom.com").rstrip("/")
@@ -291,7 +341,7 @@ def page(lang, path, key, body, ld, title=None, desc=None, alt=True, depth=None)
 </head><body>
 {banner(lang)}
 <header class="top"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="28" height="28" alt=""><b>{t["name"]}</b></a>
-<nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="https://app.wakeloom.com/board">{t["cta"]}</a></div></header>
+<nav class="nv">{nav}</nav><div class="tr"><a class="lg" href="/{other}/{path}" hreflang="{"en" if other=="en" else "zh-CN"}">{t["other"]}</a><a class="btn pri sm" href="{APP_HOME}">{t["cta"]}</a></div></header>
 <main>{body}</main>
 <footer class="ft"><div class="fl"><a class="logo" href="/{lang}/"><img src="/icons/wakeloom.svg" width="22" height="22" alt=""><b>{t["name"]}</b></a><span>{t["tag"]}</span></div><nav>{foot}</nav><p>{E(t["indep"])}</p></footer>
 <script src="/site.js" defer></script><script src="/site-live.js" defer></script>{'<script src="/assets/app-run.js?v=3" defer></script>' if key == 'home' else ''}</body></html>'''
@@ -337,7 +387,7 @@ def home(lang, D):
 <h1>{"Polymarket 跟单前，先看清谁靠实力、谁靠运气" if zh else "Before you copy a Polymarket trader, see if it's skill or luck"}</h1>
 <p class="lead">{"按综合评分排序，看近 90 天胜率、回撤与收益；先用模拟盘跟单，零资金看真实滑点（公测中）" if zh else "Ranked by composite score. See 90-day win rate, drawdown, and returns — then paper-copy with zero capital to feel real slippage (public beta)."}</p>
 <p class="brand-line">{'Wakeloom（织迹）是用于 Polymarket 的钱包分析和模拟盘跟单工具，尚未正式上线。' if zh else 'Wakeloom is a wallet analytics and paper copy-trading tool for Polymarket. It has not launched yet.'}</p>
-<div class="ctas"><a class="btn pri mag" href="https://app.wakeloom.com/board">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
+<div class="ctas"><a class="btn pri mag" href="{APP_HOME}">{T[lang]["cta"]} <i>→</i></a><a class="btn" href="/{lang}/leaderboard/">{T[lang]["cta2"]}</a></div>
 <p class="mu sm">{"目前只有模拟盘，不动真钱，不需要私钥。" if zh else "Currently paper trading only: no real money, no private key."}</p></div>
 <div class="hv card rise" data-live="home-top"><div class="hd"><b>{"排行榜前 3" if zh else "Top 3 on the leaderboard"}</b><span class="live-badge" data-live-badge="home-top"></span>{f'<span class="mu sm" data-live-meta="home-top">{"截至" if zh else "As of"} {E(asof)}</span>' if asof else '<span class="mu sm" data-live-meta="home-top"></span>'}</div>
 {f'<table class="lt"><thead>{lhead(lang, short=True)}</thead><tbody>{rows}</tbody></table>' if rows else f'<p class="nd pad">{T[lang]["nd"]}</p>'}
@@ -351,7 +401,7 @@ def home(lang, D):
     steps = (["选一个地址：在排行榜里看长期数据", "设规则：比例、单笔上限、单市场上限、偏离阈值", "跑模拟盘：记录每笔的价差、延迟和扣费结果", "再决定：结果说得通再考虑实盘（实盘跟单即将推出）"] if zh else
              ["Pick a wallet from the leaderboard's long-term data", "Set rules: ratio, per-trade cap, per-market cap, deviation limit", "Run paper trading: log price gap, delay and net result per trade", "Then decide: consider live trading only if the numbers hold up (live copy trading is coming soon)"])
     sh = "".join(f'<li><span class="num">{i}</span>{E(s)}</li>' for i, s in enumerate(steps, 1))
-    body = hero + f'<section class="feats">{fh}</section>' + app_run_html(lang) + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="https://app.wakeloom.com/board">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
+    body = hero + f'<section class="feats">{fh}</section>' + app_run_html(lang) + f'<section class="card steps"><h2>{"怎么用" if zh else "How to use it"}</h2><ol>{sh}</ol><a class="btn pri" href="{APP_HOME}">{T[lang]["cta"]} →</a></section><section class="card wl-card wl-gate" id="notify" hidden><h2>{"正式上线时通知你" if zh else "Get notified when we launch"}</h2><p class="mu sm">{"实盘跟单等功能即将推出。留下邮箱，上线时发一封通知。" if zh else "Live copy trading and more are coming soon. Leave your email and we'll send one launch notice."}</p>{wl_form("home", lang)}</section>'
     write(f"{lang}/index.html", page(lang, "", "home", body, [softapp(lang), crumbs(lang, []), {"@type": "WebPage", "url": f"{SITE}/{lang}/", "name": DESC[lang]["home"][0], "inLanguage": T[lang]["html"], "isPartOf": {"@id": SITE + "/#website"}}]))
 
 # 排行榜表格：和 site-live.js rowFull / rowShort / fillHead 输出同一套 HTML，爬虫看到的就是浏览器刷新后的样子。
@@ -532,7 +582,7 @@ def leader(lang, a, upd, rank, D):
 <div data-f="spark">{spark_html}</div>
 <section class="card" data-f="facts"{"" if fh else " style=\"display:none\""}>{f"<ul class=\"facts\">{fh}</ul>" if fh else ""}</section>
 {rr_html}
-<section class="card cta-row"><div><b>{L("想看他每个市场的买卖点、近 20 笔输赢？", "Want per-market buy/sell points and the last 20 trades?")}</b><p class="mu">{L("在应用里打开这个地址，或用模拟盘跟一跟。上榜不代表以后的表现。", "Open this wallet in the app or paper-trade it. A ranking does not predict future results.")}</p></div><a class="btn pri" href="https://app.wakeloom.com/leader?addr={a}">{L("在应用中查看", "Open in the app")} →</a></section>
+<section class="card cta-row"><div><b>{L("想看他每个市场的买卖点、近 20 笔输赢？", "Want per-market buy/sell points and the last 20 trades?")}</b><p class="mu">{L("在应用里打开这个地址，或用模拟盘跟一跟。上榜不代表以后的表现。", "Open this wallet in the app or paper-trade it. A ranking does not predict future results.")}</p></div><a class="btn pri" href="{app_leader_url(a)}">{L("在应用中查看", "Open in the app")} →</a></section>
 </div>'''
     vm = [{"@type": "PropertyValue", "name": lab, "propertyID": key, **({"value": v} if v is not None else {})} for lab, v, _, key in stats if v is not None]
     url = f"{SITE}/{lang}/leader/{a}/"
@@ -587,7 +637,6 @@ def article(lang, path, key, h1, secs, crumb):
     rendered = page(lang, path, key, body, ld)
     if lang == "en" and key == "copy":
         rendered = rendered.replace('data-waitlist="off"', 'data-waitlist="on"', 1)
-        rendered = rendered.replace('href="https://app.wakeloom.com/board"', 'href="https://app.wakeloom.com/markets?tab=board&lang=en"', 1)
         rendered = rendered.replace('</a>\n<nav class="nv">', '</a><nav class="nv">', 1)
     write(f"{lang}/{path}index.html", rendered)
 
@@ -740,7 +789,7 @@ def leader_shell(lang):
 <div data-f="spark"></div>
 <section class="card" data-f="facts" style="display:none"></section>
 <section class="card" data-f="recent"><div class="hd"><b>{L("近 20 笔输赢", "Last 20 results")}</b></div><p class="nd pad">{N}</p></section>
-<section class="card cta-row"><div><b>{L("在应用里打开这个地址", "Open this wallet in the app")}</b><p class="mu">{L("上榜不代表以后的表现。", "A ranking does not predict future results.")}</p></div><a class="btn pri" data-f="app" href="https://app.wakeloom.com/board">{L("进入应用", "Open the app")} →</a></section>
+<section class="card cta-row"><div><b>{L("在应用里打开这个地址", "Open this wallet in the app")}</b><p class="mu">{L("上榜不代表以后的表现。", "A ranking does not predict future results.")}</p></div><a class="btn pri" data-f="app" href="{APP_HOME}">{L("进入应用", "Open the app")} →</a></section>
 </div>
 <script>
 (function(){{
@@ -748,7 +797,7 @@ def leader_shell(lang):
   var a=(m&&m[1]||new URLSearchParams(location.search).get("addr")||"").toLowerCase();
   var root=document.querySelector("[data-live=leader]");
   if(root&&a){{root.setAttribute("data-addr",a);var el=document.querySelector("[data-f=addr]");if(el){{el.textContent=a;el.title=a;}}
-  var app=document.querySelector("[data-f=app]");if(app)app.href="https://app.wakeloom.com/leader?addr="+a;
+  var app=document.querySelector("[data-f=app]");if(app)app.href="{app_leader_base()}"+a;
   var can=document.querySelector('link[rel=canonical]');if(can)can.href="https://www.wakeloom.com/{lang}/leader/"+a+"/";
   }}
 }})();
@@ -757,30 +806,22 @@ def leader_shell(lang):
     write(f"{lang}/leader/_shell/index.html", page(lang, "leader/_shell/", "x", body, [crumbs(lang, [(L("排行榜", "Leaderboard"), "leaderboard/")])], title=title, desc=desc, alt=False))
 
 def write_redirects():
-    app = "https://app.wakeloom.com"
-    # 旧的根路径和 /app 前缀都送到 App 子域，路径原样保留。query 由 workers/www.mjs 附上。
-    lines = [
-        f"/account.html {app}/account.html 301",
-        f"/board.html {app}/board.html 301",
-        f"/config.html {app}/config.html 301",
-        f"/health.html {app}/health.html 301",
-        f"/leader-5c1e.html {app}/leader-5c1e.html 301",
-        f"/leader-91d4.html {app}/leader-91d4.html 301",
-        f"/leader-avalon.html {app}/leader-avalon.html 301",
-        f"/leader-lunadegen.html {app}/leader-lunadegen.html 301",
-        f"/leader.html {app}/leader.html 301",
-        f"/leaders.html {app}/leaders.html 301",
-        f"/login.html {app}/login.html 301",
-        f"/overview.html {app}/overview.html 301",
-        f"/strategies.html {app}/strategies.html 301",
-        f"/app {app}/ 301",
-        f"/app/ {app}/ 301",
-        f"/app/* {app}/:splat 301",
-        # 无静态文件时回落到壳页（已有 /zh/leader/0x…/index.html 的仍优先）
-        "/zh/leader/:addr /zh/leader/_shell/index.html 200",
-        "/en/leader/:addr /en/leader/_shell/index.html 200",
-        "/zh/leader/:addr/ /zh/leader/_shell/index.html 200",
-        "/en/leader/:addr/ /en/leader/_shell/index.html 200",
+    # 旧的根路径和 /app 前缀都送到目标测试 App 的 Hash 路由；不再保留旧路径或旧查询参数。
+    # 带 ?addr= 的 /leader.html 由 workers/www.mjs 先处理，静态规则没有地址时退到领袖列表。
+    lines = []
+    for path, return_to in LEGACY_APP_ROUTES.items():
+        lines.append(f"{path} {app_start(return_to)} 301")
+    for path, return_to in LEGACY_APP_ROUTES.items():
+        lines.append(f"/app{path} {app_start(return_to)} 301")
+    lines += [
+        f"/app {APP_HOME} 301",
+        f"/app/ {APP_HOME} 301",
+        f"/app/* {APP_HOME} 301",
+        # 不要把 /en|zh/leader/:addr 200 改写到 /leader/_shell/index.html。
+        # html_handling=auto-trailing-slash 会把该 index.html 308 到 /leader/_shell/，
+        # 而 :addr 又能匹配 _shell，sitemap 上的钱包页就会 ERR_TOO_MANY_REDIRECTS。
+        # /en|zh/leader/{addr}/ 由 Worker 按 BFF 做服务端渲染，不把静态快照或 _shell 交给爬虫。
+        # 公开打开壳目录由 Worker 301 到排行榜（这里不写 301，否则 Worker 取壳模板时会被资产层提前跳走）。
     ]
     write("_redirects", "\n".join(lines) + "\n")
 
@@ -811,7 +852,7 @@ LLMS_SUMMARY = {
   ("How is Wakeloom related to Polymarket?", "It is not affiliated. Wakeloom is an independent analytics tool for Polymarket and only reads public on-chain and API data."),
  ],
 }
-LLMS_BAN = ("稳赚", "保证收益", "保证盈利", "guaranteed", "app.wakeloom.com", "收费", "评分", "价格", "price", "rating", "$", "¥")
+LLMS_BAN = ("稳赚", "保证收益", "保证盈利", "guaranteed", "app.wakeloom.com", "app-test.wakeloom.com", "收费", "评分", "价格", "price", "rating", "$", "¥")
 
 def write_llms():
     for lang in ("zh", "en"):
