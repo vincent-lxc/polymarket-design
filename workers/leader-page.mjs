@@ -1,5 +1,7 @@
 /** leader 详情页：把公开接口的数据写进 HTML。门槛只信 leader.indexable，页面不算。 */
 
+import { appLeaderBase, appLeaderUrl } from "./app-links.mjs";
+
 export const SITE = "https://www.wakeloom.com";
 
 const CAT = {
@@ -690,7 +692,7 @@ export function renderLeaderMain(lang, addr, leader) {
   const paperNote = copy.paper.on
     ? `<p class="mu sm" data-f="paper">${esc(zh ? "模拟盘" : "Paper trading")}</p>`
     : "";
-  const app = `https://app.wakeloom.com/leader?addr=${addr}&amp;lang=${lang}`;
+  const app = appLeaderUrl(addr);
   const notify = leaderNotifyBlock(lang, app);
   const further = furtherReading(lang);
   return `<main><div data-live="leader" data-addr="${esc(addr)}"${copy.paper.on ? ' data-paper="1"' : ""}${copy.flags.marketMaker ? ' data-mm="1"' : ""}>
@@ -711,7 +713,7 @@ ${further}
   var a=${JSON.stringify(addr)};
   var root=document.querySelector("[data-live=leader]");
   if(root&&a){root.setAttribute("data-addr",a);var el=document.querySelector("[data-f=addr]");if(el){el.textContent=a;el.title=a;}
-  var app=document.querySelector("[data-f=app]");if(app)app.href="https://app.wakeloom.com/leader?addr="+a+"&lang=${lang}";
+  var app=document.querySelector("[data-f=app]");if(app)app.href=${JSON.stringify(appLeaderBase())}+a;
   var lg=document.querySelector("header .lg");if(lg)lg.href="/${other}/leader/"+a+"/";
   var can=document.querySelector('link[rel=canonical]');if(can)can.href=${JSON.stringify(`${SITE}/${lang}/leader/${addr}/`)};
   }

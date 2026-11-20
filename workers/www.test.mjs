@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import worker, { INDEXNOW_KEY, appRedirect, httpsRedirect, isShellRedirect, leaderDecision, barePathRedirect } from "./www.mjs";
+import worker, { APP_ORIGIN, INDEXNOW_KEY, appRedirect, httpsRedirect, isShellRedirect, leaderDecision, barePathRedirect } from "./www.mjs";
 import { leaderMetaDescription, leaderNotifyBlock, furtherReading, renderLeaderMain } from "./leader-page.mjs";
 import { localPreviewURL } from "../tools/preview-www.mjs";
 import { LEADER_INDEX_PINNED, applyPin, isPinned, mergePinnedSitemap } from "./leader-pin.mjs";
@@ -11,29 +11,55 @@ import { renderSitemap } from "./sitemap-bff.mjs";
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const host = "https://www.wakeloom.com";
+const APP = "https://app-test.wakeloom.com";
+const APP_HOME = APP + "/#/overview";
+const legacyWallet = "0x" + "ab".repeat(20);
+assert.equal(APP_ORIGIN, APP);
 assert.equal(
   appRedirect(host + "/app/login.html?next=overview.html"),
-  "https://app.wakeloom.com/login.html?next=overview.html",
+  APP + "/#/login",
 );
 assert.equal(
-  appRedirect(host + "/app/leader.html?addr=0xabc&x=1"),
-  "https://app.wakeloom.com/leader.html?addr=0xabc&x=1",
+  appRedirect(host + `/app/leader.html?addr=${legacyWallet}&x=1`),
+  APP + `/#/leader/${legacyWallet}`,
 );
-assert.equal(appRedirect(host + "/app/overview.html"), "https://app.wakeloom.com/overview.html");
-assert.equal(appRedirect(host + "/app"), "https://app.wakeloom.com/");
-assert.equal(appRedirect(host + "/app/"), "https://app.wakeloom.com/");
-assert.equal(appRedirect(host + "/app/?from=home"), "https://app.wakeloom.com/?from=home");
+assert.equal(appRedirect(host + "/app/leader.html?addr=0xabc&x=1"), APP + "/#/leaders");
+assert.equal(appRedirect(host + "/app/leader.html"), APP + "/#/leaders");
+assert.equal(appRedirect(host + "/app/overview.html"), APP_HOME);
+assert.equal(appRedirect(host + "/app"), APP_HOME);
+assert.equal(appRedirect(host + "/app/"), APP_HOME);
+assert.equal(appRedirect(host + "/app/?from=home"), APP_HOME);
 assert.equal(
   appRedirect(host + "/login.html?next=%2Foverview"),
-  "https://app.wakeloom.com/login.html?next=%2Foverview",
+  APP + "/#/login",
 );
-assert.equal(appRedirect(host + "/board.html"), "https://app.wakeloom.com/markets?tab=board");
+assert.equal(appRedirect(host + "/board.html"), APP + "/#/leaders");
+assert.equal(appRedirect(host + "/leaders.html"), APP + "/#/leaders");
 assert.equal(
   appRedirect(host + "/app/board.html?window=90d"),
-  "https://app.wakeloom.com/markets?window=90d&tab=board",
+  APP + "/#/leaders",
 );
-assert.equal(appRedirect(host + "/app/board/?from=home"), "https://app.wakeloom.com/markets?from=home&tab=board");
-assert.equal(appRedirect(host + "/markets.html"), "https://app.wakeloom.com/markets.html");
+assert.equal(appRedirect(host + "/app/board/?from=home"), APP + "/#/leaders");
+assert.equal(appRedirect(host + "/markets.html"), APP + "/#/markets");
+assert.equal(appRedirect(host + "/overview.html"), APP_HOME);
+assert.equal(appRedirect(host + "/account.html"), APP + "/#/accounts");
+assert.equal(appRedirect(host + "/config.html"), APP + "/#/connections");
+assert.equal(appRedirect(host + "/health.html"), APP + "/#/health");
+assert.equal(appRedirect(host + "/strategies.html"), APP + "/#/strategies");
+for (const p of ["/leader-5c1e.html", "/leader-91d4.html", "/leader-avalon.html", "/leader-lunadegen.html"]) {
+  assert.equal(appRedirect(host + p), APP + "/#/leaders", p);
+}
+/* 旧参数不能照搬，旧域名也不能再出现。 */
+for (const input of [
+  "/app/login.html?next=overview.html",
+  "/app/board.html?window=90d&tab=board",
+  "/app/?from=home",
+  "/markets.html?tab=board&lang=zh",
+]) {
+  const dest = appRedirect(host + input);
+  assert.ok(dest.startsWith(APP + "/#/"), input);
+  assert.doesNotMatch(dest, /app\.wakeloom\.com|tab=board|window=|from=|next=|lang=/, input);
+}
 assert.equal(appRedirect(host + "/zh/"), null);
 assert.equal(appRedirect(host + "/app-not"), null);
 assert.equal(appRedirect(host + "/application"), null);
@@ -128,6 +154,7 @@ const llmsBody = await llms.text();
 assert.equal(llmsBody, fs.readFileSync(path.join(repo, "llms.txt"), "utf8"));
 assert.match(llmsBody, /公测前预览，尚未正式上线/);
 assert.doesNotMatch(llmsBody, /app\.wakeloom\.com/);
+assert.doesNotMatch(llmsBody, /app-test\.wakeloom\.com/);
 
 const home = await worker.fetch(new Request(host + "/"), { ASSETS: assets });
 assert.equal(home.status, 200);
@@ -151,6 +178,36 @@ assert.match(enHtml, /application\/ld\+json/);
 assert.match(enHtml, /"@type":"Organization"/);
 const zh = await worker.fetch(new Request(host + "/zh/"), { ASSETS: assets });
 assert.match(await zh.text(), /hreflang="x-default" href="https:\/\/www\.wakeloom\.com\/"/);
+
+/* 已生成的静态 HTML（未全量重建）里的 App 入口也必须和生成器一致。 */
+{
+  const appHome = APP + "/#/overview";
+  const detailAddr = "0xf1f9a438f2697381b4ac8eb283d6f4dd772d1245";
+  for (const lang of ["zh", "en"]) {
+    const idx = fs.readFileSync(path.join(repo, lang, "index.html"), "utf8");
+    assert.ok(idx.includes(`href="${appHome}"`), `${lang} home CTA`);
+    assert.doesNotMatch(idx, /app\.wakeloom\.com|tab=board/, `${lang} home old app`);
+
+    const lb = fs.readFileSync(path.join(repo, lang, "leaderboard", "index.html"), "utf8");
+    assert.ok(lb.includes(`href="${appHome}"`), `${lang} leaderboard header CTA`);
+    assert.doesNotMatch(lb, /app\.wakeloom\.com|tab=board/, `${lang} leaderboard old app`);
+
+    const detail = fs.readFileSync(path.join(repo, lang, "leader", detailAddr, "index.html"), "utf8");
+    assert.ok(detail.includes(`href="${appHome}"`), `${lang} detail header CTA`);
+    assert.ok(detail.includes(`href="${APP}/#/leader/${detailAddr}"`), `${lang} detail CTA`);
+    assert.doesNotMatch(detail, /app\.wakeloom\.com|leader\?addr=|tab=board/, `${lang} detail old app`);
+
+    const shell = fs.readFileSync(path.join(repo, lang, "leader", "_shell", "index.html"), "utf8");
+    assert.ok(shell.includes(`href="${appHome}"`), `${lang} shell header CTA`);
+    assert.ok(shell.includes(`${APP}/#/leader/`), `${lang} shell detail base`);
+    assert.doesNotMatch(shell, /app\.wakeloom\.com|tab=board/, `${lang} shell old app`);
+  }
+
+  const siteJs = fs.readFileSync(path.join(repo, "site.js"), "utf8");
+  assert.match(siteJs, /app-test\.wakeloom\.com/);
+  assert.doesNotMatch(siteJs, /app\.wakeloom\.com/);
+  assert.doesNotMatch(siteJs, /searchParams\.set\(["']lang/);
+}
 for (const p of ["faq/", "guides/", "guides/polymarket-trader-data-checklist/", "research/", "research/leaderboard-data-quality/"]) {
   for (const lang of ["zh", "en"]) {
     const res = await worker.fetch(new Request(`${host}/${lang}/${p}`), { ASSETS: assets });
@@ -262,6 +319,10 @@ assert.match(trueHtml, /数据截至 2026-10-23 10:06（UTC）/);
 assert.match(trueHtml, />12\.3%</);
 assert.match(trueHtml, /@vinii/);
 assert.doesNotMatch(trueHtml, /加载中|打开后从公开接口加载/);
+/* 详情入口：带该地址进入测试 App 的 Hash 路由，不带 lang。 */
+assert.ok(trueHtml.includes(`href="${APP}/#/leader/${liveAddr}"`));
+assert.ok(trueHtml.includes(`app.href="${APP}/#/leader/"+a`));
+assert.doesNotMatch(trueHtml, /app\.wakeloom\.com|leader\?addr=|tab=board/);
 const ld = JSON.parse(trueHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
 const types = ld["@graph"].map((node) => node["@type"]);
 assert.ok(types.includes("ProfilePage"));
@@ -382,6 +443,7 @@ assert.equal(siteRes.headers.get("x-wakeloom-sitemap"), "bff");
 assert.equal(siteAssets.length, 0);
 const xml = await siteRes.text();
 assert.doesNotMatch(xml, /app\.wakeloom\.com/);
+assert.doesNotMatch(xml, /app-test\.wakeloom\.com/);
 for (const hex of ["de", "df", "da"]) assert.doesNotMatch(xml, new RegExp("0x" + hex.repeat(20)));
 const leaderLocs = xml.match(/<loc>https:\/\/www\.wakeloom\.com\/(?:zh|en)\/leader\/0x[a-f0-9]{40}\//g) || [];
 const pinnedCount = Object.keys(LEADER_INDEX_PINNED).length;
@@ -498,7 +560,7 @@ assert.equal(bareRes.headers.get("Location"), host + "/zh/faq/?x=1");
 
 // P1：leader 页主 CTA 是上线通知表单，App 链接降为文字链接，延伸阅读只链现有页面
 for (const lang of ["zh", "en"]) {
-  const nb = leaderNotifyBlock(lang, "https://app.wakeloom.com/leader?addr=0x1");
+  const nb = leaderNotifyBlock(lang, `${APP}/#/leader/0x1`);
   assert.match(nb, /data-source="leader"/);
   assert.match(nb, /class="wl-form/);
   assert.doesNotMatch(nb, /class="btn pri" data-f="app"/);
@@ -529,7 +591,7 @@ for (const lang of ["zh", "en"]) {
   const ct = fs.readFileSync(path.join(repo, lang, "copy-trading", "index.html"), "utf8");
   assert.match(ct, /<p class="lead answer">/);
   assert.match(ct, /data-source="copy-trading"/);
-  assert.match(ct, lang === "zh" ? /Polymarket 本身没有跟单功能。.*模拟盘（paper trading）.*尚未正式上线/ : /Polymarket has no built-in copy trading\..*paper trading only.*has not launched yet/);
+  assert.match(ct, lang === "zh" ? /Polymarket 本身没有跟单功能。.*模拟盘（paper trading）.*尚未正式上线/ : /Polymarket has no built-in copy trading\..*paper-trading copy simulator only.*has not launched live copy trading/);
   const home = fs.readFileSync(path.join(repo, lang, "index.html"), "utf8");
   assert.match(home, /<title>Wakeloom/);
   assert.match(home, lang === "zh" ? /Wakeloom（织迹）是用于 Polymarket 的钱包分析和模拟盘跟单工具，尚未正式上线。/ : /Wakeloom is a wallet analytics and paper copy-trading tool for Polymarket\. It has not launched yet\./);
@@ -602,4 +664,10 @@ console.log("www redirect tests ok");
   const walk = (d) => readdirSync(d).flatMap((n) => { const p = d + "/" + n; return statSync(p).isDirectory() ? (["node_modules", ".git", "tools/__pycache__"].includes(n) ? [] : walk(p)) : [p]; });
   const files = [...walk("zh"), ...walk("en"), "llms.txt", "tools/build_site.py", "index.html"].filter((f) => /\.(html|txt|py)$/.test(f));
   for (const f of files) assert.doesNotMatch(readFileSync(f, "utf8"), /值得跟|值不值得|worth (following|copying)|traders to follow/i, f);
+  // 已生成的官网页面不能再把旧 App 域名或旧榜单参数作为入口。
+  for (const f of [...walk("zh"), ...walk("en")].filter((x) => x.endsWith(".html"))) {
+    const html = readFileSync(f, "utf8");
+    assert.doesNotMatch(html, /https:\/\/app\.wakeloom\.com/, f);
+    assert.doesNotMatch(html, /markets\?tab=board|tab=board&lang=/, f);
+  }
 }

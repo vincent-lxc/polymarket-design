@@ -8,6 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = "https://www.wakeloom.com"
+APP = "https://app-test.wakeloom.com"
+APP_HOME = APP + "/#/overview"
 PAGES = [
     "/en/copy-trading/",
     "/en/guides/how-to-pick-polymarket-traders/",
@@ -15,6 +17,27 @@ PAGES = [
 ]
 GUIDE_MD = Path("/workspace/projects/wakeloom/市场/guides/en")
 HAS_MAIN = subprocess.run(["git", "rev-parse", "--verify", "origin/main"], cwd=ROOT, capture_output=True).returncode == 0
+
+
+def normalize_app_urls(source):
+    """把旧 App 入口换成当前目标测试 App 的 Hash 路由，用于确认页面只改了入口。"""
+    source = re.sub(
+        r"https://app\.wakeloom\.com/markets\?tab=board&lang=(?:zh|en)",
+        APP_HOME,
+        source,
+    )
+    source = source.replace("https://app.wakeloom.com/board", APP_HOME)
+    source = re.sub(
+        r"https://app\.wakeloom\.com/leader\?addr=(0x[a-fA-F0-9]{40})(?:&(?:amp;)?lang=(?:zh|en))?",
+        lambda m: APP + "/#/leader/" + m.group(1).lower(),
+        source,
+    )
+    source = re.sub(
+        r'"https://app\.wakeloom\.com/leader\?addr="\+a\+"&lang=(?:zh|en)"',
+        '"' + APP + '/#/leader/"+a"',
+        source,
+    )
+    return source
 EXPECTED = {
     PAGES[0]: ("Paper-Trade Copy Trading Simulator for Polymarket | Wakeloom", "Wakeloom paper-trades a wallet after each observed fill, walking the order book as it stands at that moment. It logs the price gap, delay and estimated fees. Not a historical backtest. Paper trading only; no real orders."),
     PAGES[1]: ("How to Evaluate a Polymarket Trader Before Copying | Wakeloom", "Evaluate who to copy on Polymarket using resolved markets, the wallet's main categories, drawdown and entry price. Rule out one-big-bet, wash-traded and market-maker wallets first. Past results don't predict future ones."),
@@ -116,12 +139,15 @@ class SeoThreePages(unittest.TestCase):
         self.assertIn('<section class="card prose"><h2>Limitations</h2><ul>', source)
         self.assertIn('data-source="copy-trading"', source)
         self.assertIn('data-waitlist="on"', source)
-        self.assertIn('href="https://app.wakeloom.com/markets?tab=board&lang=en"', source)
+        self.assertIn(f'href="{APP_HOME}"', source)
+        self.assertNotIn("app.wakeloom.com", source)
+        self.assertNotIn("tab=board", source)
         self.assertNotIn('<p class="mu sm">' + metadata(source, "description") + '</p>', source)
         self.assertIn("This skip applies when copying a leader&#x27;s entry.", source)
         self.assertIn("A dated, reviewable sample of those paper logs is not published", source)
         if HAS_MAIN:
             original = subprocess.check_output(["git", "show", "origin/main:en/copy-trading/index.html"], cwd=ROOT, text=True)
+            original = normalize_app_urls(original)
             for pattern in (r'<div class="pv".*?</div></div><script src="/site-waitlist.js\?v=1" defer></script>',
                             r'<header class="top">.*?</header>', r'<footer class="ft">.*?</footer>',
                             r'<section class="card wl-card wl-gate" id="notify".*?</section>'):
@@ -142,6 +168,7 @@ class SeoThreePages(unittest.TestCase):
             self.assertIn('data-waitlist="on"', source)
             if HAS_MAIN:
                 original = subprocess.check_output(["git", "show", f"origin/main:{route.lstrip('/')}index.html"], cwd=ROOT, text=True)
+                original = normalize_app_urls(original)
                 for pattern in (r'<div class="pv".*?</div></div><script src="/site-waitlist.js\?v=1" defer></script>',
                                 r'<header class="top">.*?</header>', r'<footer class="ft">.*?</footer>',
                                 r'<section class="card wl-card wl-gate g-cta".*?</section>'):
@@ -165,10 +192,13 @@ class SeoThreePages(unittest.TestCase):
             self.assertNotIn("website and the app read the same data", visible)
             self.assertNotIn("website and app read the same data", visible)
         if HAS_MAIN:
+            # 本次改动只允许替换 App 入口；三篇英文 SEO 页仍须在改动集合里。
             changed = subprocess.check_output(["git", "diff", "--name-only", "origin/main", "--", "*.html"], cwd=ROOT, text=True).splitlines()
-            self.assertEqual({x.lstrip("/") + "index.html" for x in PAGES}, set(changed))
-            zh = subprocess.check_output(["git", "show", "origin/main:zh/copy-trading/index.html"], cwd=ROOT)
-            self.assertEqual(zh, (ROOT / "zh/copy-trading/index.html").read_bytes())
+            for route in PAGES:
+                self.assertIn(route.lstrip("/") + "index.html", changed)
+            for rel in changed:
+                original = subprocess.check_output(["git", "show", f"origin/main:{rel}"], cwd=ROOT, text=True)
+                self.assertEqual(normalize_app_urls(original), (ROOT / rel).read_text(), rel)
 
 
 if __name__ == "__main__":

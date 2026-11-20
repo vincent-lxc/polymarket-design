@@ -86,7 +86,7 @@ else:
                 S + "/en/copy-trading/", S + "/zh/faq/", S + "/en/faq/"):
         if bit not in llms: err.append(f"llms.txt 缺少 {bit}")
     low = llms.lower()
-    for w in ("稳赚", "保证收益", "保证盈利", "guaranteed", "app.wakeloom.com", "收费", "评分", "价格", "price", "rating"):
+    for w in ("稳赚", "保证收益", "保证盈利", "guaranteed", "app.wakeloom.com", "app-test.wakeloom.com", "收费", "评分", "价格", "price", "rating"):
         if w.lower() in low: err.append(f"llms.txt 红线 {w}")
     if "$" in llms or "¥" in llms: err.append("llms.txt 含价格符号")
 

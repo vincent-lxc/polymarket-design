@@ -2,12 +2,12 @@
 var l=document.documentElement.lang.indexOf("zh")===0?"zh":"en";
 document.querySelectorAll(".lg").forEach(function(a){a.addEventListener("click",function(){try{localStorage.setItem("wl_lang",l==="zh"?"en":"zh")}catch(e){}})});
 /* 只在手动点语言切换时记住选择；单纯打开某个语言的页面不写入，避免把搜索点进来的语言误当成偏好。 */
-/* 进 App 带上页面语言。已有 lang 不覆盖。英文站是 lang=en，中文站是 lang=zh。 */
-document.querySelectorAll('a[href*="app.wakeloom.com"]').forEach(function(a){
+/* 进 App 不再带 lang：目标应用是 HashRouter，没有 lang 查询或 i18n 入口。
+   若旧页面残留 lang 参数，只在 App 链接上清掉，避免破坏 Hash 路由。 */
+document.querySelectorAll('a[href*="app-test.wakeloom.com"]').forEach(function(a){
   try{
     var u=new URL(a.href);
-    if(!u.searchParams.get("lang")) u.searchParams.set("lang", l);
-    a.href=u.toString();
+    if(u.searchParams.has("lang")){ u.searchParams.delete("lang"); a.href=u.toString(); }
   }catch(e){}
 });
 /* ≤900px 主导航：桌面 .nv 不动，窄屏补汉堡。 */
