@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SITE = "https://www.wakeloom.com"
 APP = "https://app-test.wakeloom.com"
-APP_HOME = APP + "/#/overview"
+APP_HOME = APP + "/#/auth/start"
 PAGES = [
     "/en/copy-trading/",
     "/en/guides/how-to-pick-polymarket-traders/",
@@ -29,12 +29,12 @@ def normalize_app_urls(source):
     source = source.replace("https://app.wakeloom.com/board", APP_HOME)
     source = re.sub(
         r"https://app\.wakeloom\.com/leader\?addr=(0x[a-fA-F0-9]{40})(?:&(?:amp;)?lang=(?:zh|en))?",
-        lambda m: APP + "/#/leader/" + m.group(1).lower(),
+        lambda m: APP + "/#/auth/start?returnTo=/leader/" + m.group(1).lower(),
         source,
     )
     source = re.sub(
         r'"https://app\.wakeloom\.com/leader\?addr="\+a\+"&lang=(?:zh|en)"',
-        '"' + APP + '/#/leader/"+a"',
+        '"' + APP + '/#/auth/start?returnTo=/leader/"+a',
         source,
     )
     return source

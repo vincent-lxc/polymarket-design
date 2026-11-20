@@ -21,7 +21,7 @@ if str(TOOLS) not in sys.path:
 import build_site as bs  # noqa: E402
 
 APP = "https://app-test.wakeloom.com"
-APP_HOME = APP + "/#/overview"
+APP_HOME = APP + "/#/auth/start"
 OLD_APP = "https://app.wakeloom.com"
 DETAIL_ADDR = "0xf1f9a438f2697381b4ac8eb283d6f4dd772d1245"
 
@@ -52,12 +52,12 @@ class GeneratedHtmlTest(unittest.TestCase):
         for lang in ("zh", "en"):
             detail = read(f"{lang}/leader/{DETAIL_ADDR}/index.html")
             self.assert_app_home(detail, f"{lang} detail header")
-            self.assertIn(f'href="{APP}/#/leader/{DETAIL_ADDR}"', detail, f"{lang} detail CTA")
+            self.assertIn(f'href="{APP_HOME}?returnTo=/leader/{DETAIL_ADDR}"', detail, f"{lang} detail CTA")
             self.assertNotIn("leader?addr=", detail, f"{lang} detail old query")
 
             shell = read(f"{lang}/leader/_shell/index.html")
             self.assert_app_home(shell, f"{lang} shell header")
-            self.assertIn(f'{APP}/#/leader/"+a', shell, f"{lang} shell detail base")
+            self.assertIn(f'{APP_HOME}?returnTo=/leader/"+a', shell, f"{lang} shell detail base")
 
     def test_no_generated_page_uses_old_app_entry(self):
         for base in ("zh", "en"):
@@ -70,8 +70,10 @@ class GeneratedHtmlTest(unittest.TestCase):
 class GeneratorTemplateTest(unittest.TestCase):
     def test_helpers(self):
         self.assertEqual(bs.APP_HOME, APP_HOME)
-        self.assertEqual(bs.app_route("leaders"), APP + "/#/leaders")
-        self.assertEqual(bs.app_leader_url(DETAIL_ADDR.upper()), APP + f"/#/leader/{DETAIL_ADDR}")
+        self.assertEqual(bs.app_route("leaders"), APP_HOME + "?returnTo=/leaders")
+        self.assertEqual(bs.app_leader_url(DETAIL_ADDR.upper()), APP_HOME + f"?returnTo=/leader/{DETAIL_ADDR}")
+        self.assertEqual(bs.app_start(""), APP_HOME)
+        self.assertEqual(bs.app_start("/markets"), APP_HOME + "?returnTo=/markets")
 
     def test_page_template(self):
         html = bs.page("zh", "", "home", "<main></main>", [])
@@ -99,15 +101,17 @@ class GeneratorTemplateTest(unittest.TestCase):
                 }
                 bs.leader("zh", detail, "2026-11-20T00:00:00Z", 1, data)
                 page = Path(tmp, "zh", "leader", detail, "index.html").read_text(encoding="utf-8")
-                self.assertIn(f'href="{APP}/#/leader/{detail}"', page)
+                self.assertIn(f'href="{APP_HOME}?returnTo=/leader/{detail}"', page)
                 self.assertNotIn(OLD_APP, page)
                 self.assertNotIn("leader?addr=", page)
                 self.assertNotIn("tab=board", page)
 
                 bs.write_redirects()
                 redirects = Path(tmp, "_redirects").read_text(encoding="utf-8")
-                self.assertIn(f"/board.html {APP}/#/leaders 301", redirects)
-                self.assertIn(f"/markets.html {APP}/#/markets 301", redirects)
+                self.assertIn(f"/board.html {APP_HOME}?returnTo=/leaders 301", redirects)
+                self.assertIn(f"/markets.html {APP_HOME}?returnTo=/markets 301", redirects)
+                self.assertIn(f"/login.html {APP_HOME} 301", redirects)
+                self.assertIn(f"/overview.html {APP_HOME} 301", redirects)
                 self.assertIn(f"/app {APP_HOME} 301", redirects)
                 self.assertNotIn(OLD_APP, redirects)
                 self.assertNotIn("tab=board", redirects)
@@ -131,13 +135,13 @@ class ClientAndDeploySourcesTest(unittest.TestCase):
         self.assertNotIn(OLD_APP, rules)
         self.assertNotIn("tab=board", rules)
         for expected in (
-            f"/board.html {APP}/#/leaders 301",
-            f"/leaders.html {APP}/#/leaders 301",
-            f"/markets.html {APP}/#/markets 301",
+            f"/board.html {APP_HOME}?returnTo=/leaders 301",
+            f"/leaders.html {APP_HOME}?returnTo=/leaders 301",
+            f"/markets.html {APP_HOME}?returnTo=/markets 301",
             f"/overview.html {APP_HOME} 301",
-            f"/login.html {APP}/#/login 301",
-            f"/account.html {APP}/#/accounts 301",
-            f"/config.html {APP}/#/connections 301",
+            f"/login.html {APP_HOME} 301",
+            f"/account.html {APP_HOME}?returnTo=/accounts 301",
+            f"/config.html {APP_HOME}?returnTo=/connections 301",
             f"/app {APP_HOME} 301",
         ):
             self.assertIn(expected, rules)

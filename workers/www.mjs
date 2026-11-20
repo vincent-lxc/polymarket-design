@@ -6,7 +6,7 @@
 import { applyLeaderShell, leaderIndexable } from "./leader-page.mjs";
 import { loadSitemapLeaders, renderSitemap } from "./sitemap-bff.mjs";
 import { applyPin, mergePinnedSitemap } from "./leader-pin.mjs";
-import { APP_HOME, APP_ORIGIN, appLeaderUrl, appRoute, legacyAppRoute } from "./app-links.mjs";
+import { APP_HOME, APP_ORIGIN, appLeaderUrl, appRoute, appStart, legacyAppRoute } from "./app-links.mjs";
 
 export const BFF_ORIGIN = "https://api.wakeloom.com";
 
@@ -29,11 +29,11 @@ export function appRedirect(input) {
 
   let legacyPath = null;
   if (path.startsWith("/app/")) legacyPath = path.slice("/app".length);
-  else if (legacyAppRoute(path)) legacyPath = path;
+  else if (legacyAppRoute(path) !== null) legacyPath = path;
   if (legacyPath == null) return null;
 
   const normalized = legacyPath.replace(/\/+$/, "") || "/";
-  // 钱包详情：旧 /leader.html?addr=… → #/leader/<addr>；没有合法地址退到领袖列表。
+  // 钱包详情：旧 /leader.html?addr=… → 发起页 + returnTo=/leader/<addr>；没有合法地址退到领袖列表。
   if (normalized === "/leader.html" || normalized === "/leader") {
     const addr = (url.searchParams.get("addr") || "").trim();
     return /^0x[a-fA-F0-9]{40}$/.test(addr) ? appLeaderUrl(addr) : appRoute("leaders");
@@ -42,7 +42,7 @@ export function appRedirect(input) {
     return appRoute("leaders");
   }
   const route = legacyAppRoute(normalized);
-  return route ? appRoute(route) : APP_HOME;
+  return route === null ? APP_HOME : appStart(route);
 }
 
 /**

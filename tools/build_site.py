@@ -6,41 +6,59 @@
          其余手改过的 HTML 原样保留。全量重建会把多次手改（等候名单开关、App 链接、壳页文案等）冲掉，不要用全量重建刷数据。
 数据：构建时读公开接口生成 SEO 快照（排行榜 + 前 50 详情 + JSON-LD）；页面打开后由 site-live.js 再请求接口刷新数字。其余 leader 走 _shell + _redirects。
 """
-import json, os, re, sys, html, shutil, time, urllib.request, datetime as dt
+import json, os, re, sys, html, shutil, time, urllib.request, urllib.parse, datetime as dt
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = "https://www.wakeloom.com"
-# 目标测试 App。它是 HashRouter：入口是 /#/overview、/#/leaders、/#/leader/<addr>、/#/markets 等。
+# 目标测试 App。它是 HashRouter，所有官网入口统一先进发起页 /#/auth/start，
+# 站内目标放在 returnTo 查询里（以 / 开头），例如：
+#   通用：/#/auth/start
+#   分段：/#/auth/start?returnTo=/markets
+#   详情：/#/auth/start?returnTo=/leader/<小写地址>
 # 应用没有 lang 查询或 i18n 入口，所有官网入口都不带 lang。
 APP = "https://app-test.wakeloom.com"
-APP_HOME = APP + "/#/overview"
+APP_START_PATH = "/#/auth/start"
+APP_HOME = APP + APP_START_PATH
 
-def app_route(path="overview"):
-    """App Hash 路由。path 不带 #，例如 overview、leader/0x…。"""
-    return f"{APP}/#/{str(path).strip('/')}"
+def app_start(return_to=None):
+    """进入应用的唯一入口。returnTo 只接受以 / 开头的站内路径，按查询参数编码（保留路径斜杠）。"""
+    p = "" if return_to is None else str(return_to).strip()
+    if not p.startswith("/"):
+        return APP_HOME
+    return f"{APP_HOME}?returnTo={urllib.parse.quote(p, safe='/')}"
+
+def app_route(path=""):
+    """分段入口。path 不带 #，例如 markets、leaders；统一经发起页并带 returnTo。"""
+    p = str(path or "").strip("/")
+    return app_start("/" + p) if p else APP_HOME
 
 def app_leader_url(addr):
-    """钱包详情：地址是 Hash 路径参数，不是 ?addr=。"""
-    return app_route("leader/" + str(addr).lower())
+    """钱包详情：经发起页，returnTo=/leader/<小写地址>，不再直接落 #/leader/。"""
+    return app_start("/leader/" + str(addr).lower())
 
-# 旧官网根路径（或 /app 前缀）上的 App 页面 → 目标 App 的 Hash 路由。
+def app_leader_base():
+    """壳页 JS 动态详情前缀：app_leader_base() + addr。"""
+    return APP_HOME + "?returnTo=/leader/"
+
+# 旧官网根路径（或 /app 前缀）上的 App 页面 → 发起页的 returnTo 路径。
+# 空字符串表示通用发起页（/login.html、/overview.html 不再落到 #/login 或 #/overview）。
 # 不照搬 tab=board、window、from、next 等旧参数。
 LEGACY_APP_ROUTES = {
-    "/account.html": "accounts",
-    "/board.html": "leaders",
-    "/config.html": "connections",
-    "/health.html": "health",
-    "/leader-5c1e.html": "leaders",
-    "/leader-91d4.html": "leaders",
-    "/leader-avalon.html": "leaders",
-    "/leader-lunadegen.html": "leaders",
-    "/leader.html": "leaders",
-    "/leaders.html": "leaders",
-    "/login.html": "login",
-    "/markets.html": "markets",
-    "/overview.html": "overview",
-    "/strategies.html": "strategies",
+    "/account.html": "/accounts",
+    "/board.html": "/leaders",
+    "/config.html": "/connections",
+    "/health.html": "/health",
+    "/leader-5c1e.html": "/leaders",
+    "/leader-91d4.html": "/leaders",
+    "/leader-avalon.html": "/leaders",
+    "/leader-lunadegen.html": "/leaders",
+    "/leader.html": "/leaders",
+    "/leaders.html": "/leaders",
+    "/login.html": "",
+    "/markets.html": "/markets",
+    "/overview.html": "",
+    "/strategies.html": "/strategies",
 }
 
 # 根路径分享图。不能用 favicon；尺寸 1200×630，由 tools/render_og_home.py 生成。
@@ -779,7 +797,7 @@ def leader_shell(lang):
   var a=(m&&m[1]||new URLSearchParams(location.search).get("addr")||"").toLowerCase();
   var root=document.querySelector("[data-live=leader]");
   if(root&&a){{root.setAttribute("data-addr",a);var el=document.querySelector("[data-f=addr]");if(el){{el.textContent=a;el.title=a;}}
-  var app=document.querySelector("[data-f=app]");if(app)app.href="{APP}/#/leader/"+a;
+  var app=document.querySelector("[data-f=app]");if(app)app.href="{app_leader_base()}"+a;
   var can=document.querySelector('link[rel=canonical]');if(can)can.href="https://www.wakeloom.com/{lang}/leader/"+a+"/";
   }}
 }})();
@@ -791,19 +809,19 @@ def write_redirects():
     # 旧的根路径和 /app 前缀都送到目标测试 App 的 Hash 路由；不再保留旧路径或旧查询参数。
     # 带 ?addr= 的 /leader.html 由 workers/www.mjs 先处理，静态规则没有地址时退到领袖列表。
     lines = []
-    for path, route in LEGACY_APP_ROUTES.items():
-        dest = app_route(route)
-        lines.append(f"{path} {dest} 301")
-        lines.append(f"/app{path} {dest} 301")
+    for path, return_to in LEGACY_APP_ROUTES.items():
+        lines.append(f"{path} {app_start(return_to)} 301")
+    for path, return_to in LEGACY_APP_ROUTES.items():
+        lines.append(f"/app{path} {app_start(return_to)} 301")
     lines += [
         f"/app {APP_HOME} 301",
         f"/app/ {APP_HOME} 301",
         f"/app/* {APP_HOME} 301",
-        # 无静态文件时回落到壳页（已有 /zh/leader/0x…/index.html 的仍优先）
-        "/zh/leader/:addr /zh/leader/_shell/index.html 200",
-        "/en/leader/:addr /en/leader/_shell/index.html 200",
-        "/zh/leader/:addr/ /zh/leader/_shell/index.html 200",
-        "/en/leader/:addr/ /en/leader/_shell/index.html 200",
+        # 不要把 /en|zh/leader/:addr 200 改写到 /leader/_shell/index.html。
+        # html_handling=auto-trailing-slash 会把该 index.html 308 到 /leader/_shell/，
+        # 而 :addr 又能匹配 _shell，sitemap 上的钱包页就会 ERR_TOO_MANY_REDIRECTS。
+        # /en|zh/leader/{addr}/ 由 Worker 按 BFF 做服务端渲染，不把静态快照或 _shell 交给爬虫。
+        # 公开打开壳目录由 Worker 301 到排行榜（这里不写 301，否则 Worker 取壳模板时会被资产层提前跳走）。
     ]
     write("_redirects", "\n".join(lines) + "\n")
 

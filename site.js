@@ -3,11 +3,15 @@ var l=document.documentElement.lang.indexOf("zh")===0?"zh":"en";
 document.querySelectorAll(".lg").forEach(function(a){a.addEventListener("click",function(){try{localStorage.setItem("wl_lang",l==="zh"?"en":"zh")}catch(e){}})});
 /* 只在手动点语言切换时记住选择；单纯打开某个语言的页面不写入，避免把搜索点进来的语言误当成偏好。 */
 /* 进 App 不再带 lang：目标应用是 HashRouter，没有 lang 查询或 i18n 入口。
+   动态详情链接统一走发起页并带 returnTo（/leader/<地址>），不再直接落 #/leader/。
    若旧页面残留 lang 参数，只在 App 链接上清掉，避免破坏 Hash 路由。 */
 document.querySelectorAll('a[href*="app-test.wakeloom.com"]').forEach(function(a){
   try{
-    var u=new URL(a.href);
-    if(u.searchParams.has("lang")){ u.searchParams.delete("lang"); a.href=u.toString(); }
+    var u=new URL(a.href), h=u.hash, m=h.match(/^#\/leader\/(0x[0-9a-fA-F]{40})$/);
+    if(m){ u.hash="#/auth/start?returnTo=/leader/"+m[1].toLowerCase(); }
+    else if(h==="#/overview"||h==="#/login"){ u.hash="#/auth/start"; }
+    if(u.searchParams.has("lang")){ u.searchParams.delete("lang"); }
+    a.href=u.toString();
   }catch(e){}
 });
 /* ≤900px 主导航：桌面 .nv 不动，窄屏补汉堡。 */

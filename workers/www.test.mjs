@@ -12,42 +12,42 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const host = "https://www.wakeloom.com";
 const APP = "https://app-test.wakeloom.com";
-const APP_HOME = APP + "/#/overview";
+const APP_HOME = APP + "/#/auth/start";
 const legacyWallet = "0x" + "ab".repeat(20);
 assert.equal(APP_ORIGIN, APP);
 assert.equal(
   appRedirect(host + "/app/login.html?next=overview.html"),
-  APP + "/#/login",
+  APP_HOME,
 );
 assert.equal(
   appRedirect(host + `/app/leader.html?addr=${legacyWallet}&x=1`),
-  APP + `/#/leader/${legacyWallet}`,
+  `${APP_HOME}?returnTo=/leader/${legacyWallet}`,
 );
-assert.equal(appRedirect(host + "/app/leader.html?addr=0xabc&x=1"), APP + "/#/leaders");
-assert.equal(appRedirect(host + "/app/leader.html"), APP + "/#/leaders");
+assert.equal(appRedirect(host + "/app/leader.html?addr=0xabc&x=1"), APP_HOME + "?returnTo=/leaders");
+assert.equal(appRedirect(host + "/app/leader.html"), APP_HOME + "?returnTo=/leaders");
 assert.equal(appRedirect(host + "/app/overview.html"), APP_HOME);
 assert.equal(appRedirect(host + "/app"), APP_HOME);
 assert.equal(appRedirect(host + "/app/"), APP_HOME);
 assert.equal(appRedirect(host + "/app/?from=home"), APP_HOME);
 assert.equal(
   appRedirect(host + "/login.html?next=%2Foverview"),
-  APP + "/#/login",
+  APP_HOME,
 );
-assert.equal(appRedirect(host + "/board.html"), APP + "/#/leaders");
-assert.equal(appRedirect(host + "/leaders.html"), APP + "/#/leaders");
+assert.equal(appRedirect(host + "/board.html"), APP_HOME + "?returnTo=/leaders");
+assert.equal(appRedirect(host + "/leaders.html"), APP_HOME + "?returnTo=/leaders");
 assert.equal(
   appRedirect(host + "/app/board.html?window=90d"),
-  APP + "/#/leaders",
+  APP_HOME + "?returnTo=/leaders",
 );
-assert.equal(appRedirect(host + "/app/board/?from=home"), APP + "/#/leaders");
-assert.equal(appRedirect(host + "/markets.html"), APP + "/#/markets");
+assert.equal(appRedirect(host + "/app/board/?from=home"), APP_HOME + "?returnTo=/leaders");
+assert.equal(appRedirect(host + "/markets.html"), APP_HOME + "?returnTo=/markets");
 assert.equal(appRedirect(host + "/overview.html"), APP_HOME);
-assert.equal(appRedirect(host + "/account.html"), APP + "/#/accounts");
-assert.equal(appRedirect(host + "/config.html"), APP + "/#/connections");
-assert.equal(appRedirect(host + "/health.html"), APP + "/#/health");
-assert.equal(appRedirect(host + "/strategies.html"), APP + "/#/strategies");
+assert.equal(appRedirect(host + "/account.html"), APP_HOME + "?returnTo=/accounts");
+assert.equal(appRedirect(host + "/config.html"), APP_HOME + "?returnTo=/connections");
+assert.equal(appRedirect(host + "/health.html"), APP_HOME + "?returnTo=/health");
+assert.equal(appRedirect(host + "/strategies.html"), APP_HOME + "?returnTo=/strategies");
 for (const p of ["/leader-5c1e.html", "/leader-91d4.html", "/leader-avalon.html", "/leader-lunadegen.html"]) {
-  assert.equal(appRedirect(host + p), APP + "/#/leaders", p);
+  assert.equal(appRedirect(host + p), APP_HOME + "?returnTo=/leaders", p);
 }
 /* 旧参数不能照搬，旧域名也不能再出现。 */
 for (const input of [
@@ -181,7 +181,7 @@ assert.match(await zh.text(), /hreflang="x-default" href="https:\/\/www\.wakeloo
 
 /* 已生成的静态 HTML（未全量重建）里的 App 入口也必须和生成器一致。 */
 {
-  const appHome = APP + "/#/overview";
+  const appHome = APP_HOME;
   const detailAddr = "0xf1f9a438f2697381b4ac8eb283d6f4dd772d1245";
   for (const lang of ["zh", "en"]) {
     const idx = fs.readFileSync(path.join(repo, lang, "index.html"), "utf8");
@@ -194,12 +194,12 @@ assert.match(await zh.text(), /hreflang="x-default" href="https:\/\/www\.wakeloo
 
     const detail = fs.readFileSync(path.join(repo, lang, "leader", detailAddr, "index.html"), "utf8");
     assert.ok(detail.includes(`href="${appHome}"`), `${lang} detail header CTA`);
-    assert.ok(detail.includes(`href="${APP}/#/leader/${detailAddr}"`), `${lang} detail CTA`);
+    assert.ok(detail.includes(`href="${APP_HOME}?returnTo=/leader/${detailAddr}"`), `${lang} detail CTA`);
     assert.doesNotMatch(detail, /app\.wakeloom\.com|leader\?addr=|tab=board/, `${lang} detail old app`);
 
     const shell = fs.readFileSync(path.join(repo, lang, "leader", "_shell", "index.html"), "utf8");
     assert.ok(shell.includes(`href="${appHome}"`), `${lang} shell header CTA`);
-    assert.ok(shell.includes(`${APP}/#/leader/`), `${lang} shell detail base`);
+    assert.ok(shell.includes(`${APP_HOME}?returnTo=/leader/"+a`), `${lang} shell detail base`);
     assert.doesNotMatch(shell, /app\.wakeloom\.com|tab=board/, `${lang} shell old app`);
   }
 
@@ -320,8 +320,8 @@ assert.match(trueHtml, />12\.3%</);
 assert.match(trueHtml, /@vinii/);
 assert.doesNotMatch(trueHtml, /加载中|打开后从公开接口加载/);
 /* 详情入口：带该地址进入测试 App 的 Hash 路由，不带 lang。 */
-assert.ok(trueHtml.includes(`href="${APP}/#/leader/${liveAddr}"`));
-assert.ok(trueHtml.includes(`app.href="${APP}/#/leader/"+a`));
+assert.ok(trueHtml.includes(`href="${APP_HOME}?returnTo=/leader/${liveAddr}"`));
+assert.ok(trueHtml.includes(`app.href="${APP_HOME}?returnTo=/leader/"+a`));
 assert.doesNotMatch(trueHtml, /app\.wakeloom\.com|leader\?addr=|tab=board/);
 const ld = JSON.parse(trueHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
 const types = ld["@graph"].map((node) => node["@type"]);
